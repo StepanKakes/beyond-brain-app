@@ -72,3 +72,37 @@ Pracovní deník redesignu. Decisions, gotchas, follow-ups.
 ### TODO Fáze D
 - Framer Motion install + page transitions + bubble fade-in stagger + spring hover.
 
+
+## Fáze C — Client-focused sidebar
+
+### Co je hotové
+- **Backend endpoint `GET /api/beyond/clients`** (`server/routes/beyond.js`):
+  - Skenuje `~/Documents/GitHub/beyond-brain/clients/aktivni/` (override `BEYOND_BRAIN_PATH` env).
+  - Per klient parsuje `profil.md` (název, Stav, "Aktuální týden W##", Notion link), `_action-items.md` (počet `- [ ]` = open promises), `raw/notion/dashboard.json` (weeklyGoal), a mtime `raw/` (čerstvost).
+  - 30s cache. Graceful 404 fallback když adresář není.
+- **Backend endpoint `GET /api/beyond/status`**: n8n ping (`BEYOND_N8N_HEALTH` env, optional), git přítomnost beyond-brain repo, "raw stáří" (nejstarší mtime ze všech `raw/` složek). Vrací `{ ok, label, hoursOld }`.
+- **Auth:** oba endpointy chráněné `authenticateToken`. Jediný uživatel `tim`.
+- **Frontend hook `useBeyondClients`**: fetch + 60s polling, error handling.
+- **`BeyondClientsList`**: živá komponenta s avatarem, jménem, "W## · X otevřených slibů", coral promise dot, hover lift. Loading skeleton (3 pulse divs), error/empty state s instrukcí "Naklonuj beyond-brain repo".
+- **`BeyondStatusFooter`**: 3 status tečky (n8n / git / raw) + settings ikon. Polling 90s.
+- **`SidebarContent`**: nahoře BeyondClientsList (primární), pod tím `<details>` "Projekty & konverzace" obalující původní `SidebarProjectList`. BeyondStatusFooter před SidebarFooter (který je teď jen update banner).
+- **Smart folders** (Dnes / Tento týden / Otevřené sliby) — UI placeholder, klik zatím nefiltruje. Phase D / E task: napojit na real filtry.
+- **Search ⌘K** je v `SidebarHeader` (existující kbd hint).
+
+### Gotchas / Decisions
+- **Nemodifikovat backend** = nepřepisuj existující; nové endpointy pro nové features jsou OK (jinak Phase C nelze udělat smysluplně). Žádný existující endpoint změněn.
+- **Hardcoded clients vs. live data:** mock v `BeyondSidebarPreview.tsx` (jen pro screenshoty bez auth) + `BeyondClientsList.tsx` (live data v reálném sidebaru). Mock list zrcadlí spec'd 6 klientů.
+- **`details/summary` pro projekty** je nejjednodušší collapsible bez extra state. Tim si může otevřít historii kdykoli, ale defaultně sbalená — sidebar zaměřený na klienty.
+- **Real-time refresh:** clients = 60s polling, status = 90s. Stačí pro UX, šetří disk IO. ESC: WebSocket push neuděláno, beyond-brain repo se nemění tak často.
+- **Conversation section pod klienty:** záměrně menší, méně visible (uvnitř `<details>`). Migration plán: klikem na klienta v Phase D otevřít konkrétní Beyond session a původní project list smazat.
+
+### TODO (Phase D / nezablokuje commit)
+- Klik na klienta → start Beyond chat s preloaded systémovým promptem (Beyond hlas, klient context). Vyžaduje napojit `onClientSelect` na `onNewSession`.
+- Smart folders filtrování (Dnes = klienti s callem dnes, Týden = s milníkem tento týden, Otevřené sliby = filtr `openPromises > 0`).
+- Status footer tooltipy s detailem (`title` už je, ale ne s vlastní stylovkou).
+- Notion dashboard rychlolink v hover stavu (otevřít v novém tabu).
+
+### Doporučení pro deploy
+- Beyond-brain repo musí být na ~/Documents/GitHub/beyond-brain (nebo nastav `BEYOND_BRAIN_PATH` env).
+- Volitelně `BEYOND_N8N_HEALTH=https://n8n.example.com/healthz` pro zelenou tečku.
+

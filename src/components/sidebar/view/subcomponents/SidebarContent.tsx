@@ -11,6 +11,8 @@ import SidebarFooter from './SidebarFooter';
 import SidebarHeader from './SidebarHeader';
 import SidebarProjectList, { type SidebarProjectListProps } from './SidebarProjectList';
 import { getAllSessions } from '../../utils/utils';
+import BeyondClientsList from '../../../beyond/BeyondClientsList';
+import BeyondStatusFooter from '../../../beyond/BeyondStatusFooter';
 
 function HighlightedSnippet({ snippet, highlights }: { snippet: string; highlights: { start: number; end: number }[] }) {
   const parts: ReactNode[] = [];
@@ -509,10 +511,36 @@ export default function SidebarContent({
             </div>
           )
         ) : (
-          <SidebarProjectList {...projectListProps} />
+          <>
+            {/* Beyond Brain primary navigation — live data from
+                ~/Documents/GitHub/beyond-brain/clients/aktivni/ */}
+            <BeyondClientsList
+              selectedSlug={null}
+              onClientSelect={() => {
+                /* TODO Phase D: start a Beyond chat with the client context preloaded */
+              }}
+            />
+
+            {/* Secondary section — original auto-detected projects.
+                Kept visible (collapsed style) so historical chats stay reachable
+                until Beyond chat sessions per client are wired up. */}
+            <details className="mt-3 px-2">
+              <summary className="cursor-pointer list-none px-3 pb-1.5 pt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-beyond-muted hover:text-beyond-secondary">
+                Projekty &amp; konverzace
+              </summary>
+              <div className="mt-1 opacity-90">
+                <SidebarProjectList {...projectListProps} />
+              </div>
+            </details>
+          </>
         )}
       </ScrollArea>
 
+      {/* Beyond Brain status footer — n8n / git / raw stáří + settings. */}
+      <BeyondStatusFooter onShowSettings={onShowSettings} />
+
+      {/* Legacy update / version banner (kept; only renders when an update is
+          actually available). */}
       <SidebarFooter
         updateAvailable={updateAvailable}
         releaseInfo={releaseInfo}
