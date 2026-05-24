@@ -15,9 +15,17 @@ export default {
     },
     extend: {
       fontFamily: {
+        // Beyond v2 — Helvetica primary, Instrument Serif only for special moments.
+        sans: [
+          '"Helvetica Neue"',
+          'Helvetica',
+          '-apple-system',
+          'BlinkMacSystemFont',
+          '"Segoe UI"',
+          'Arial',
+          'sans-serif',
+        ],
         serif: ['"Instrument Serif"', 'ui-serif', 'Georgia', 'serif'],
-        // Body / UI
-        sans: ['"Inter"', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
       },
       colors: {
@@ -54,24 +62,33 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
-        // Beyond pastel palette — soft, warm, Sequoia-like
+        // Beyond v2 — hyperminimal neutrals + powder-blue / cream hero gradient stops.
         beyond: {
-          // Sunrise (5-11)
-          peach: '#FFD8B5',
-          cream: '#FFF4E0',
-          // Day (11-17)
-          sky: '#CFE8FF',
-          haze: '#EAF4FF',
-          // Evening (17-22)
-          coral: '#FFAA8C',
-          plum: '#A87FB8',
-          dusk: '#6B5B95',
-          // Night (22-5)
-          midnight: '#1A2238',
-          ink: '#0F1626',
-          // Neutral
-          parchment: '#FAF6F1',
-          charcoal: '#1F2533',
+          // Surface neutrals
+          white: '#ffffff',
+          paper: '#fafafa',
+          // Text
+          ink: '#0a0a0a',
+          dim: '#737373',
+          faint: '#a3a3a3',
+          // Borders / dividers
+          line: '#f0f0f0',
+          // Hero gradient stops
+          powder: '#cdd9e8',
+          mist: '#e4dfd6',
+          cream: '#f0e6dc',
+          // --- v1 compat (legacy components still reference these names) ---
+          // Will be removed once all legacy components are rewritten.
+          charcoal: '#0a0a0a',
+          dusk:     '#737373',
+          plum:     '#737373',
+          coral:    '#0a0a0a',
+          parchment:'#fafafa',
+          peach:    '#f0e6dc',
+          cream2:   '#f0e6dc',
+          sky:      '#cdd9e8',
+          haze:     '#e4dfd6',
+          midnight: '#0a0a0a',
         },
       },
       borderRadius: {
@@ -85,16 +102,18 @@ export default {
         'safe-area-inset-bottom': 'env(safe-area-inset-bottom)',
         'mobile-nav': 'var(--mobile-nav-total)',
       },
-      backdropBlur: {
-        xs: '2px',
-        '2xl': '32px',
-        '3xl': '48px',
-      },
       boxShadow: {
-        'glass': '0 8px 32px rgba(17, 24, 39, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.6)',
-        'glass-lg': '0 20px 60px rgba(17, 24, 39, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.6)',
-        'glass-sm': '0 4px 16px rgba(17, 24, 39, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.5)',
-        'soft': '0 2px 12px rgba(17, 24, 39, 0.06)',
+        // v1 compat — flattened to no-op so glass shadows disappear cleanly.
+        'glass': 'none',
+        'glass-lg': 'none',
+        'glass-sm': 'none',
+        'soft': 'none',
+      },
+      backdropBlur: {
+        // v1 compat — disable blur via util presence but value 0.
+        xs: '0px',
+        '2xl': '0px',
+        '3xl': '0px',
       },
       keyframes: {
         shimmer: {
@@ -109,27 +128,28 @@ export default {
           from: { opacity: '0', transform: 'translate(-50%, -48%) scale(0.96)' },
           to: { opacity: '1', transform: 'translate(-50%, -50%) scale(1)' },
         },
-        'gradient-pulse': {
-          '0%, 100%': { opacity: '0.6', transform: 'scale(1)' },
-          '50%': { opacity: '1', transform: 'scale(1.02)' },
-        },
-        'gradient-drift': {
-          '0%': { backgroundPosition: '0% 50%' },
-          '50%': { backgroundPosition: '100% 50%' },
-          '100%': { backgroundPosition: '0% 50%' },
-        },
         'fade-in-up': {
           from: { opacity: '0', transform: 'translateY(8px)' },
           to: { opacity: '1', transform: 'translateY(0)' },
+        },
+        // Subtle gradient drift for the welcome hero — 30s loop, barely visible.
+        'beyond-hero-drift': {
+          '0%': { backgroundPosition: '0% 30%' },
+          '50%': { backgroundPosition: '100% 70%' },
+          '100%': { backgroundPosition: '0% 30%' },
+        },
+        'beyond-pulse-dot': {
+          '0%, 100%': { opacity: '0.35' },
+          '50%': { opacity: '1' },
         },
       },
       animation: {
         shimmer: 'shimmer 2s linear infinite',
         'dialog-overlay-show': 'dialog-overlay-show 150ms ease-out',
         'dialog-content-show': 'dialog-content-show 150ms ease-out',
-        'gradient-pulse': 'gradient-pulse 2s ease-in-out infinite',
-        'gradient-drift': 'gradient-drift 18s ease infinite',
         'fade-in-up': 'fade-in-up 300ms cubic-bezier(0.21, 1.02, 0.73, 1) both',
+        'beyond-hero-drift': 'beyond-hero-drift 30s ease-in-out infinite',
+        'beyond-pulse-dot': 'beyond-pulse-dot 1.5s ease-in-out infinite',
       },
     },
   },

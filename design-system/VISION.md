@@ -1,106 +1,135 @@
-# Beyond Brain App — Design Vision
+# Beyond Brain App — Design Vision (v2 — REWRITE)
+
+**⚠️ Tato verze je kompletní redesign směru.** První pokus (v1) byl peach/sunrise glassmorphism, Tim řekl „strašný". Pivot na **hyperminimalismus**.
 
 ## Cíl
-Personal assistant UI pro Tima (Beyond mentoring), který se cítí jako **vlastní Apple-like sleek app**, ne dev tool. Pod kapotou claudecodeui (wraps Claude Code CLI), ale frontend kompletně redesigned.
+Apple-like sleek personal assistant, **embrace empty space**, hyperminimalismus. Pod kapotou claudecodeui, frontend kompletně přepsán.
 
-## Vibe
-**Apple sleek + soft + osobní.** Reference: macOS Sequoia liquid glass, ChatGPT, Linear (přesnost), Notion (typografie), Stripe (gradient backgrounds).
+## Vibe (v2)
+**Hyperminimal artistic**. Reference:
+- `inspiration/04-emmanuelhong-minimal.png` — Emmanuel Hong personal site: pure white, tiny logo (emoji tree), small clean text bloc, GIANT empty space, browser-like minimal chrome
+- `inspiration/05-powder-blue-gradient.png` — Mobile app: powder blue → cream subtle gradient, white sans hero "Shaping what we create with the power of air.", pill button "Learn more"
 
-## Design jazyk
+**OUT:**
+- ❌ Glassmorphism cards (žádné sklo, žádný backdrop-blur)
+- ❌ Peach / orange / sunrise gradients
+- ❌ Time-of-day gradient rotation
+- ❌ Decorative chrome (avatars on every message, status dots all over)
+- ❌ Busy chip suggestions
+- ❌ Instrument Serif jako primary font
 
-### Backgrounds
-- **Soft pastel gradients** jako macOS Sequoia wallpapery
-- Rotace podle denní doby:
-  - **Ráno** (5-11): warm peach → soft yellow (jako screenshot 2 — sunrise nad pouští)
-  - **Poledne** (11-17): soft blue → cool white (jako screenshot 3 — clear sky)
-  - **Večer** (17-22): purple → orange sunset (jako screenshot 1 — Apple Sequoia)
-  - **Noc** (22-5): deep blue → soft black (dark mode auto)
-- **Glassmorphism overlays**: bílé/translucent cards `backdrop-blur-xl` `bg-white/60`
+**IN:**
+- ✅ White / off-white background většiny appu
+- ✅ Subtle powder-blue → cream gradient JEN na welcome/hero screen
+- ✅ Helvetica Neue primary sans
+- ✅ Instrument Serif jen pro special moments (welcome greeting „Dobré ráno, Štěpáne")
+- ✅ Generous empty space — embrace prázdno
+- ✅ Soft gray pill buttons (transparent, subtle)
+- ✅ Cool artistic micro-animations (Framer Motion, subtle parallax, fade-in)
+- ✅ Hidden-by-default sidebar (toggle button)
 
-### Typografie
-- **Hero / Welcome**: **Instrument Serif** (Google Fonts) — warm, personal, ne corporate
-- **Body / UI**: Inter nebo systému sans-serif
-- **Mono / code**: JetBrains Mono pro kód bloky
+## Design jazyk (v2)
 
-### Personal assistant tón (Český)
-Ne enterprise „Choose Your AI Assistant". Místo toho:
-- Welcome: *„Dobré ráno, Štěpáne. Co dnes řešíme?"* (mění se podle denní doby)
-- Empty chat: *„Tady jsem. Co potřebuješ?"*
-- Loading: *„Přemýšlím..."* místo spinner
-- Errors: *„Hmm, něco se rozbilo. Zkusíme znovu?"*
-- Success: *„Hotovo. Pushnul jsem 3 commity."*
+### Background
+- Default: `#ffffff` (pure white) nebo `#fafafa` (off-white)
+- Welcome / hero: **soft powder blue → cream gradient** (`from-[#cdd9e8] via-[#e4dfd6] to-[#f0e6dc]` approx — match screenshot 05)
+- Single static gradient. **Žádná rotace podle denní doby.**
+
+### Typography
+- **Primary**: Helvetica Neue (system fallback: `-apple-system, "Helvetica Neue", Helvetica, sans`)
+- **Special moments** (welcome greeting, "Vítej zpátky"): **Instrument Serif** (Google Fonts), italic
+- **Weights**:
+  - Hero: 700 (bold) — clean, ne stylized
+  - Headings: 600 (semibold)
+  - Body: 400 (regular)
+  - UI labels: 500 (medium)
+- **Sizes**: generous — hero 48-64px, body 16-17px (ne 14)
+- **Line height**: airy — 1.5 body, 1.2 hero
+
+### Colors
+- **Text primary**: `#0a0a0a` (near black, ne pure black)
+- **Text secondary**: `#737373`
+- **Text tertiary**: `#a3a3a3`
+- **Borders / dividers**: `#f0f0f0` (very subtle)
+- **Pill button background**: `rgba(0,0,0,0.05)` (transparent gray)
+- **Pill button hover**: `rgba(0,0,0,0.08)`
+- **Accent**: minimal — possibly small color glyphs nebo žádný accent (text-only is fine)
+
+### Spacing
+- **Generous everywhere**. Padding 24-48px standardně, ne 12-16.
+- Empty space je content. Nebát se prázdné půlky obrazovky.
 
 ### Layout
-- **Sidebar (250px)** vlevo:
-  - Search nahoře (⌘K)
-  - Smart folders: „Dnes", „Tento týden", „Otevřené sliby"
-  - **Klienti (6)** s avatars + status dot (open promises count)
-  - Conversations historie
-  - Bottom: settings + system status (n8n, git, raw stáří)
-- **Main panel** vpravo:
-  - Welcome state (žádný klient vybrán)
-  - Chat view (klient vybrán)
-  - Optional secondary panel (jako screenshot 2 levá strana „Current Understanding")
 
-### Komponenty
-
-**Welcome screen** (žádný klient vybrán):
+**Welcome screen** (žádný klient, žádný chat):
 ```
-[soft gradient background]
+[powder blue → cream gradient full screen]
 
-           Dobré ráno, Štěpáne.        ← Instrument Serif 42px
-           Co dnes řešíme?
+                                            ← lot of empty space
 
-  [💬 Co je nového u Ivany?]           ← chip suggestions
-  [📋 Action items Patrik]
-  [🌅 Sync all]
+
+        Dobré ráno, Štěpáne.                ← Instrument Serif italic 56px, center
+        Co dnes řešíme?                     ← Instrument Serif italic 32px
+
+        [   Co je u Ivany?   ]              ← soft gray pills, ne přemíra
+        [   Action items Patrik   ]
+        [   Sync all   ]
+
+
+                                            ← lot of empty space
 ```
 
-**Chat view** (klient vybrán):
-- AI message: bílá glassmorphism card vlevo s avatarem
-- User message: šedá glassmorphism card vpravo
-- Generous spacing (24-32px mezi messages)
-- Tool calls: subtle inline indicator („📄 Čtu profil.md...", „💾 Commitnul jsem")
-- Step indicator pod (jako screenshot 2 „Step 1 of 4")
+**Chat view**:
+- **White bg** (žádný gradient)
+- Messages: simple text blocks, NO bubbles, NO avatars. Jen subtle indent + text color difference (AI dark, user lighter / lighter background).
+- Můžeš mít subtle horizontal rule mezi messages.
+- Input bottom: simple text input, minimal chrome, pill send button.
 
-**Input area** (bottom):
-- Light card s blur, soft shadow
-- Placeholder: „Jak ti můžu pomoct?"
-- Quick action chips pod inputem (Brief, Sync, Action items, atd.)
-- Subtle send button (arrow up)
+**Sidebar** (hidden by default):
+- Tiny toggle button (≡ icon) top left
+- Klik → sidebar slide in from left (~280px wide)
+- Content: search at top, 6 klientů (just names + W## small text), settings at bottom
+- Žádné status dots, žádné decorative elements
+- Klik na klienta → main view fokus na něj, sidebar auto-collapse
 
-**Sidebar client item**:
-- Avatar (initials nebo Notion icon)
-- Jméno
-- Status: „W04 · 2 sliby otevřené" v menším šedém textu
-- Hover: jemný gradient highlight
-- Selected: glassmorphism active state
+**Top chrome** (when sidebar collapsed):
+- Tiny browser-like bar: sidebar toggle (≡) | breadcrumb / context | chat button right
+- Příklad jako emmanuelhong screenshot — minimal, jen to nutné
 
-**Status bar** (bottom of sidebar):
-- 3 tečky: n8n (zelená OK / žlutá pomalá / červená error), git (clean / dirty / ahead), raw (čerstvá < 12h / stará > 36h)
-- Hover na tečku → tooltip detail
+### Animace (Cool artistic)
+- **Welcome hero text**: subtle typewriter or fade-in slow (1.2s ease)
+- **Sidebar slide**: spring physics, ne linear
+- **Page transitions**: subtle blur-fade (200ms)
+- **Chat message append**: fade up 100ms
+- **Hover states**: minimal — text color shift, pill bg shift, ne ruined transforms
+- **Loading**: tiny pulsing dot ne spinner
+- **Idle decorative**: maybe subtle parallax on welcome gradient — gradient pomalu morfuje (10-30s loop)
 
-### Animace (Framer Motion)
-- **Page transitions**: cross-fade 200ms
-- **Sidebar items**: spring on hover (subtle Y translate)
-- **Chat bubbles**: fade-in + slight Y on enter (50ms stagger)
-- **Loading**: subtle gradient pulse, ne spinner
-- **Command palette**: spring open from center, blur backdrop
+### Tone (Český, personal)
+- Welcome: **Dobré ráno / odpoledne / večer, Štěpáne. Co dnes řešíme?** (variable greeting podle hodiny)
+- Empty chat: **Tady jsem.**
+- Loading: **Přemýšlím...**
+- Errors: **Hm, něco se rozbilo. Zkusíme znovu?**
+- Success: **Hotovo.** (krátké, suché, ne enthusiastic)
 
-### Pravidla
-1. **Méně je víc.** Whitespace > content density. Sequoia, ne dashboard.
-2. **Tone over feature.** Personal AI assistant feel > „premium SaaS".
-3. **Skip dev tool patterns.** Žádné monospace tabs, žádné `>` cursor indikátory, žádné generic „workspace".
-4. **Glassmorphism > flat.** Soft blur backgrounds, ne hard color blocks.
-5. **Smooth > snappy.** 200-300ms ease-out, ne 100ms snap.
+## Pravidla (v2)
 
-## Reference
-- `inspiration/01-mail-app-ai-chat.png` — pastel sunset bg, soft sidebar, AI chat overlay, model picker
-- `inspiration/02-anastasia-cabinet.png` — warm sand bg, two-panel layout, chat + structured notes, „Hi, how can I help you today?", step indicator
-- `inspiration/03-search-sessions.png` — soft blue bg, search-first session list, document panel
+1. **Méně > Více.** Pokud má váhat, nepřidávej.
+2. **Empty space je feature, ne chyba.** 70% obrazovky může být prázdné. Je to OK.
+3. **Animace subtle, ne flashy.** Tasteful, ne TikTok.
+4. **Žádný designový shortcut.** Když máš pocit „přidám tady malou ikonku", nedělej to.
+5. **Default state = nejprázdnější.** Sidebar collapsed, žádná badge, žádná notif. Až user akce → reveal.
+6. **Typografie nese vibe.** Helvetica clean + Instrument Serif jako akcent. Žádné serif fonts in chat.
+7. **Bez claudecodeui chromu.** Žádné „CloudCLI v1.32 — Open Source" footer, žádné Discord links, žádné GitHub stars. Pure Beyond.
 
-## Brand (TBD)
-Tim pošle ukázky později. Zatím:
-- Color palette: TBD (asi navázat na growbeyond.cz)
-- Logo / wordmark: TBD
-- Font fallbacks: Instrument Serif → ui-serif → serif
+## Co Tim ještě dodá
+- Brand glyph (asi 1 emoji nebo tiny SVG — viz emmanuelhong tree)
+- Případně exact color hex pro accent (zatím text-only)
+- PWA ikona — minimalistic glyph
+
+## Reference (vše v `inspiration/`)
+- `04-emmanuelhong-minimal.png` — golden standard pro empty-space minimalism
+- `05-powder-blue-gradient.png` — jediný akceptovaný gradient styl
+- ~~`01-mail-app-ai-chat.png`~~ — DEPRECATED (glassmorphism out)
+- ~~`02-anastasia-cabinet.png`~~ — DEPRECATED (warm sunset out)
+- ~~`03-search-sessions.png`~~ — keep for search UI inspiration only

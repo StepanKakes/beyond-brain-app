@@ -125,25 +125,30 @@
     box-sizing: border-box;
     transition: none;
   }
-  
+
   body {
-    /* Beyond: keep body transparent so BeyondBackground gradient shows through */
+    /* Beyond v2 — pure white default. BeyondBackgroundV2 may layer a subtle hero gradient on top. */
     @apply text-foreground;
-    background: transparent;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: #ffffff;
+    color: #0a0a0a;
+    font-family: "Helvetica Neue", Helvetica, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
     margin: 0;
     padding: 0;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
 
   html {
-    /* Fallback solid color in case the BeyondBackground component isn't mounted yet (FOUC) */
-    background-color: #FAF6F1;
+    /* Pure white fallback — no FOUC color shift */
+    background-color: #ffffff;
   }
   html.dark {
-    background-color: #0F1626;
+    /* v2: dark mode is light-deferred for now; keep neutral so legacy chrome doesn't go black mid-redesign */
+    background-color: #ffffff;
   }
 
-  /* The Beyond gradient layer is fixed-positioned; ensure no parent paints on top */
+  /* No fixed gradient layer in v2 — backgrounds are set per-view */
   #root {
     background: transparent;
   }
@@ -951,165 +956,162 @@
 }
 
 /* ============================================================ */
-/*  BEYOND BRAIN DESIGN SYSTEM                                  */
-/*  Apple-sleek personal assistant aesthetic                    */
-/*  Soft pastel gradients, glassmorphism, Instrument Serif      */
+/*  BEYOND BRAIN DESIGN SYSTEM — v2                              */
+/*  Hyperminimal. White surfaces, generous space,                */
+/*  Helvetica primary, Instrument Serif for moments,             */
+/*  one soft powder-blue → cream gradient (hero only).           */
 /* ============================================================ */
 
 @layer base {
+  /* Load Instrument Serif from Google — only used for hero greetings. */
+  @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap');
+
   :root {
-    /* Beyond glass surface tokens (light) */
-    --beyond-glass-bg: 255 255 255 / 0.62;
-    --beyond-glass-bg-strong: 255 255 255 / 0.78;
-    --beyond-glass-bg-subtle: 255 255 255 / 0.42;
-    --beyond-glass-border: 255 255 255 / 0.55;
-    --beyond-glass-shadow: 17 24 39 / 0.08;
-    --beyond-glass-blur: 22px;
-    --beyond-glass-saturate: 1.4;
+    /* Beyond v2 surface tokens */
+    --beyond-bg: #ffffff;
+    --beyond-bg-paper: #fafafa;
+    --beyond-ink: #0a0a0a;
+    --beyond-dim: #737373;
+    --beyond-faint: #a3a3a3;
+    --beyond-line: #f0f0f0;
 
-    /* Text on glass */
-    --beyond-text-primary: 24 28 42;
-    --beyond-text-secondary: 80 86 104;
-    --beyond-text-muted: 130 138 160;
+    /* Pill button surface — transparent gray that sits on either white or hero gradient */
+    --beyond-pill-bg: rgba(0, 0, 0, 0.05);
+    --beyond-pill-bg-hover: rgba(0, 0, 0, 0.08);
 
-    /* Default day gradient (will be overridden by JS based on hour) */
-    --beyond-bg-from: #FFE4CC;
-    --beyond-bg-via: #FFD1DC;
-    --beyond-bg-to: #D6C7F0;
-  }
-
-  .dark {
-    --beyond-glass-bg: 26 34 56 / 0.55;
-    --beyond-glass-bg-strong: 26 34 56 / 0.72;
-    --beyond-glass-bg-subtle: 26 34 56 / 0.35;
-    --beyond-glass-border: 255 255 255 / 0.08;
-    --beyond-glass-shadow: 0 0 0 / 0.35;
-
-    --beyond-text-primary: 240 244 252;
-    --beyond-text-secondary: 178 188 210;
-    --beyond-text-muted: 130 140 165;
-  }
-
-  /* Use Inter as default body font (with system fallback) */
-  body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    font-feature-settings: 'cv11', 'ss01', 'ss03';
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    text-rendering: optimizeLegibility;
+    /* Hero gradient stops */
+    --beyond-hero-from: #cdd9e8;
+    --beyond-hero-via:  #e4dfd6;
+    --beyond-hero-to:   #f0e6dc;
   }
 }
 
 @layer utilities {
   /* ---------------------------------------------------------- */
-  /*  GRADIENT BACKGROUND SYSTEM                                */
-  /*  Time-of-day variants — applied by BeyondBackground.tsx    */
+  /*  SURFACES                                                  */
   /* ---------------------------------------------------------- */
 
-  .beyond-bg-morning {
-    /* sunrise — warm peach → soft yellow, with strong corners */
-    background:
-      radial-gradient(at 15% 10%, #FFB58A 0%, transparent 50%),
-      radial-gradient(at 85% 15%, #FFCCA5 0%, transparent 55%),
-      radial-gradient(at 50% 95%, #FFE0B5 0%, transparent 55%),
-      radial-gradient(at 0% 100%, #FFB89D 0%, transparent 40%),
-      linear-gradient(165deg, #FFEFDA 0%, #FFDCBC 60%, #FFB58A 100%);
-    background-attachment: fixed;
+  .beyond-surface {
+    background: var(--beyond-bg);
+    color: var(--beyond-ink);
   }
 
-  .beyond-bg-day {
-    /* clear sky — soft blue → cool white, with visible color shifts */
-    background:
-      radial-gradient(at 12% 18%, #A8CFFF 0%, transparent 55%),
-      radial-gradient(at 88% 12%, #CDE3FF 0%, transparent 60%),
-      radial-gradient(at 50% 85%, #E0EEFF 0%, transparent 50%),
-      radial-gradient(at 95% 95%, #B6D8FF 0%, transparent 50%),
-      linear-gradient(180deg, #CCE3FF 0%, #E7F2FF 50%, #F0F6FF 100%);
-    background-attachment: fixed;
+  /* Welcome hero gradient — powder-blue → mist → cream.
+     Slow drift animation (30s) for the artistic idle. */
+  .beyond-hero-gradient {
+    background: linear-gradient(
+      155deg,
+      var(--beyond-hero-from) 0%,
+      var(--beyond-hero-via)  55%,
+      var(--beyond-hero-to)   100%
+    );
+    background-size: 180% 180%;
+    background-position: 0% 30%;
+    animation: beyond-hero-drift 30s ease-in-out infinite;
   }
 
-  .beyond-bg-evening {
-    /* sunset — purple haze → orange glow */
-    background:
-      radial-gradient(at 78% 8%, #FF9F76 0%, transparent 55%),
-      radial-gradient(at 12% 28%, #B485D4 0%, transparent 60%),
-      radial-gradient(at 50% 90%, #6B5B95 0%, transparent 60%),
-      radial-gradient(at 95% 95%, #8A6BB0 0%, transparent 50%),
-      linear-gradient(170deg, #FFB892 0%, #C29DDC 55%, #6B5B95 100%);
-    background-attachment: fixed;
-  }
-
-  .beyond-bg-night {
-    /* night — deep indigo + plum + subtle aurora */
-    background:
-      radial-gradient(at 20% 15%, #3B4D8C 0%, transparent 55%),
-      radial-gradient(at 78% 25%, #5A4079 0%, transparent 55%),
-      radial-gradient(at 50% 88%, #1B2952 0%, transparent 60%),
-      linear-gradient(180deg, #14213D 0%, #1A2238 60%, #25224A 100%);
-    background-attachment: fixed;
-  }
-
-  /* Container that paints the gradient behind everything.
-     Using z-index 0 + pointer-events: none — content above sits via flow ordering. */
-  .beyond-bg-layer {
-    position: fixed;
-    inset: 0;
-    z-index: 0;
-    pointer-events: none;
-    transition: opacity 1500ms ease-in-out;
+  @media (prefers-reduced-motion: reduce) {
+    .beyond-hero-gradient {
+      animation: none;
+    }
   }
 
   /* ---------------------------------------------------------- */
-  /*  GLASSMORPHISM SURFACES                                    */
+  /*  TYPOGRAPHY                                                */
   /* ---------------------------------------------------------- */
 
-  .bg-glass {
-    background: rgb(var(--beyond-glass-bg));
-    backdrop-filter: blur(var(--beyond-glass-blur)) saturate(var(--beyond-glass-saturate));
-    -webkit-backdrop-filter: blur(var(--beyond-glass-blur)) saturate(var(--beyond-glass-saturate));
-    border: 1px solid rgb(var(--beyond-glass-border));
-    box-shadow: 0 8px 32px rgb(var(--beyond-glass-shadow));
+  /* Special-moment serif. Use sparingly: greetings, hero lines. */
+  .font-hero {
+    font-family: 'Instrument Serif', ui-serif, Georgia, serif;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    line-height: 1.08;
   }
 
-  .bg-glass-strong {
-    background: rgb(var(--beyond-glass-bg-strong));
-    backdrop-filter: blur(28px) saturate(1.6);
-    -webkit-backdrop-filter: blur(28px) saturate(1.6);
-    border: 1px solid rgb(var(--beyond-glass-border));
-    box-shadow: 0 12px 40px rgb(var(--beyond-glass-shadow));
+  .text-beyond-ink   { color: var(--beyond-ink); }
+  .text-beyond-dim   { color: var(--beyond-dim); }
+  .text-beyond-faint { color: var(--beyond-faint); }
+
+  /* ---------------------------------------------------------- */
+  /*  PILL BUTTONS                                              */
+  /* ---------------------------------------------------------- */
+
+  .beyond-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.65rem 1.15rem;
+    border-radius: 999px;
+    background: var(--beyond-pill-bg);
+    color: var(--beyond-ink);
+    font-family: inherit;
+    font-size: 0.95rem;
+    font-weight: 500;
+    line-height: 1;
+    border: 0;
+    cursor: pointer;
+    transition: background-color 180ms ease-out, color 180ms ease-out;
   }
 
-  .bg-glass-subtle {
-    background: rgb(var(--beyond-glass-bg-subtle));
-    backdrop-filter: blur(16px) saturate(1.3);
-    -webkit-backdrop-filter: blur(16px) saturate(1.3);
-    border: 1px solid rgb(var(--beyond-glass-border));
+  .beyond-pill:hover {
+    background: var(--beyond-pill-bg-hover);
   }
 
-  /* Glass card with hover lift */
+  .beyond-pill:focus-visible {
+    outline: 2px solid var(--beyond-ink);
+    outline-offset: 3px;
+  }
+
+  /* ---------------------------------------------------------- */
+  /*  MISC                                                      */
+  /* ---------------------------------------------------------- */
+
+  /* Pulsing loader dot — "Přemýšlím" */
+  .beyond-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--beyond-ink);
+    animation: beyond-pulse-dot 1.5s ease-in-out infinite;
+  }
+
+  /* ---------------------------------------------------------- */
+  /*  V1 COMPAT SHIMS                                           */
+  /*  Legacy classes still referenced by un-rewritten components.*/
+  /*  Mapped to flat neutral v2 surfaces so the build keeps     */
+  /*  rendering during the per-phase rewrite. Remove once all   */
+  /*  components are migrated.                                  */
+  /* ---------------------------------------------------------- */
+
+  .bg-glass,
+  .bg-glass-strong,
+  .bg-glass-subtle,
   .beyond-card {
-    background: rgb(var(--beyond-glass-bg));
-    backdrop-filter: blur(var(--beyond-glass-blur)) saturate(var(--beyond-glass-saturate));
-    -webkit-backdrop-filter: blur(var(--beyond-glass-blur)) saturate(var(--beyond-glass-saturate));
-    border: 1px solid rgb(var(--beyond-glass-border));
-    border-radius: 1.25rem;
-    box-shadow:
-      0 8px 32px rgb(var(--beyond-glass-shadow)),
-      inset 0 1px 0 rgba(255, 255, 255, 0.55);
-    transition: transform 280ms cubic-bezier(0.21, 1.02, 0.73, 1),
-                box-shadow 280ms cubic-bezier(0.21, 1.02, 0.73, 1);
+    background: #ffffff;
+    border: 1px solid var(--beyond-line);
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 
-  .beyond-card:hover {
-    transform: translateY(-1px);
-    box-shadow:
-      0 14px 44px rgb(var(--beyond-glass-shadow)),
-      inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  .beyond-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.55rem 0.95rem;
+    border-radius: 999px;
+    background: var(--beyond-pill-bg);
+    border: 0;
+    color: var(--beyond-ink);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 180ms ease-out;
   }
 
-  /* ---------------------------------------------------------- */
-  /*  TEXT STYLES                                               */
-  /* ---------------------------------------------------------- */
+  .beyond-chip:hover { background: var(--beyond-pill-bg-hover); }
 
   .text-hero {
     font-family: 'Instrument Serif', ui-serif, Georgia, serif;
@@ -1118,60 +1120,16 @@
     line-height: 1.1;
   }
 
-  .text-beyond-primary { color: rgb(var(--beyond-text-primary)); }
-  .text-beyond-secondary { color: rgb(var(--beyond-text-secondary)); }
-  .text-beyond-muted { color: rgb(var(--beyond-text-muted)); }
+  .text-beyond-primary   { color: var(--beyond-ink); }
+  .text-beyond-secondary { color: var(--beyond-dim); }
+  .text-beyond-muted     { color: var(--beyond-faint); }
 
-  /* ---------------------------------------------------------- */
-  /*  BEYOND BUTTONS / CHIPS                                    */
-  /* ---------------------------------------------------------- */
-
-  .beyond-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.55rem 0.95rem;
-    border-radius: 999px;
-    background: rgb(var(--beyond-glass-bg-strong));
-    backdrop-filter: blur(18px) saturate(1.5);
-    -webkit-backdrop-filter: blur(18px) saturate(1.5);
-    border: 1px solid rgb(var(--beyond-glass-border));
-    color: rgb(var(--beyond-text-primary));
-    font-size: 0.875rem;
-    font-weight: 500;
-    box-shadow: 0 2px 8px rgb(var(--beyond-glass-shadow));
-    cursor: pointer;
-    transition: transform 200ms cubic-bezier(0.21, 1.02, 0.73, 1),
-                box-shadow 200ms ease-out,
-                background-color 200ms ease-out;
-  }
-
-  .beyond-chip:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 6px 18px rgb(var(--beyond-glass-shadow));
-    background: rgb(255 255 255 / 0.88);
-  }
-
-  .dark .beyond-chip:hover {
-    background: rgb(40 50 78 / 0.85);
-  }
-
-  .beyond-chip:active {
-    transform: translateY(0);
-  }
-
-  /* Subtle loading pulse — replaces spinner */
   .beyond-loading-pulse {
     display: inline-block;
     width: 100%;
     height: 100%;
     border-radius: inherit;
-    background: linear-gradient(
-      90deg,
-      transparent 0%,
-      rgba(255, 255, 255, 0.45) 50%,
-      transparent 100%
-    );
+    background: linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.05) 50%, transparent 100%);
     background-size: 200% 100%;
     animation: shimmer 1.8s linear infinite;
   }

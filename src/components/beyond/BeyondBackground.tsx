@@ -1,16 +1,18 @@
-import { useEffect, useState } from 'react';
-
 /**
- * Beyond Brain gradient background system.
- * Picks a soft pastel gradient based on the current hour (Sequoia-like).
- * Re-evaluates every 5 minutes so the background drifts through the day.
+ * Beyond Brain — v2 background.
  *
- * Variants:
- *  - morning (5-11): warm peach → soft yellow
- *  - day     (11-17): soft blue → cool white
- *  - evening (17-22): purple → orange sunset
- *  - night   (22-5): deep blue → soft black (auto-pairs with dark mode)
+ * v1 painted a fixed full-screen time-of-day gradient (peach/sunrise).
+ * v2 is hyperminimal: default state is **pure white**. The only colored
+ * background is the soft powder-blue → cream gradient used on the welcome
+ * hero — opt-in via the `variant` prop.
+ *
+ * No time-of-day rotation. No glassmorphism. No fixed layer unless asked.
  */
+
+/* ---- v1 compat re-exports (so legacy imports still type-check) -----------
+ * v2 doesn't rotate by hour, but BeyondWelcome (v1) still imports these.
+ * They're kept here as deprecated thin shims and will be removed once all
+ * v1 components are rewritten. */
 export type TimeOfDay = 'morning' | 'day' | 'evening' | 'night';
 
 export function getTimeOfDay(date: Date = new Date()): TimeOfDay {
@@ -21,44 +23,25 @@ export function getTimeOfDay(date: Date = new Date()): TimeOfDay {
   return 'night';
 }
 
-const VARIANT_CLASS: Record<TimeOfDay, string> = {
-  morning: 'beyond-bg-morning',
-  day: 'beyond-bg-day',
-  evening: 'beyond-bg-evening',
-  night: 'beyond-bg-night',
+export type BeyondBackgroundVariant = 'white' | 'hero';
+
+type Props = {
+  /** 'white' (default) paints nothing — the page sits on the body's white background.
+   *  'hero' paints the powder-blue → cream gradient as a fixed layer. */
+  variant?: BeyondBackgroundVariant;
 };
 
-export default function BeyondBackground() {
-  const [variant, setVariant] = useState<TimeOfDay>(() => {
-    // Allow ?bg=morning|day|evening|night override for design previews / screenshots
-    if (typeof window !== 'undefined') {
-      const forced = new URLSearchParams(window.location.search).get('bg');
-      if (forced === 'morning' || forced === 'day' || forced === 'evening' || forced === 'night') {
-        return forced;
-      }
-    }
-    return getTimeOfDay();
-  });
-
-  useEffect(() => {
-    // Skip auto-rotation if URL pins a variant
-    if (typeof window !== 'undefined') {
-      const forced = new URLSearchParams(window.location.search).get('bg');
-      if (forced === 'morning' || forced === 'day' || forced === 'evening' || forced === 'night') {
-        return undefined;
-      }
-    }
-    const tick = () => setVariant(getTimeOfDay());
-    tick();
-    const id = window.setInterval(tick, 5 * 60 * 1000);
-    return () => window.clearInterval(id);
-  }, []);
+export default function BeyondBackground({ variant = 'white' }: Props) {
+  if (variant === 'white') {
+    // Nothing to paint — body already has #ffffff.
+    return null;
+  }
 
   return (
     <div
       aria-hidden="true"
-      data-variant={variant}
-      className={`beyond-bg-layer ${VARIANT_CLASS[variant]}`}
+      data-variant="hero"
+      className="beyond-hero-gradient pointer-events-none fixed inset-0 z-0"
     />
   );
 }
