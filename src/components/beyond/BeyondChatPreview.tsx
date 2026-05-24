@@ -29,22 +29,20 @@ export default function BeyondChatPreview() {
   return (
     <div className="flex h-full w-full flex-col">
       {/* Top header (glass) */}
-      <div className="flex flex-shrink-0 items-center gap-3 border-b border-white/30 bg-white/45 px-4 py-3 backdrop-blur-xl backdrop-saturate-150 dark:border-white/5 dark:bg-beyond-ink/45">
-        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-beyond-peach via-beyond-coral to-beyond-plum font-medium text-white shadow-soft">
+      <div className="flex flex-shrink-0 items-center gap-3 border-b border-white/30 bg-white/45 px-3 py-3 backdrop-blur-xl backdrop-saturate-150 dark:border-white/5 dark:bg-beyond-ink/45 sm:px-4">
+        <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-beyond-peach via-beyond-coral to-beyond-plum font-medium text-white shadow-soft">
           IJ
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h2 className="truncate font-serif text-lg leading-tight text-beyond-primary">
             Ivana Juříková
           </h2>
           <p className="truncate text-xs text-beyond-secondary">W18 · 2 otevřené sliby</p>
         </div>
-        <div className="ml-auto flex items-center gap-2">
-          <button className="beyond-chip" type="button">
-            <Sparkles className="h-3.5 w-3.5" />
-            Sync
-          </button>
-        </div>
+        <button className="beyond-chip flex-shrink-0" type="button">
+          <Sparkles className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">Sync</span>
+        </button>
       </div>
 
       {/* Messages */}

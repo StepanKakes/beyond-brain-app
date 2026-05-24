@@ -29,9 +29,9 @@ type Props = {
 };
 
 const DEFAULT_SUGGESTIONS: SuggestionChip[] = [
-  { icon: '💬', label: 'Co je nového u Ivany?', prompt: 'Co je nového u Ivany Juříkové?' },
-  { icon: '📋', label: 'Action items Patrik', prompt: 'Ukaž mi otevřené sliby u Patrika Kruntorada.' },
-  { icon: '🌅', label: 'Sync all', prompt: 'Spusť sync všech klientů z Notion.' },
+  { icon: '💬', label: 'Co je u Ivany?', prompt: 'Co je nového u Ivany Juříkové?' },
+  { icon: '📋', label: 'Sliby Patrik', prompt: 'Ukaž mi otevřené sliby u Patrika Kruntorada.' },
+  { icon: '🌅', label: 'Sync', prompt: 'Spusť sync všech klientů z Notion.' },
 ];
 
 function getGreeting(name: string): string {
@@ -64,14 +64,14 @@ export default function BeyondWelcome({
   const greeting = useMemo(() => getGreeting(name), [name]);
 
   return (
-    <div className="flex h-full w-full items-center justify-center px-6">
+    <div className="flex h-full w-full items-center justify-center px-5 sm:px-6">
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.55, ease: [0.21, 1.02, 0.73, 1] }}
         className="mx-auto w-full max-w-2xl text-center"
       >
-        <h1 className="text-hero text-[2.5rem] leading-tight text-beyond-primary sm:text-[3rem] md:text-[3.25rem]">
+        <h1 className="text-hero text-[1.85rem] leading-tight text-beyond-primary sm:text-[2.5rem] md:text-[3rem] lg:text-[3.25rem]">
           {greeting}
           <br />
           <span className="italic text-beyond-secondary">{QUESTION}</span>
@@ -85,7 +85,7 @@ export default function BeyondWelcome({
               hidden: {},
               show: { transition: { staggerChildren: 0.08, delayChildren: 0.25 } },
             }}
-            className="mt-10 flex flex-wrap items-center justify-center gap-2.5"
+            className="mx-auto mt-10 flex max-w-xs flex-col items-stretch gap-2 sm:max-w-none sm:flex-row sm:flex-wrap sm:justify-center sm:gap-2.5"
           >
             {suggestions.map((s) => (
               <motion.button

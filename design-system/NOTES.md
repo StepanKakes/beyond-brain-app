@@ -125,3 +125,23 @@ Pracovní deník redesignu. Decisions, gotchas, follow-ups.
 - **Plné video screen capture:** vyžadovalo by ffmpeg + Puppeteer headful, skipped pro čas. Místo toho commitnuto 5 stop-motion snapshotů.
 - **Page transitions mezi tab change:** AppContent má lots of state + WebSocket re-mounting risk. Necháno bez transition; component-level fade je dostatečný.
 
+
+## Fáze E — Final polish + responsive + PWA
+
+### Co je hotové
+- **PWA manifest** (`public/manifest.json`): name "Beyond Brain" / short_name "Beyond", lang "cs", description, theme + background color `#FAF6F1`.
+- **Service worker** (`public/sw.js`): zachován existující network-first SW (manifest pre-cache, HTML/JS net-first, nic se nezacaccuje "natvrdo"). Beyond nepotřebuje vlastní.
+- **Mobile responsive welcome:** chip suggestions stacked column na `< sm`, side-by-side wrap na `≥ sm`. Hero font scale `1.85 → 2.5 → 3 → 3.25rem`.
+- **Mobile chat preview:** Sync chip v headeru má "Sync" label hidden na `< sm`. Avatar/title/sub stack respektuje `flex-shrink-0`.
+- **Existující mobile sidebar drawer:** `AppContent` má `isMobile` flag pattern (drawer + overlay), zachován z upstreamu — Beyond styly přes glass apply automaticky.
+- **BEYOND.md**: dedicated README pro Beyond Brain — design vibe, jak rozjet, /__preview rotuy, env vars, klíčové soubory, screenshoty, Coolify deploy notes.
+
+### Screenshoty Phase E
+- `fase-E-desktop-{welcome,chat,all}.png` — 1440×900 finální desktop views
+- `fase-E-mobile-{welcome,chat}.png` — 390×844 (iPhone 14)
+- `fase-E-wide-evening.png` — 1920×1080 evening sunset, sidebar + welcome split
+
+### Gotchas
+- **Mobile chip wrap:** původní `flex-wrap` nestačil — chipy zůstávaly na jedné řádce. Vyřešeno stacked column na mobile (`max-w-xs flex-col` → `sm:flex-row sm:flex-wrap`). Také zkrácený copy "Sync all" → "Sync".
+- **PWA install test:** v Safari/Chrome v "Add to Home Screen" by mělo fungovat. Beyond manifest + theme color + icons předány. Existující ikony (`icons/icon-*.png`) jsou claudecodeui generic; **Tim pravděpodobně chce vlastní logo** — TODO swap.
+
