@@ -8,9 +8,23 @@ import { WebSocketProvider } from './contexts/WebSocketContext';
 import { PluginsProvider } from './contexts/PluginsContext';
 import AppContent from './components/app/AppContent';
 import BeyondBackground from './components/beyond/BeyondBackground';
+import BeyondPreview from './components/beyond/BeyondPreview';
 import i18n from './i18n/config.js';
 
 export default function App() {
+  // Design-system preview routes (no auth, no backend) — handy for screenshots.
+  // Only available at /__preview/ paths; never linked from the real UI.
+  if (typeof window !== 'undefined' && window.location.pathname.startsWith('/__preview')) {
+    return (
+      <I18nextProvider i18n={i18n}>
+        <ThemeProvider>
+          <BeyondBackground />
+          <BeyondPreview />
+        </ThemeProvider>
+      </I18nextProvider>
+    );
+  }
+
   return (
     <I18nextProvider i18n={i18n}>
       <ThemeProvider>

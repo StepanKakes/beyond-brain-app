@@ -117,10 +117,10 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
       className={`chat-message ${message.type} ${isGrouped ? 'grouped' : ''} ${message.type === 'user' ? 'flex justify-end px-3 sm:px-0' : 'px-3 sm:px-0'}`}
     >
       {message.type === 'user' ? (
-        /* User message bubble on the right */
+        /* User message bubble on the right — Beyond glass charcoal */
         <div className="flex w-full items-end space-x-0 sm:w-auto sm:max-w-[85%] sm:space-x-3 md:max-w-md lg:max-w-lg xl:max-w-xl">
-          <div className="group flex-1 rounded-2xl rounded-br-md bg-blue-600 px-3 py-2 text-white shadow-sm sm:flex-initial sm:px-4">
-            <div className="whitespace-pre-wrap break-words text-sm">
+          <div className="group flex-1 rounded-3xl rounded-br-lg bg-beyond-charcoal/95 px-4 py-2.5 text-white shadow-glass-sm backdrop-blur-md sm:flex-initial sm:px-4 dark:bg-white/95 dark:text-beyond-charcoal">
+            <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">
               {message.content}
             </div>
             {message.images && message.images.length > 0 && (
@@ -130,13 +130,13 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                     key={img.name || idx}
                     src={img.data}
                     alt={img.name}
-                    className="h-auto max-w-full cursor-pointer rounded-lg transition-opacity hover:opacity-90"
+                    className="h-auto max-w-full cursor-pointer rounded-xl transition-opacity hover:opacity-90"
                     onClick={() => window.open(img.data, '_blank')}
                   />
                 ))}
               </div>
             )}
-            <div className="mt-1 flex items-center justify-end gap-1 text-xs text-blue-100">
+            <div className="mt-1 flex items-center justify-end gap-1 text-[11px] text-white/55 dark:text-beyond-charcoal/55">
               {shouldShowUserCopyControl && (
                 <MessageCopyControl content={userCopyContent} messageType="user" />
               )}
@@ -144,8 +144,8 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
             </div>
           </div>
           {!isGrouped && (
-            <div className="hidden h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm text-white sm:flex">
-              U
+            <div className="hidden h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-beyond-sky to-beyond-dusk/70 text-sm font-medium text-white shadow-soft sm:flex">
+              T
             </div>
           )}
         </div>
@@ -167,16 +167,16 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, o
                   !
                 </div>
               ) : message.type === 'tool' ? (
-                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gray-600 text-sm text-white dark:bg-gray-700">
-                  🔧
+                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-white/70 text-sm shadow-soft backdrop-blur-md dark:bg-white/10">
+                  <span aria-hidden="true">🔧</span>
                 </div>
               ) : (
-                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full p-1 text-sm text-white">
+                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-beyond-peach via-beyond-coral to-beyond-plum p-1 shadow-soft">
                   <SessionProviderLogo provider={provider} className="h-full w-full" />
                 </div>
               )}
-              <div className="text-sm font-medium text-gray-900 dark:text-white">
-                {message.type === 'error' ? t('messageTypes.error') : message.type === 'tool' ? t('messageTypes.tool') : (provider === 'cursor' ? t('messageTypes.cursor') : provider === 'codex' ? t('messageTypes.codex') : provider === 'gemini' ? t('messageTypes.gemini') : t('messageTypes.claude'))}
+              <div className="text-sm font-medium text-beyond-primary">
+                {message.type === 'error' ? t('messageTypes.error') : message.type === 'tool' ? t('messageTypes.tool') : 'Beyond'}
               </div>
             </div>
           )}

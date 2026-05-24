@@ -41,3 +41,34 @@ Pracovní deník redesignu. Decisions, gotchas, follow-ups.
 - Coolify build: `npm run build` (client + server). Spustit `npm run server` na produkci.
 - ENV: `SERVER_PORT`, `VITE_PORT`, `HOST` (viz `.env.example`). Auth (single-user) skrz setup screen při prvním spuštění.
 - Google Fonts: `https://fonts.googleapis.com` musí být dostupný; alternativně lze stáhnout fonty lokálně do `public/fonts/`.
+
+## Fáze B — Welcome + Chat redesign
+
+### Co je hotové
+- `BeyondWelcome.tsx`: hero greeting podle denní doby ("Dobré ráno / odpoledne / večer / Ahoj, Štěpáne." + "Co dnes řešíme?" italic), 3 chip suggestions (Co je nového u Ivany / Action items Patrik / Sync all). `?bg=…` override platí i pro greeting.
+- `MainContentStateView.tsx` empty state přepsán na `<BeyondWelcome />`. Loading state má Beyond gradient pulse místo spinneru + serif "Načítám".
+- `MessageComponent.tsx`:
+  - User bubble: `bg-beyond-charcoal/95` (dark→bílá inverze), `rounded-3xl rounded-br-lg`, glass shadow, generous padding.
+  - User avatar: gradient `from-beyond-sky to-beyond-dusk/70`.
+  - Assistant header: gradient circle (`peach → coral → plum`) jako Beyond avatar, label vždy "Beyond" (ne "Claude/Codex/…").
+- `ChatComposer.tsx` placeholder: hardcoded "Jak ti můžu pomoct?" v `ChatInterface.tsx` (přebíjí `t('input.placeholder', …)`).
+- `ClaudeStatus.tsx`: glass pill (`bg-white/65 backdrop-blur-xl`), CZ action words ("Přemýšlím", "Zpracovávám", …), Beyond gradient avatar, "Stop" místo "STOP" CAPS.
+
+### Preview infrastructure
+- `BeyondPreview.tsx`: standalone routes `/__preview/welcome`, `/__preview/chat`, `/__preview/sidebar`, `/__preview/all`. Bypassují `ProtectedRoute` + nedělají WS/Auth nic. Slouží jen pro screenshoty / iteraci. Neviditelné z reálné navigace.
+- `BeyondChatPreview.tsx`: mock chat s 3 seed messages (user → AI s tool callem → user), složená "Přemýšlím…" pill, glass composer s quick chips. Demonstruje finální vizuál.
+- `BeyondSidebarPreview.tsx`: ✨ **Phase C preview ready** — Beyond glyph + wordmark, search, smart folders (Dnes / Tento týden / Otevřené sliby), 6 klientů s avatary + W## + počet otevřených slibů + coral promise dot, status bar (n8n / git / raw), settings ikon.
+- `BeyondAssistantAvatar.tsx`: sdílená gradient circle pro Beyond identitu v chatu.
+
+### Gotchas
+- **Greeting vs. fyzický čas:** v 00:36 (skutečný test) → night → "Ahoj". Aby screenshot ukázal "Dobré ráno", `getEffectiveTimeOfDay()` respektuje `?bg=…`.
+- **Preview routy & SPA fallback:** Vite SPA fallback vrací `index.html`, takže `/__preview/...` funguje out-of-the-box v dev i prod (přes `historyApiFallback`).
+
+### TODO Fáze C
+- Reálný sidebar: nahradit `SidebarProjectList` (auto-detect GitHub repos) za **6 klientů z `~/Documents/GitHub/beyond-brain/clients/aktivni/`** s real-time daty z `profil.md` (W##), `_action-items.md` (open promises count), `raw/notion/dashboard.json` (cíl).
+- Backend endpoint `/api/beyond/clients` který scanne adresář a vrátí JSON.
+- Konverzace sekce zmenšit / posunout pod klienty.
+
+### TODO Fáze D
+- Framer Motion install + page transitions + bubble fade-in stagger + spring hover.
+

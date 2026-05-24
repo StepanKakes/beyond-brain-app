@@ -22,7 +22,8 @@ const ACTION_KEYS = [
   'claudeStatus.actions.computing',
   'claudeStatus.actions.reasoning',
 ];
-const DEFAULT_ACTION_WORDS = ['Thinking', 'Processing', 'Analyzing', 'Working', 'Computing', 'Reasoning'];
+// Beyond CZ defaults — used when no translation key matches.
+const DEFAULT_ACTION_WORDS = ['Přemýšlím', 'Zpracovávám', 'Analyzuju', 'Pracuju', 'Počítám', 'Uvažuju'];
 
 const PROVIDER_LABEL_KEYS: Record<string, string> = {
   claude: 'messageTypes.claude',
@@ -75,47 +76,53 @@ export default function ClaudeStatus({
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 mb-3 w-full duration-500">
-      <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 overflow-hidden rounded-full border border-border/50 bg-slate-100 px-3 py-1.5 shadow-sm backdrop-blur-md dark:bg-slate-900">
+      <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 overflow-hidden rounded-full border border-white/40 bg-white/65 px-3.5 py-1.5 shadow-soft backdrop-blur-xl backdrop-saturate-150 dark:border-white/10 dark:bg-beyond-ink/55">
 
-        {/* Left Side: Identity & Status */}
+        {/* Left side — identity + Beyond "Přemýšlím..." status */}
         <div className="flex min-w-0 items-center gap-2.5">
-          <div className="relative flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/20 ring-1 ring-primary/10">
+          <div className="relative flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-beyond-peach via-beyond-coral to-beyond-plum">
             <SessionProviderLogo provider={provider} className="h-3.5 w-3.5" />
             {isLoading && (
-              <span className="absolute inset-0 animate-pulse rounded-full ring-2 ring-emerald-500/20" />
+              <span className="absolute inset-0 rounded-full ring-2 ring-beyond-coral/30 animate-pulse" />
             )}
           </div>
 
           <div className="flex min-w-0 flex-col sm:flex-row sm:items-center sm:gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
+            <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-beyond-muted">
               {providerLabel}
             </span>
             <div className="flex items-center gap-1.5">
-              <span className={cn("h-1.5 w-1.5 rounded-full", isLoading ? "bg-emerald-500 animate-pulse" : "bg-amber-500")} />
-              <p className="truncate text-xs font-medium text-foreground">
-                {statusText}<span className="inline-block w-4 text-primary">{isLoading ? dots : ''}</span>
+              <span className={cn(
+                "h-1.5 w-1.5 rounded-full",
+                isLoading ? "bg-beyond-coral animate-pulse" : "bg-beyond-muted/40"
+              )} />
+              <p className="truncate text-xs font-medium text-beyond-primary">
+                {statusText}
+                <span className="inline-block w-4 text-beyond-secondary">
+                  {isLoading ? dots : ''}
+                </span>
               </p>
             </div>
           </div>
         </div>
 
-        {/* Right Side: Metrics & Actions */}
+        {/* Right side — elapsed time + stop button */}
         <div className="flex items-center gap-2">
           {isLoading && status?.can_interrupt !== false && onAbort && (
             <>
-              <div className="hidden items-center rounded-md bg-muted/50 px-2 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground sm:flex">
+              <div className="hidden items-center rounded-full bg-white/55 px-2 py-0.5 text-[10px] font-medium tabular-nums text-beyond-secondary sm:flex dark:bg-white/10">
                 {formatElapsedTime(elapsedTime)}
               </div>
 
               <button
                 type="button"
                 onClick={onAbort}
-                className="group flex items-center gap-1.5 rounded-full bg-destructive/10 px-2.5 py-1 text-[10px] font-bold text-destructive transition-all hover:bg-destructive hover:text-destructive-foreground"
+                className="group flex items-center gap-1.5 rounded-full bg-destructive/10 px-2.5 py-1 text-[10px] font-medium text-destructive transition-all hover:bg-destructive hover:text-destructive-foreground"
               >
                 <svg className="h-3 w-3 fill-current" viewBox="0 0 24 24">
                   <path d="M6 6h12v12H6z" />
                 </svg>
-                <span className="hidden sm:inline">STOP</span>
+                <span className="hidden sm:inline">Stop</span>
                 <kbd className="hidden rounded bg-black/10 px-1 text-[9px] group-hover:bg-white/20 sm:block">
                   ESC
                 </kbd>
