@@ -1,4 +1,5 @@
 import { Calendar, CheckCircle2, ChevronRight, Sun } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { useBeyondClients, type BeyondClient } from './useBeyondClients';
 
 type Props = {
@@ -74,7 +75,15 @@ export default function BeyondClientsList({ selectedSlug, onClientSelect }: Prop
         ) : clients.length === 0 ? (
           <p className="px-3 py-2 text-xs text-beyond-muted">Žádní aktivní klienti.</p>
         ) : (
-          <div className="space-y-0.5">
+          <motion.div
+            initial="hidden"
+            animate="show"
+            variants={{
+              hidden: {},
+              show: { transition: { staggerChildren: 0.05 } },
+            }}
+            className="space-y-0.5"
+          >
             {clients.map((c) => (
               <ClientRow
                 key={c.slug}
@@ -83,7 +92,7 @@ export default function BeyondClientsList({ selectedSlug, onClientSelect }: Prop
                 onClick={() => onClientSelect?.(c)}
               />
             ))}
-          </div>
+          </motion.div>
         )}
       </div>
     </div>
@@ -105,10 +114,17 @@ function ClientRow({
   const sub = subParts.join(' · ') || '—';
 
   return (
-    <button
+    <motion.button
       type="button"
       onClick={onClick}
-      className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-all hover:-translate-y-px ${
+      variants={{
+        hidden: { opacity: 0, x: -6 },
+        show: { opacity: 1, x: 0 },
+      }}
+      transition={{ duration: 0.3, ease: 'easeOut' }}
+      whileHover={{ y: -1 }}
+      whileTap={{ scale: 0.985 }}
+      className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left ${
         selected
           ? 'bg-white/80 shadow-glass-sm dark:bg-white/15'
           : 'hover:bg-white/55 dark:hover:bg-white/10'
@@ -128,7 +144,7 @@ function ClientRow({
         />
       ) : null}
       <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 text-beyond-muted opacity-0 transition-opacity group-hover:opacity-100" />
-    </button>
+    </motion.button>
   );
 }
 

@@ -165,7 +165,7 @@ export default function CommandPalette({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-xl overflow-hidden p-0">
+      <DialogContent className="beyond-card max-w-xl overflow-hidden border-0 bg-white/85 p-0 backdrop-blur-2xl backdrop-saturate-150 dark:bg-beyond-ink/80">
         <DialogTitle>Command palette</DialogTitle>
         <Command label="Command palette" onKeyDown={handleKeyDown}>
           {page && (

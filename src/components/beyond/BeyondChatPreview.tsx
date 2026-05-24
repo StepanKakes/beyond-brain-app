@@ -1,4 +1,5 @@
 import { ArrowUp, Paperclip, Sparkles } from 'lucide-react';
+import { motion } from 'framer-motion';
 import BeyondAssistantAvatar from './BeyondAssistantAvatar';
 
 type SeedMessage = {
@@ -48,20 +49,35 @@ export default function BeyondChatPreview() {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-8">
-        <div className="mx-auto flex max-w-2xl flex-col gap-6">
+        <motion.div
+          initial="hidden"
+          animate="show"
+          variants={{
+            hidden: {},
+            show: { transition: { staggerChildren: 0.12, delayChildren: 0.1 } },
+          }}
+          className="mx-auto flex max-w-2xl flex-col gap-6"
+        >
           {SEED.map((m, i) => (
             <Message key={i} message={m} />
           ))}
 
           {/* "Přemýšlím..." status pill */}
-          <div className="flex items-center justify-center pt-2">
+          <motion.div
+            variants={{
+              hidden: { opacity: 0, y: 6 },
+              show: { opacity: 1, y: 0 },
+            }}
+            transition={{ duration: 0.4, ease: 'easeOut' }}
+            className="flex items-center justify-center pt-2"
+          >
             <div className="flex items-center gap-2 rounded-full border border-white/40 bg-white/65 px-3.5 py-1.5 shadow-soft backdrop-blur-xl backdrop-saturate-150 dark:border-white/10 dark:bg-beyond-ink/55">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-beyond-coral" />
               <span className="text-xs font-medium text-beyond-primary">Přemýšlím</span>
               <span className="text-xs text-beyond-secondary">…</span>
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       </div>
 
       {/* Composer */}
@@ -102,17 +118,23 @@ export default function BeyondChatPreview() {
 }
 
 function Message({ message }: { message: SeedMessage }) {
+  const variants = {
+    hidden: { opacity: 0, y: 8 },
+    show: { opacity: 1, y: 0 },
+  };
+  const transition = { duration: 0.45, ease: [0.21, 1.02, 0.73, 1] as const };
+
   if (message.role === 'user') {
     return (
-      <div className="flex justify-end">
+      <motion.div variants={variants} transition={transition} className="flex justify-end">
         <div className="max-w-[80%] rounded-3xl rounded-br-lg bg-beyond-charcoal/95 px-4 py-2.5 text-sm leading-relaxed text-white shadow-glass-sm backdrop-blur-md dark:bg-white/95 dark:text-beyond-charcoal">
           {message.text}
         </div>
-      </div>
+      </motion.div>
     );
   }
   return (
-    <div className="flex items-start gap-3">
+    <motion.div variants={variants} transition={transition} className="flex items-start gap-3">
       <BeyondAssistantAvatar />
       <div className="flex max-w-[85%] flex-col gap-2">
         {message.tool && (
@@ -124,7 +146,7 @@ function Message({ message }: { message: SeedMessage }) {
           {renderMd(message.text)}
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 

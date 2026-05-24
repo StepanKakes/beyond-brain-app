@@ -1,4 +1,5 @@
 import { Calendar, CheckCircle2, ChevronRight, Search, Settings, Sun } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 type Client = {
   slug: string;
@@ -107,9 +108,12 @@ export default function BeyondSidebarPreview() {
 function ClientRow({ client }: { client: Client }) {
   const promisesText = client.openPromises ? ` · ${client.openPromises} otevřených slibů` : '';
   return (
-    <button
+    <motion.button
       type="button"
-      className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2 transition-all hover:-translate-y-px ${
+      whileHover={{ y: -1 }}
+      whileTap={{ scale: 0.985 }}
+      transition={{ type: 'spring', stiffness: 380, damping: 26 }}
+      className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2 ${
         client.selected
           ? 'bg-white/80 shadow-glass-sm dark:bg-white/15'
           : 'hover:bg-white/55 dark:hover:bg-white/10'
@@ -128,7 +132,7 @@ function ClientRow({ client }: { client: Client }) {
         <span className="flex h-1.5 w-1.5 flex-shrink-0 rounded-full bg-beyond-coral" aria-hidden="true" />
       ) : null}
       <ChevronRight className="h-3.5 w-3.5 flex-shrink-0 text-beyond-muted opacity-0 transition-opacity group-hover:opacity-100" />
-    </button>
+    </motion.button>
   );
 }
 

@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { motion } from 'framer-motion';
 import { getTimeOfDay, type TimeOfDay } from './BeyondBackground';
 
 /** Allow ?bg=morning|day|evening|night to drive both bg and greeting (preview only). */
@@ -64,7 +65,12 @@ export default function BeyondWelcome({
 
   return (
     <div className="flex h-full w-full items-center justify-center px-6">
-      <div className="mx-auto w-full max-w-2xl animate-fade-in-up text-center">
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.55, ease: [0.21, 1.02, 0.73, 1] }}
+        className="mx-auto w-full max-w-2xl text-center"
+      >
         <h1 className="text-hero text-[2.5rem] leading-tight text-beyond-primary sm:text-[3rem] md:text-[3.25rem]">
           {greeting}
           <br />
@@ -72,21 +78,36 @@ export default function BeyondWelcome({
         </h1>
 
         {suggestions.length > 0 && (
-          <div className="mt-10 flex flex-wrap items-center justify-center gap-2.5">
+          <motion.div
+            initial="hidden"
+            animate="show"
+            variants={{
+              hidden: {},
+              show: { transition: { staggerChildren: 0.08, delayChildren: 0.25 } },
+            }}
+            className="mt-10 flex flex-wrap items-center justify-center gap-2.5"
+          >
             {suggestions.map((s) => (
-              <button
+              <motion.button
                 key={s.label}
                 type="button"
                 onClick={() => onSuggestionClick?.(s)}
                 className="beyond-chip"
+                variants={{
+                  hidden: { opacity: 0, y: 8 },
+                  show: { opacity: 1, y: 0 },
+                }}
+                transition={{ duration: 0.35, ease: 'easeOut' }}
+                whileHover={{ y: -2, scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
               >
                 <span aria-hidden="true">{s.icon}</span>
                 <span>{s.label}</span>
-              </button>
+              </motion.button>
             ))}
-          </div>
+          </motion.div>
         )}
-      </div>
+      </motion.div>
     </div>
   );
 }

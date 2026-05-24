@@ -106,3 +106,22 @@ Pracovní deník redesignu. Decisions, gotchas, follow-ups.
 - Beyond-brain repo musí být na ~/Documents/GitHub/beyond-brain (nebo nastav `BEYOND_BRAIN_PATH` env).
 - Volitelně `BEYOND_N8N_HEALTH=https://n8n.example.com/healthz` pro zelenou tečku.
 
+
+## Fáze D — Animations + polish
+
+### Co je hotové
+- **Framer Motion** nainstalován (`framer-motion ^12.40.0`).
+- **BeyondWelcome:** hero fade+slide-up (550ms ease-out cubic-bezier), chip suggestions stagger (80ms apart, 250ms delay), `whileHover y:-2 scale:1.02`, `whileTap scale:0.98`.
+- **BeyondChatPreview:** stagger fade-in messages (120ms apart, 100ms delay), 450ms ease per bubble, "Přemýšlím" pill component slide-up.
+- **BeyondClientsList & BeyondSidebarPreview:** klienti stagger (50ms apart), per-row `whileHover y:-1` (spring stiffness 380 / damping 26), `whileTap scale:0.985`.
+- **CommandPalette `DialogContent`:** beyond-card glass (`bg-white/85 backdrop-blur-2xl backdrop-saturate-150`). Open/close keyframes z `index.css` (`dialog-content-show` scale 0.96→1).
+- **Loading pulse:** zachován `beyond-loading-pulse` (shimmer gradient přes radius) jako náhrada za spinner.
+- **Reduced motion:** existující `@media (prefers-reduced-motion: reduce)` v `index.css` deaktivuje všechny animace.
+
+### Demo snapshots
+- `design-system/demos/welcome-anim-{100,250,450,700,1500}ms.png` — sekvence rané fáze animace (chrome --virtual-time-budget). Animace probíhá rychleji než budget v headlessu, takže rozdíl mezi 100 a 700 ms je jemný; v reálném prohlížeči je 600-800ms cubic-bezier fade-up plně viditelný.
+
+### Co se nestihlo (Phase D)
+- **Plné video screen capture:** vyžadovalo by ffmpeg + Puppeteer headful, skipped pro čas. Místo toho commitnuto 5 stop-motion snapshotů.
+- **Page transitions mezi tab change:** AppContent má lots of state + WebSocket re-mounting risk. Necháno bez transition; component-level fade je dostatečný.
+
