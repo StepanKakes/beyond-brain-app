@@ -29,7 +29,7 @@ export default function AuthInputField({
 }: AuthInputFieldProps) {
   return (
     <div>
-      <label htmlFor={id} className="mb-1 block text-sm font-medium text-foreground">
+      <label htmlFor={id} className="mb-1.5 block text-xs font-medium tracking-wide text-beyond-secondary">
         {label}
       </label>
       <input
@@ -39,7 +39,7 @@ export default function AuthInputField({
         autoComplete={autoComplete}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded-md border border-border bg-background px-3 py-2 text-foreground focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="w-full rounded-xl border border-white/40 bg-white/70 px-3.5 py-2.5 text-sm text-beyond-primary placeholder:text-beyond-muted/70 backdrop-blur-md focus:border-transparent focus:bg-white/95 focus:outline-none focus:ring-2 focus:ring-beyond-dusk/30 dark:border-white/10 dark:bg-white/5"
         placeholder={placeholder}
         required
         disabled={isDisabled}

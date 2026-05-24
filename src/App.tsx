@@ -7,12 +7,16 @@ import { TasksSettingsProvider } from './contexts/TasksSettingsContext';
 import { WebSocketProvider } from './contexts/WebSocketContext';
 import { PluginsProvider } from './contexts/PluginsContext';
 import AppContent from './components/app/AppContent';
+import BeyondBackground from './components/beyond/BeyondBackground';
 import i18n from './i18n/config.js';
 
 export default function App() {
   return (
     <I18nextProvider i18n={i18n}>
       <ThemeProvider>
+        {/* Beyond Brain — time-of-day pastel gradient. Mounted outside ProtectedRoute
+            so it paints behind login & onboarding too. */}
+        <BeyondBackground />
         <AuthProvider>
           <WebSocketProvider>
             <PluginsProvider>

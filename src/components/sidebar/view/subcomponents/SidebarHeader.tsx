@@ -55,12 +55,16 @@ export default function SidebarHeader({
 
   const LogoBlock = () => (
     <div className="flex min-w-0 items-center gap-2.5">
-      <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-primary/90 shadow-sm">
-        <svg className="h-3.5 w-3.5 text-primary-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      {/* Beyond glyph — soft pastel infinity-ish circle */}
+      <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-beyond-peach via-beyond-coral to-beyond-plum shadow-soft">
+        <svg className="h-4 w-4 text-white/95" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.93 4.93l2.12 2.12M16.95 16.95l2.12 2.12M4.93 19.07l2.12-2.12M16.95 7.05l2.12-2.12" />
         </svg>
       </div>
-      <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">{t('app.title')}</h1>
+      <h1 className="truncate font-serif text-[1.35rem] leading-none text-beyond-primary">
+        Beyond Brain
+      </h1>
     </div>
   );
 

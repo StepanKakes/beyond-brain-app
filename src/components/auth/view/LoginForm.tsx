@@ -56,9 +56,9 @@ export default function LoginForm() {
 
   return (
     <AuthScreenLayout
-      title={t('login.title')}
-      description={t('login.description')}
-      footerText="Enter your credentials to access CloudCLI"
+      title="Vítej zpátky"
+      description="Beyond Brain — tvůj druhý mozek"
+      footerText="Přihlas se a pokračujte tam, kde jsme skončili."
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <AuthInputField
@@ -87,9 +87,9 @@ export default function LoginForm() {
         <button
           type="submit"
           disabled={isSubmitting}
-          className="w-full rounded-md bg-blue-600 px-4 py-2 font-medium text-white transition-colors duration-200 hover:bg-blue-700 disabled:bg-blue-400"
+          className="w-full rounded-full bg-beyond-charcoal px-4 py-2.5 text-sm font-medium text-white shadow-soft transition-all duration-200 hover:-translate-y-px hover:shadow-glass-sm disabled:opacity-60 dark:bg-white dark:text-beyond-charcoal"
         >
-          {isSubmitting ? t('login.loading') : t('login.submit')}
+          {isSubmitting ? 'Přihlašuju…' : 'Přihlásit se'}
         </button>
       </form>
     </AuthScreenLayout>
