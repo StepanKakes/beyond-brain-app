@@ -19,6 +19,9 @@ import {
   X,
   File as FileIcon,
   Upload,
+  Plus,
+  MessagesSquare,
+  Check,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -42,6 +45,60 @@ const BRAIN_PROJECT_PATH = '/Users/stepankakes/Documents/GitHub/beyond-brain';
 
 function sessionStorageKey(slug: string): string {
   return `beyond.session.${slug}`;
+}
+
+function sessionsStorageKey(slug: string): string {
+  return `beyond.sessions.${slug}`;
+}
+
+type BeyondSession = {
+  uuid: string;
+  title: string;
+  lastUsedAt: number;
+};
+
+function readSessions(slug: string): BeyondSession[] {
+  try {
+    const raw = localStorage.getItem(sessionsStorageKey(slug));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter(
+        (s): s is BeyondSession =>
+          !!s && typeof s === 'object' &&
+          typeof (s as BeyondSession).uuid === 'string' &&
+          typeof (s as BeyondSession).title === 'string' &&
+          typeof (s as BeyondSession).lastUsedAt === 'number',
+      )
+      .sort((a, b) => b.lastUsedAt - a.lastUsedAt);
+  } catch {
+    return [];
+  }
+}
+
+function writeSessions(slug: string, sessions: BeyondSession[]): void {
+  try {
+    localStorage.setItem(sessionsStorageKey(slug), JSON.stringify(sessions));
+  } catch {
+    /* ignore */
+  }
+}
+
+function shortTitle(text: string): string {
+  const oneLine = text.replace(/\s+/g, ' ').trim();
+  return oneLine.length > 60 ? oneLine.slice(0, 60) + '…' : oneLine;
+}
+
+function relativeTime(ts: number): string {
+  const diff = Date.now() - ts;
+  const min = 60 * 1000;
+  const h = 60 * min;
+  const d = 24 * h;
+  if (diff < min) return 'teď';
+  if (diff < h) return `${Math.round(diff / min)} min`;
+  if (diff < d) return `${Math.round(diff / h)} h`;
+  return `${Math.round(diff / d)} d`;
 }
 
 type Role = 'user' | 'assistant';
@@ -172,6 +229,90 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Per-client sessions index (localStorage). The transcripts themselves live
+  // on disk under ~/.claude/projects/<cwd-hash>/<uuid>.jsonl — we just keep
+  // track of which UUIDs belong to this client + a human-readable title.
+  const [sessions, setSessions] = useState<BeyondSession[]>(() => readSessions(client.slug));
+  const [sessionsOpen, setSessionsOpen] = useState(false);
+  // When a fresh chat is started we remember the next user prompt so we can
+  // title the new session as soon as the server emits session_created.
+  const pendingTitleRef = useRef<string | null>(null);
+
+  const activeSession = sessions.find((s) => s.uuid === sessionIdRef.current);
+
+  const startNewSession = useCallback(() => {
+    // Drop the current uuid + transcript; the next send() will spawn a fresh
+    // SDK session and capture its new UUID via session_created.
+    try {
+      localStorage.removeItem(sessionStorageKey(client.slug));
+    } catch {
+      /* ignore */
+    }
+    sessionIdRef.current = null;
+    setMessages([]);
+    setThinking(false);
+    setAskRequest(null);
+    setPermRequest(null);
+    setSessionsOpen(false);
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }, [client.slug]);
+
+  const switchToSession = useCallback(
+    (uuid: string) => {
+      if (sessionIdRef.current === uuid) {
+        setSessionsOpen(false);
+        return;
+      }
+      sessionIdRef.current = uuid;
+      try {
+        localStorage.setItem(sessionStorageKey(client.slug), uuid);
+      } catch {
+        /* ignore */
+      }
+      setMessages([]);
+      setThinking(false);
+      setAskRequest(null);
+      setPermRequest(null);
+      setSessionsOpen(false);
+      setLoadingHistory(true);
+
+      authenticatedFetch(`/api/providers/sessions/${encodeURIComponent(uuid)}/messages`)
+        .then(async (r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (!data) return;
+          setMessages(rebuildHistory(data.messages || []));
+        })
+        .catch(() => {
+          /* silent */
+        })
+        .finally(() => setLoadingHistory(false));
+
+      // Bump lastUsedAt to top of list.
+      setSessions((prev) => {
+        const next = prev.map((s) =>
+          s.uuid === uuid ? { ...s, lastUsedAt: Date.now() } : s,
+        );
+        writeSessions(client.slug, next);
+        return next;
+      });
+    },
+    [client.slug],
+  );
+
+  const deleteSession = useCallback(
+    (uuid: string) => {
+      setSessions((prev) => {
+        const next = prev.filter((s) => s.uuid !== uuid);
+        writeSessions(client.slug, next);
+        return next;
+      });
+      if (sessionIdRef.current === uuid) {
+        startNewSession();
+      }
+    },
+    [client.slug, startNewSession],
+  );
 
   // Sidebar file tree clicks dispatch `beyond:insert-text` so the chat can
   // splice `@<path>` (or any future quick-text) into the composer without
@@ -329,6 +470,22 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
     setMessages([]);
     setThinking(false);
 
+    const existing = readSessions(client.slug);
+    // Migration: when the active sessionId predates the per-client index,
+    // seed it so it shows up in the dropdown after this upgrade.
+    if (persisted && !existing.some((s) => s.uuid === persisted)) {
+      const seeded: BeyondSession = {
+        uuid: persisted,
+        title: `${client.name} · původní chat`,
+        lastUsedAt: Date.now(),
+      };
+      const merged = [seeded, ...existing];
+      writeSessions(client.slug, merged);
+      setSessions(merged);
+    } else {
+      setSessions(existing);
+    }
+
     if (!persisted) {
       setLoadingHistory(false);
       return;
@@ -373,6 +530,17 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
         } catch {
           /* ignore */
         }
+        const title = pendingTitleRef.current
+          ? shortTitle(pendingTitleRef.current)
+          : `Chat ${new Date().toLocaleString('cs-CZ', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`;
+        pendingTitleRef.current = null;
+        const entry: BeyondSession = { uuid: newId, title, lastUsedAt: Date.now() };
+        setSessions((prev) => {
+          if (prev.some((s) => s.uuid === newId)) return prev;
+          const next = [entry, ...prev];
+          writeSessions(client.slug, next);
+          return next;
+        });
       }
       return;
     }
@@ -525,6 +693,20 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
       // Only resume when we already have a real SDK-issued UUID. On the very
       // first turn we let the SDK assign one and pick it up via session_created.
       const resumeId = sessionIdRef.current;
+      if (!resumeId) {
+        // Remember the first user message so session_created can title the
+        // newly minted session.
+        pendingTitleRef.current = trimmed || (attachments.length > 0 ? `${attachments.length} přílohy` : 'Nový chat');
+      } else {
+        // Bump lastUsedAt for the active session.
+        setSessions((prev) => {
+          const next = prev.map((s) =>
+            s.uuid === resumeId ? { ...s, lastUsedAt: Date.now() } : s,
+          );
+          writeSessions(client.slug, next);
+          return next;
+        });
+      }
       sendMessage({
         type: 'claude-command',
         command: composedCommand,
@@ -545,7 +727,7 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
         },
       });
     },
-    [attachments, bypassPermissions, client.name, isConnected, sendMessage],
+    [attachments, bypassPermissions, client.name, client.slug, isConnected, sendMessage],
   );
 
   const stop = useCallback(() => {
@@ -617,16 +799,47 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
       {/* Header — floating rounded card with Beyond glyph avatar.
           Left padding leaves room for the shell's hamburger toggle (~52px). */}
       <header className="flex flex-shrink-0 items-center px-4 pb-3 pl-16 pr-4 pt-4 sm:px-6 sm:pl-20 sm:pr-6 sm:pt-5">
-        <div className="mx-auto flex w-full max-w-[760px] items-center gap-3 rounded-2xl bg-white px-4 py-3 shadow-[0_2px_16px_-8px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.04]">
+        <div className="relative mx-auto flex w-full max-w-[760px] items-center gap-3 rounded-2xl bg-white px-4 py-3 shadow-[0_2px_16px_-8px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.04]">
           <BeyondGlyph size={28} />
-          <div className="min-w-0 flex-1">
-            <h2 className="truncate text-[14px] font-medium leading-tight text-beyond-ink">
-              {client.name}
-            </h2>
-            {client.week && (
-              <p className="truncate text-[12px] leading-tight text-beyond-faint">{client.week}</p>
+          <button
+            type="button"
+            onClick={() => setSessionsOpen((v) => !v)}
+            className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+            title="Seznam chatů s tímto klientem"
+          >
+            <div className="min-w-0 flex-1">
+              <h2 className="truncate text-[14px] font-medium leading-tight text-beyond-ink">
+                {client.name}
+              </h2>
+              <p className="truncate text-[12px] leading-tight text-beyond-faint">
+                {activeSession ? activeSession.title : client.week || 'Nový chat'}
+              </p>
+            </div>
+            <ChevronRight
+              className={`h-[14px] w-[14px] flex-shrink-0 text-beyond-faint transition-transform ${sessionsOpen ? 'rotate-90' : ''}`}
+              strokeWidth={1.8}
+            />
+          </button>
+          <button
+            type="button"
+            onClick={startNewSession}
+            title="Nový chat"
+            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-black/[0.04] hover:text-beyond-dim"
+          >
+            <Plus className="h-[16px] w-[16px]" strokeWidth={1.8} />
+          </button>
+          <AnimatePresence>
+            {sessionsOpen && (
+              <BeyondSessionsMenu
+                sessions={sessions}
+                activeUuid={sessionIdRef.current}
+                onPick={switchToSession}
+                onDelete={deleteSession}
+                onNew={startNewSession}
+                onClose={() => setSessionsOpen(false)}
+              />
             )}
-          </div>
+          </AnimatePresence>
           <button
             type="button"
             onClick={() => setPermsOpen(true)}
@@ -1659,5 +1872,112 @@ function BeyondWhatsAppActionCard({
         </button>
       </div>
     </motion.div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Per-client sessions dropdown                                        */
+/* ------------------------------------------------------------------ */
+
+function BeyondSessionsMenu({
+  sessions,
+  activeUuid,
+  onPick,
+  onDelete,
+  onNew,
+  onClose,
+}: {
+  sessions: BeyondSession[];
+  activeUuid: string | null;
+  onPick: (uuid: string) => void;
+  onDelete: (uuid: string) => void;
+  onNew: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <>
+      <div
+        className="fixed inset-0 z-30"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <motion.div
+        initial={{ opacity: 0, y: -4, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: -4, scale: 0.98 }}
+        transition={{ duration: 0.16, ease: 'easeOut' }}
+        className="absolute left-3 right-3 top-full z-40 mt-2 overflow-hidden rounded-2xl bg-white shadow-[0_16px_48px_-12px_rgba(0,0,0,0.18)] ring-1 ring-black/[0.04]"
+      >
+        <button
+          type="button"
+          onClick={onNew}
+          className="flex w-full items-center gap-2.5 px-4 py-3 text-left transition-colors hover:bg-black/[0.03]"
+        >
+          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-beyond-ink text-white">
+            <Plus className="h-[14px] w-[14px]" strokeWidth={2} />
+          </div>
+          <span className="text-[13px] font-medium text-beyond-ink">Nový chat</span>
+        </button>
+
+        <div className="max-h-[60vh] overflow-y-auto border-t border-black/[0.04]">
+          {sessions.length === 0 ? (
+            <p className="px-4 py-4 text-[12px] text-beyond-faint">
+              Žádné dřívější chaty.
+            </p>
+          ) : (
+            <div className="flex flex-col py-1">
+              <p className="px-4 py-1.5 text-[10px] uppercase tracking-wider text-beyond-faint">
+                Historie ({sessions.length})
+              </p>
+              {sessions.map((s) => {
+                const active = s.uuid === activeUuid;
+                return (
+                  <div
+                    key={s.uuid}
+                    className={`group flex items-start gap-2 px-3 py-2 transition-colors ${active ? 'bg-black/[0.03]' : 'hover:bg-black/[0.025]'}`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => onPick(s.uuid)}
+                      className="flex min-w-0 flex-1 items-start gap-2 text-left"
+                    >
+                      <div className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center text-beyond-faint">
+                        {active ? (
+                          <Check className="h-[12px] w-[12px] text-beyond-ink" strokeWidth={2.2} />
+                        ) : (
+                          <MessagesSquare className="h-[12px] w-[12px]" strokeWidth={1.8} />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p
+                          className={`truncate text-[13px] leading-tight ${active ? 'font-medium text-beyond-ink' : 'text-beyond-dim'}`}
+                        >
+                          {s.title}
+                        </p>
+                        <p className="mt-0.5 text-[10px] text-beyond-faint">
+                          {relativeTime(s.lastUsedAt)}
+                        </p>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm(`Smazat chat „${s.title}" z indexu?\n(transkript na disku zůstane.)`)) {
+                          onDelete(s.uuid);
+                        }
+                      }}
+                      title="Odebrat z indexu"
+                      className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint opacity-0 transition-all hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
+                    >
+                      <Trash2 className="h-[12px] w-[12px]" strokeWidth={1.8} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </>
   );
 }
