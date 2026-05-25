@@ -80,18 +80,20 @@ export default function BeyondWelcome({
 
   return (
     <div className="beyond-hero-gradient relative flex h-full min-h-screen w-full flex-col items-center justify-center px-6 py-16">
-      {/* Avatar — placeholder Beyond glyph (soft gradient circle, animated subtle pulse) */}
+      {/* Avatar — Beyond glyph (mascot-like soft gradient circle, gently pulsing) */}
       <motion.div
         initial={{ opacity: 0, scale: 0.92 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 1.0, ease: [0.21, 1.02, 0.73, 1] }}
-        className="mb-10"
+        className="mb-12"
       >
         <motion.div
-          className="h-14 w-14 rounded-full"
+          className="relative h-16 w-16 rounded-full"
           style={{
-            background: 'radial-gradient(circle at 35% 30%, #d4e3f5 0%, #c1d4e8 45%, #a8bdd4 100%)',
-            boxShadow: '0 8px 24px -8px rgba(168, 189, 212, 0.45)',
+            background:
+              'radial-gradient(circle at 32% 28%, #f6d8e4 0%, #d4dff2 38%, #c9bce3 72%, #ad9fd1 100%)',
+            boxShadow:
+              '0 10px 32px -10px rgba(173, 159, 209, 0.45), inset 0 1px 2px rgba(255,255,255,0.55)',
           }}
           animate={{ scale: [1, 1.04, 1] }}
           transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
@@ -119,7 +121,7 @@ export default function BeyondWelcome({
         transition={{ duration: 1.0, delay: 0.35, ease: [0.21, 1.02, 0.73, 1] }}
         className="mt-10 w-full max-w-2xl"
       >
-        <div className="relative rounded-3xl bg-white/85 shadow-[0_2px_24px_-8px_rgba(0,0,0,0.08)] backdrop-blur-sm ring-1 ring-black/5 transition-shadow focus-within:shadow-[0_4px_32px_-8px_rgba(0,0,0,0.12)] focus-within:ring-black/10">
+        <div className="relative rounded-[28px] bg-white shadow-[0_4px_32px_-12px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.04] transition-shadow focus-within:shadow-[0_8px_40px_-12px_rgba(0,0,0,0.12)] focus-within:ring-black/[0.06]">
           <textarea
             ref={textareaRef}
             value={value}
@@ -134,7 +136,7 @@ export default function BeyondWelcome({
             type="submit"
             disabled={!canSubmit}
             aria-label="Pošli"
-            className="absolute right-3 bottom-3 flex h-10 w-10 items-center justify-center rounded-full bg-beyond-ink text-white transition-all hover:scale-105 disabled:bg-black/10 disabled:text-black/30 disabled:hover:scale-100"
+            className="absolute right-3 bottom-3 flex h-10 w-10 items-center justify-center rounded-full bg-beyond-ink text-white shadow-[0_2px_8px_-2px_rgba(0,0,0,0.25)] transition-all hover:scale-105 disabled:bg-black/[0.08] disabled:text-black/30 disabled:shadow-none disabled:hover:scale-100"
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
               <path d="M8 13V3M8 3L3.5 7.5M8 3L12.5 7.5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />

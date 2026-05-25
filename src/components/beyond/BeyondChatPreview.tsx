@@ -42,18 +42,29 @@ export default function BeyondChatPreview() {
   const [value, setValue] = useState('');
 
   return (
-    <div className="flex h-full w-full flex-col bg-white">
-      {/* Minimal top bar — just context label. No avatar circle, no badges. */}
-      <header className="flex flex-shrink-0 items-center px-6 pb-4 pt-5 sm:px-8">
-        <div className="min-w-0 flex-1">
-          <h2 className="truncate text-[15px] font-medium text-beyond-ink">
-            Ivana Juříková
-          </h2>
-          <p className="truncate text-[13px] text-beyond-faint">W18</p>
+    <div className="flex h-full w-full flex-col bg-[#fafafa]">
+      {/* Floating rounded header card with Beyond glyph avatar */}
+      <header className="flex flex-shrink-0 items-center px-4 pb-3 pl-16 pr-4 pt-4 sm:px-6 sm:pl-20 sm:pr-6 sm:pt-5">
+        <div className="mx-auto flex w-full max-w-[760px] items-center gap-3 rounded-2xl bg-white px-4 py-3 shadow-[0_2px_16px_-8px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.04]">
+          <div
+            className="h-7 w-7 flex-shrink-0 rounded-full"
+            style={{
+              background:
+                'radial-gradient(circle at 32% 28%, #f6d8e4 0%, #d4dff2 38%, #c9bce3 72%, #ad9fd1 100%)',
+              boxShadow: '0 2px 6px -2px rgba(173, 159, 209, 0.5), inset 0 1px 1px rgba(255,255,255,0.5)',
+            }}
+            aria-hidden
+          />
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-[14px] font-medium leading-tight text-beyond-ink">
+              Ivana Juříková
+            </h2>
+            <p className="truncate text-[12px] leading-tight text-beyond-faint">W18</p>
+          </div>
         </div>
       </header>
 
-      {/* Messages — text-only, generous spacing, optional faint dividers. */}
+      {/* Messages */}
       <div className="flex-1 overflow-y-auto">
         <motion.div
           initial="hidden"
@@ -62,10 +73,10 @@ export default function BeyondChatPreview() {
             hidden: {},
             show: { transition: { staggerChildren: 0.12, delayChildren: 0.1 } },
           }}
-          className="mx-auto flex w-full max-w-[720px] flex-col px-6 py-10 sm:px-8 sm:py-14"
+          className="mx-auto flex w-full max-w-[760px] flex-col gap-6 px-4 py-8 sm:px-6 sm:py-10"
         >
           {SEED.map((m, i) => (
-            <Message key={i} message={m} isFirst={i === 0} />
+            <Message key={i} message={m} />
           ))}
 
           <AnimatePresence>
@@ -76,7 +87,7 @@ export default function BeyondChatPreview() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.4, ease: 'easeOut' }}
-                className="mt-6 flex items-center gap-2.5 text-[14px] text-beyond-dim"
+                className="flex items-center gap-2.5 pl-4 text-[14px] text-beyond-dim"
               >
                 <span className="beyond-dot" aria-hidden="true" />
                 <span>Přemýšlím</span>
@@ -86,36 +97,40 @@ export default function BeyondChatPreview() {
         </motion.div>
       </div>
 
-      {/* Composer — bare textarea, pill send button, optional quick chips. */}
-      <div className="flex-shrink-0 border-t border-beyond-line/60 bg-white px-6 pb-8 pt-5 sm:px-8">
-        <div className="mx-auto w-full max-w-[720px]">
-          <div className="flex items-end gap-3">
-            <textarea
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              placeholder="Napiš, co řešíme…"
-              rows={1}
-              className="min-h-[44px] flex-1 resize-none bg-transparent py-3 text-[16px] leading-snug text-beyond-ink placeholder:text-beyond-faint focus:outline-none"
-            />
-            <button
-              type="button"
-              className="beyond-pill flex-shrink-0"
-              aria-label="Send"
-            >
-              Pošli
-            </button>
-          </div>
-
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            {QUICK_ACTIONS.map((label) => (
+      {/* Composer — floating rounded card */}
+      <div className="flex-shrink-0 px-4 pb-6 pt-3 sm:px-6 sm:pb-8 sm:pt-4">
+        <div className="mx-auto w-full max-w-[760px]">
+          <div className="rounded-[24px] bg-white px-5 py-4 shadow-[0_4px_24px_-8px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.04] focus-within:shadow-[0_8px_32px_-8px_rgba(0,0,0,0.12)] focus-within:ring-black/[0.06]">
+            <div className="flex items-end gap-3">
+              <textarea
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                placeholder="Napiš, co řešíme…"
+                rows={1}
+                className="min-h-[40px] flex-1 resize-none border-0 bg-transparent py-1 text-[16px] leading-snug text-beyond-ink placeholder:text-beyond-faint focus:outline-none focus:ring-0"
+              />
               <button
-                key={label}
                 type="button"
-                className="rounded-full px-3 py-1.5 text-[13px] text-beyond-dim transition-colors hover:text-beyond-ink"
+                aria-label="Pošli"
+                className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-beyond-ink text-white shadow-[0_2px_8px_-2px_rgba(0,0,0,0.25)] transition-all hover:scale-105"
               >
-                {label}
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+                  <path d="M8 13V3M8 3L3.5 7.5M8 3L12.5 7.5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
               </button>
-            ))}
+            </div>
+
+            <div className="mt-2 flex flex-wrap items-center gap-1">
+              {QUICK_ACTIONS.map((label) => (
+                <button
+                  key={label}
+                  type="button"
+                  className="rounded-full px-3 py-1 text-[12px] text-beyond-faint transition-colors hover:bg-black/[0.04] hover:text-beyond-ink"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -123,46 +138,37 @@ export default function BeyondChatPreview() {
   );
 }
 
-function Message({ message, isFirst }: { message: SeedMessage; isFirst: boolean }) {
+function Message({ message }: { message: SeedMessage }) {
   const variants = {
     hidden: { opacity: 0, y: 8 },
     show: { opacity: 1, y: 0 },
   };
   const transition = { duration: 0.45, ease: [0.21, 1.02, 0.73, 1] as const };
 
-  // Subtle horizontal rule above every message except the first.
-  const divider = isFirst ? null : (
-    <div className="my-8 h-px w-full border-t border-beyond-line" aria-hidden="true" />
-  );
-
   if (message.role === 'user') {
     return (
-      <>
-        {divider}
-        <motion.div
-          variants={variants}
-          transition={transition}
-          className="flex justify-end"
-        >
-          <p className="max-w-[85%] whitespace-pre-line text-right text-[16px] leading-relaxed text-beyond-dim">
+      <motion.div
+        variants={variants}
+        transition={transition}
+        className="flex justify-end"
+      >
+        <div className="max-w-[85%] rounded-[22px] rounded-br-[6px] bg-white px-4 py-3 shadow-[0_2px_12px_-6px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.04]">
+          <p className="whitespace-pre-line text-[15px] leading-relaxed text-beyond-ink">
             {message.text}
           </p>
-        </motion.div>
-      </>
+        </div>
+      </motion.div>
     );
   }
 
   return (
-    <>
-      {divider}
-      <motion.div variants={variants} transition={transition} className="flex flex-col gap-3">
-        {message.tool && (
-          <p className="text-[13px] italic text-beyond-faint">{message.tool}</p>
-        )}
-        <p className="whitespace-pre-line text-[16px] leading-relaxed text-beyond-ink">
-          {message.text}
-        </p>
-      </motion.div>
-    </>
+    <motion.div variants={variants} transition={transition} className="flex flex-col gap-2 border-l border-black/[0.06] pl-4">
+      {message.tool && (
+        <p className="text-[13px] italic text-beyond-faint">{message.tool}</p>
+      )}
+      <p className="whitespace-pre-line text-[15px] leading-relaxed text-beyond-ink">
+        {message.text}
+      </p>
+    </motion.div>
   );
 }

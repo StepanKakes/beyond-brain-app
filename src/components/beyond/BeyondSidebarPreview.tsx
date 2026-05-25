@@ -76,7 +76,7 @@ export default function BeyondSidebarPreview({
   return (
     <div className="flex h-full w-full flex-col border-r border-beyond-line bg-white">
       {/* Search — underline only, no border box */}
-      <div className="flex-shrink-0 px-6 pb-2 pt-6">
+      <div className="flex-shrink-0 px-5 pb-2 pt-6">
         <input
           type="text"
           value={query}
@@ -86,9 +86,9 @@ export default function BeyondSidebarPreview({
         />
       </div>
 
-      {/* Clients — single line per client, name + small W## */}
-      <nav className="mt-4 flex-1 overflow-y-auto px-2">
-        <ul className="flex flex-col">
+      {/* Clients — tiny gradient avatars + name + W## */}
+      <nav className="mt-4 flex-1 overflow-y-auto px-3">
+        <ul className="flex flex-col gap-0.5">
           {filtered.map((c) => (
             <li key={c.slug}>
               <ClientRow client={c} onClick={() => onSelectClient?.(c.slug)} />
@@ -100,12 +100,12 @@ export default function BeyondSidebarPreview({
         </ul>
       </nav>
 
-      {/* Bottom: settings only */}
+      {/* Bottom: settings pill */}
       <div className="flex-shrink-0 px-4 pb-5 pt-3">
         <button
           type="button"
           onClick={onOpenSettings}
-          className="rounded-full px-3 py-1.5 text-[13px] text-beyond-faint transition-colors hover:text-beyond-ink"
+          className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[13px] text-beyond-faint transition-colors hover:bg-black/[0.04] hover:text-beyond-ink"
           aria-label="Settings"
         >
           Nastavení
@@ -115,25 +115,46 @@ export default function BeyondSidebarPreview({
   );
 }
 
+function initialsFor(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+
 function ClientRow({ client, onClick }: { client: Client; onClick?: () => void }) {
   return (
     <motion.button
       type="button"
       onClick={onClick}
-      className="flex w-full items-baseline justify-between gap-3 rounded-md px-4 py-2.5 text-left transition-colors"
+      className={`flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left transition-colors ${
+        client.selected ? 'bg-black/[0.04]' : 'hover:bg-black/[0.025]'
+      }`}
       whileHover={{}}
     >
       <span
-        className={`truncate text-[15px] transition-all ${
+        className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white/95"
+        style={{
+          background:
+            'radial-gradient(circle at 32% 28%, #f6d8e4 0%, #d4dff2 38%, #c9bce3 72%, #ad9fd1 100%)',
+          boxShadow:
+            '0 2px 6px -2px rgba(173, 159, 209, 0.5), inset 0 1px 1px rgba(255,255,255,0.5)',
+        }}
+        aria-hidden
+      >
+        {initialsFor(client.name)}
+      </span>
+      <span
+        className={`min-w-0 flex-1 truncate text-[14px] transition-all ${
           client.selected
             ? 'font-medium text-beyond-ink'
-            : 'text-beyond-dim hover:font-medium hover:text-beyond-ink'
+            : 'text-beyond-dim'
         }`}
       >
         {client.name}
       </span>
       {client.week && (
-        <span className="flex-shrink-0 text-[12px] text-beyond-faint">{client.week}</span>
+        <span className="flex-shrink-0 text-[11px] text-beyond-faint">{client.week}</span>
       )}
     </motion.button>
   );

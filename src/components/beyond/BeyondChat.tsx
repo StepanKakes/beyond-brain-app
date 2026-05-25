@@ -137,29 +137,40 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
   }, [client.name, client.week]);
 
   return (
-    <div className="flex h-full w-full flex-col bg-white">
-      {/* Header — minimal context label. Left padding leaves room for the
-          shell's hamburger toggle (~52px). */}
-      <header className="flex flex-shrink-0 items-center pb-4 pl-16 pr-6 pt-5 sm:pl-20 sm:pr-8">
-        <div className="min-w-0 flex-1">
-          <h2 className="truncate text-[15px] font-medium text-beyond-ink">
-            {client.name}
-          </h2>
-          {client.week && (
-            <p className="truncate text-[13px] text-beyond-faint">{client.week}</p>
-          )}
+    <div className="flex h-full w-full flex-col bg-[#fafafa]">
+      {/* Header — floating rounded card with Beyond glyph avatar.
+          Left padding leaves room for the shell's hamburger toggle (~52px). */}
+      <header className="flex flex-shrink-0 items-center px-4 pb-3 pl-16 pr-4 pt-4 sm:px-6 sm:pl-20 sm:pr-6 sm:pt-5">
+        <div className="mx-auto flex w-full max-w-[760px] items-center gap-3 rounded-2xl bg-white px-4 py-3 shadow-[0_2px_16px_-8px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.04]">
+          <div
+            className="h-7 w-7 flex-shrink-0 rounded-full"
+            style={{
+              background:
+                'radial-gradient(circle at 32% 28%, #f6d8e4 0%, #d4dff2 38%, #c9bce3 72%, #ad9fd1 100%)',
+              boxShadow: '0 2px 6px -2px rgba(173, 159, 209, 0.5), inset 0 1px 1px rgba(255,255,255,0.5)',
+            }}
+            aria-hidden
+          />
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-[14px] font-medium leading-tight text-beyond-ink">
+              {client.name}
+            </h2>
+            {client.week && (
+              <p className="truncate text-[12px] leading-tight text-beyond-faint">{client.week}</p>
+            )}
+          </div>
         </div>
       </header>
 
       {/* Messages */}
       <div ref={scrollerRef} className="flex-1 overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-[720px] flex-col px-6 py-10 sm:px-8 sm:py-14">
+        <div className="mx-auto flex w-full max-w-[760px] flex-col gap-6 px-4 py-8 sm:px-6 sm:py-10">
           {messages.length === 0 && !thinking && (
             <p className="text-center text-[15px] text-beyond-faint">Tady jsem.</p>
           )}
 
-          {messages.map((m, i) => (
-            <MessageBlock key={m.id} message={m} isFirst={i === 0} />
+          {messages.map((m) => (
+            <MessageBlock key={m.id} message={m} />
           ))}
 
           <AnimatePresence>
@@ -170,7 +181,7 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.4, ease: 'easeOut' }}
-                className="mt-8 flex items-center gap-2.5 text-[14px] text-beyond-dim"
+                className="flex items-center gap-2.5 pl-4 text-[14px] text-beyond-dim"
               >
                 <span className="beyond-dot" aria-hidden="true" />
                 <span>Přemýšlím</span>
@@ -179,7 +190,7 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
           </AnimatePresence>
 
           {!isConnected && (
-            <p className="mt-6 text-center text-[13px] text-beyond-faint">
+            <p className="text-center text-[13px] text-beyond-faint">
               Spojuju se…
             </p>
           )}
@@ -189,45 +200,49 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
         <span className="sr-only">{header}</span>
       </div>
 
-      {/* Composer */}
-      <div className="flex-shrink-0 border-t border-beyond-line/60 bg-white px-6 pb-8 pt-5 sm:px-8">
-        <div className="mx-auto w-full max-w-[720px]">
-          <div className="flex items-end gap-3">
-            <textarea
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  send(value);
-                }
-              }}
-              placeholder="Napiš, co řešíme…"
-              rows={1}
-              className="min-h-[44px] flex-1 resize-none bg-transparent py-3 text-[16px] leading-snug text-beyond-ink placeholder:text-beyond-faint focus:outline-none"
-            />
-            <button
-              type="button"
-              onClick={() => send(value)}
-              disabled={!value.trim() || !isConnected}
-              className="beyond-pill flex-shrink-0 disabled:opacity-40"
-              aria-label="Send"
-            >
-              Pošli
-            </button>
-          </div>
-
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            {QUICK_ACTIONS.map((label) => (
+      {/* Composer — floating rounded card. */}
+      <div className="flex-shrink-0 px-4 pb-6 pt-3 sm:px-6 sm:pb-8 sm:pt-4">
+        <div className="mx-auto w-full max-w-[760px]">
+          <div className="rounded-[24px] bg-white px-5 py-4 shadow-[0_4px_24px_-8px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.04] focus-within:shadow-[0_8px_32px_-8px_rgba(0,0,0,0.12)] focus-within:ring-black/[0.06]">
+            <div className="flex items-end gap-3">
+              <textarea
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    send(value);
+                  }
+                }}
+                placeholder="Napiš, co řešíme…"
+                rows={1}
+                className="min-h-[40px] flex-1 resize-none border-0 bg-transparent py-1 text-[16px] leading-snug text-beyond-ink placeholder:text-beyond-faint focus:outline-none focus:ring-0"
+              />
               <button
-                key={label}
                 type="button"
-                onClick={() => send(quickPrompt(label, client.name))}
-                className="rounded-full px-3 py-1.5 text-[13px] text-beyond-dim transition-colors hover:text-beyond-ink"
+                onClick={() => send(value)}
+                disabled={!value.trim() || !isConnected}
+                aria-label="Pošli"
+                className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-beyond-ink text-white shadow-[0_2px_8px_-2px_rgba(0,0,0,0.25)] transition-all hover:scale-105 disabled:bg-black/[0.08] disabled:text-black/30 disabled:shadow-none disabled:hover:scale-100"
               >
-                {label}
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+                  <path d="M8 13V3M8 3L3.5 7.5M8 3L12.5 7.5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
               </button>
-            ))}
+            </div>
+
+            <div className="mt-2 flex flex-wrap items-center gap-1">
+              {QUICK_ACTIONS.map((label) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => send(quickPrompt(label, client.name))}
+                  className="rounded-full px-3 py-1 text-[12px] text-beyond-faint transition-colors hover:bg-black/[0.04] hover:text-beyond-ink"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -235,45 +250,49 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
   );
 }
 
-function MessageBlock({ message, isFirst }: { message: ChatMessage; isFirst: boolean }) {
+function MessageBlock({ message }: { message: ChatMessage }) {
   const variants = {
     hidden: { opacity: 0, y: 8 },
     show: { opacity: 1, y: 0 },
   };
   // 100ms fade-up per VISION.md — subtle, not flashy.
-  const transition = { duration: 0.1, ease: 'easeOut' as const };
-
-  const divider = isFirst ? null : (
-    <div className="my-8 h-px w-full border-t border-beyond-line" aria-hidden="true" />
-  );
+  const transition = { duration: 0.18, ease: 'easeOut' as const };
 
   if (message.role === 'user') {
     return (
-      <>
-        {divider}
-        <motion.div initial="hidden" animate="show" variants={variants} transition={transition} className="flex justify-end">
-          <p className="max-w-[85%] whitespace-pre-line text-right text-[16px] leading-relaxed text-beyond-dim">
+      <motion.div
+        initial="hidden"
+        animate="show"
+        variants={variants}
+        transition={transition}
+        className="flex justify-end"
+      >
+        <div className="max-w-[85%] rounded-[22px] rounded-br-[6px] bg-white px-4 py-3 shadow-[0_2px_12px_-6px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.04]">
+          <p className="whitespace-pre-line text-[15px] leading-relaxed text-beyond-ink">
             {message.text}
           </p>
-        </motion.div>
-      </>
+        </div>
+      </motion.div>
     );
   }
 
   return (
-    <>
-      {divider}
-      <motion.div initial="hidden" animate="show" variants={variants} transition={transition} className="flex flex-col gap-3">
-        {message.tool && (
-          <p className="text-[13px] italic text-beyond-faint">{message.tool}</p>
-        )}
-        {message.text && (
-          <p className="whitespace-pre-line text-[16px] leading-relaxed text-beyond-ink">
-            {message.text}
-          </p>
-        )}
-      </motion.div>
-    </>
+    <motion.div
+      initial="hidden"
+      animate="show"
+      variants={variants}
+      transition={transition}
+      className="flex flex-col gap-2 border-l border-black/[0.06] pl-4"
+    >
+      {message.tool && (
+        <p className="text-[13px] italic text-beyond-faint">{message.tool}</p>
+      )}
+      {message.text && (
+        <p className="whitespace-pre-line text-[15px] leading-relaxed text-beyond-ink">
+          {message.text}
+        </p>
+      )}
+    </motion.div>
   );
 }
 
