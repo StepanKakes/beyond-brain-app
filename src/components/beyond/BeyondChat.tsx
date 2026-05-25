@@ -56,6 +56,18 @@ type ChatMessage =
   | { id: string; role: 'assistant'; kind: 'text'; text: string }
   | { id: string; role: 'assistant'; kind: 'steps'; steps: ToolStep[] };
 
+type AskOption = { label: string; description?: string };
+type AskQuestion = {
+  question: string;
+  header?: string;
+  multiSelect?: boolean;
+  options: AskOption[];
+};
+type AskRequest = {
+  requestId: string;
+  input: { questions: AskQuestion[] } & Record<string, unknown>;
+};
+
 type Props = {
   /** Selected client. Used for the header label and as a stable session key. */
   client: { slug: string; name: string; week?: string | null };
@@ -82,6 +94,7 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
   const [thinking, setThinking] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [value, setValue] = useState('');
+  const [askRequest, setAskRequest] = useState<AskRequest | null>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
 
   // Load persisted session id + history when switching clients. Claude Code
@@ -196,6 +209,26 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
       return;
     }
 
+    if (kind === 'permission_request') {
+      const toolName = String(m.toolName ?? '');
+      const requestId = String(m.requestId ?? '');
+      if (!requestId) return;
+      // Only AskUserQuestion gets a rich panel; other tool approvals are
+      // auto-allowed in bypass mode (see claude-sdk.js canUseTool).
+      if (toolName === 'AskUserQuestion') {
+        const input = (m.input as AskRequest['input']) || { questions: [] };
+        setAskRequest({ requestId, input });
+        setThinking(false);
+      }
+      return;
+    }
+
+    if (kind === 'permission_cancelled') {
+      const requestId = String(m.requestId ?? '');
+      setAskRequest((prev) => (prev && prev.requestId === requestId ? null : prev));
+      return;
+    }
+
     if (kind === 'complete') {
       setThinking(false);
       return;
@@ -288,7 +321,7 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
           ))}
 
           <AnimatePresence>
-            {thinking && (
+            {thinking && !askRequest && (
               <motion.div
                 key="thinking"
                 initial={{ opacity: 0, y: 6 }}
@@ -302,6 +335,32 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
               </motion.div>
             )}
           </AnimatePresence>
+
+          {askRequest && (
+            <BeyondAskPanel
+              request={askRequest}
+              onAnswer={(answers) => {
+                sendMessage({
+                  type: 'claude-permission-response',
+                  requestId: askRequest.requestId,
+                  allow: true,
+                  updatedInput: { ...askRequest.input, answers },
+                });
+                setAskRequest(null);
+                setThinking(true);
+              }}
+              onSkip={() => {
+                sendMessage({
+                  type: 'claude-permission-response',
+                  requestId: askRequest.requestId,
+                  allow: true,
+                  updatedInput: { ...askRequest.input, answers: {} },
+                });
+                setAskRequest(null);
+                setThinking(true);
+              }}
+            />
+          )}
 
           {!isConnected && (
             <p className="text-center text-[13px] text-beyond-faint">
@@ -705,4 +764,133 @@ function shortenPath(p?: string): string {
   if (!p) return '';
   const parts = p.split('/');
   return parts.slice(-2).join('/');
+}
+
+/* ------------------------------------------------------------------ */
+/* AskUserQuestion — interactive panel in Beyond style                 */
+/* ------------------------------------------------------------------ */
+
+function BeyondAskPanel({
+  request,
+  onAnswer,
+  onSkip,
+}: {
+  request: AskRequest;
+  onAnswer: (answers: Record<string, string>) => void;
+  onSkip: () => void;
+}) {
+  const questions = request.input.questions || [];
+  const [selections, setSelections] = useState<Record<number, Set<string>>>({});
+
+  if (questions.length === 0) return null;
+
+  const toggle = (qIdx: number, label: string, multi: boolean) => {
+    setSelections((prev) => {
+      const current = new Set(prev[qIdx] || []);
+      if (multi) {
+        if (current.has(label)) current.delete(label);
+        else current.add(label);
+      } else {
+        current.clear();
+        current.add(label);
+      }
+      return { ...prev, [qIdx]: current };
+    });
+  };
+
+  const canSubmit = questions.every((_, idx) => (selections[idx]?.size ?? 0) > 0);
+
+  const submit = () => {
+    const answers: Record<string, string> = {};
+    questions.forEach((q, idx) => {
+      const picks = Array.from(selections[idx] || []);
+      if (picks.length > 0) answers[q.question] = picks.join(', ');
+    });
+    onAnswer(answers);
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.22, ease: 'easeOut' }}
+      className="overflow-hidden rounded-2xl bg-white shadow-[0_4px_24px_-8px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.04]"
+    >
+      <div className="flex flex-col divide-y divide-black/[0.04]">
+        {questions.map((q, qIdx) => {
+          const multi = Boolean(q.multiSelect);
+          const selected = selections[qIdx] || new Set<string>();
+          return (
+            <div key={qIdx} className="px-5 py-4">
+              <div className="mb-3 flex items-center gap-2">
+                {q.header && (
+                  <span className="rounded-full bg-black/[0.04] px-2 py-0.5 text-[11px] uppercase tracking-wide text-beyond-faint">
+                    {q.header}
+                  </span>
+                )}
+                {multi && (
+                  <span className="text-[11px] text-beyond-faint">Více možností</span>
+                )}
+              </div>
+              <p className="mb-3 text-[15px] font-medium leading-snug text-beyond-ink">
+                {q.question}
+              </p>
+              <div className="flex flex-col gap-1.5">
+                {q.options.map((opt) => {
+                  const isOn = selected.has(opt.label);
+                  return (
+                    <button
+                      key={opt.label}
+                      type="button"
+                      onClick={() => toggle(qIdx, opt.label, multi)}
+                      className={`group flex w-full items-start gap-3 rounded-[14px] border px-3.5 py-2.5 text-left transition-all ${isOn
+                        ? 'border-black/15 bg-black/[0.03]'
+                        : 'border-black/[0.06] hover:border-black/[0.12] hover:bg-black/[0.02]'}`}
+                    >
+                      <span
+                        className={`mt-1 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border transition-colors ${isOn
+                          ? 'border-beyond-ink bg-beyond-ink'
+                          : 'border-black/15 bg-white'}`}
+                      >
+                        {isOn && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[14px] font-medium leading-tight text-beyond-ink">
+                          {opt.label}
+                        </span>
+                        {opt.description && (
+                          <span className="mt-0.5 block text-[12px] leading-snug text-beyond-faint">
+                            {opt.description}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="flex items-center justify-end gap-2 border-t border-black/[0.04] bg-black/[0.015] px-5 py-3">
+        <button
+          type="button"
+          onClick={onSkip}
+          className="rounded-full px-3 py-1.5 text-[12px] text-beyond-faint transition-colors hover:bg-black/[0.04] hover:text-beyond-dim"
+        >
+          Přeskočit
+        </button>
+        <button
+          type="button"
+          onClick={submit}
+          disabled={!canSubmit}
+          className="rounded-full bg-beyond-ink px-4 py-1.5 text-[12px] font-medium text-white shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2)] transition-all hover:shadow-[0_4px_12px_-2px_rgba(0,0,0,0.25)] disabled:bg-black/[0.08] disabled:text-black/30 disabled:shadow-none"
+        >
+          Odeslat
+        </button>
+      </div>
+    </motion.div>
+  );
 }
