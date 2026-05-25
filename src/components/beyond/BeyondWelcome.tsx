@@ -1,5 +1,7 @@
 import { useMemo, useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { ArrowUp, Paperclip } from 'lucide-react';
+import BeyondGlyph from './BeyondGlyph';
 
 /**
  * Beyond Brain — v2 Welcome (Copilot-style).
@@ -80,25 +82,14 @@ export default function BeyondWelcome({
 
   return (
     <div className="beyond-hero-gradient relative flex h-full min-h-screen w-full flex-col items-center justify-center px-6 py-16">
-      {/* Avatar — Beyond glyph (mascot-like soft gradient circle, gently pulsing) */}
+      {/* Beyond glyph mascot — gentle breathing */}
       <motion.div
         initial={{ opacity: 0, scale: 0.92 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 1.0, ease: [0.21, 1.02, 0.73, 1] }}
         className="mb-12"
       >
-        <motion.div
-          className="relative h-16 w-16 rounded-full"
-          style={{
-            background:
-              'radial-gradient(circle at 32% 28%, #f6d8e4 0%, #d4dff2 38%, #c9bce3 72%, #ad9fd1 100%)',
-            boxShadow:
-              '0 10px 32px -10px rgba(173, 159, 209, 0.45), inset 0 1px 2px rgba(255,255,255,0.55)',
-          }}
-          animate={{ scale: [1, 1.04, 1] }}
-          transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-          aria-hidden
-        />
+        <BeyondGlyph size={64} pulse face />
       </motion.div>
 
       {/* Greeting */}
@@ -129,18 +120,25 @@ export default function BeyondWelcome({
             onKeyDown={handleKeyDown}
             rows={1}
             placeholder="Napiš, co řešíme…"
-            className="block w-full resize-none border-none bg-transparent px-6 py-5 pr-16 text-[16px] leading-relaxed text-beyond-ink placeholder:text-beyond-faint focus:outline-none focus:ring-0"
+            className="block w-full resize-none border-none bg-transparent px-6 py-5 pl-14 pr-16 text-[16px] leading-relaxed text-beyond-ink placeholder:text-beyond-faint focus:outline-none focus:ring-0"
             style={{ minHeight: '60px', maxHeight: '200px' }}
           />
+          {/* Attachment placeholder (non-functional visual) */}
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-label="Příloha"
+            className="absolute left-3 bottom-3 flex h-10 w-10 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-black/[0.04] hover:text-beyond-dim"
+          >
+            <Paperclip className="h-[18px] w-[18px]" strokeWidth={1.8} />
+          </button>
           <button
             type="submit"
             disabled={!canSubmit}
             aria-label="Pošli"
             className="absolute right-3 bottom-3 flex h-10 w-10 items-center justify-center rounded-full bg-beyond-ink text-white shadow-[0_2px_8px_-2px_rgba(0,0,0,0.25)] transition-all hover:scale-105 disabled:bg-black/[0.08] disabled:text-black/30 disabled:shadow-none disabled:hover:scale-100"
           >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-              <path d="M8 13V3M8 3L3.5 7.5M8 3L12.5 7.5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+            <ArrowUp className="h-[18px] w-[18px]" strokeWidth={2.2} />
           </button>
         </div>
       </motion.form>

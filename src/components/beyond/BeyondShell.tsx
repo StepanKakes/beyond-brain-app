@@ -1,5 +1,6 @@
 import { useState, useEffect, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { PanelLeft } from 'lucide-react';
 import BeyondSidebarPreview from './BeyondSidebarPreview';
 
 /**
@@ -55,20 +56,9 @@ export default function BeyondShell({
         onClick={() => setOpen((v) => !v)}
         aria-label={open ? 'Skrýt panel' : 'Zobrazit panel'}
         aria-expanded={open}
-        className="fixed left-5 top-5 z-30 flex h-9 w-9 items-center justify-center rounded-full text-beyond-dim transition-colors hover:bg-black/5 hover:text-beyond-ink"
+        className="fixed left-5 top-5 z-40 flex h-9 w-9 items-center justify-center rounded-full text-beyond-dim transition-colors hover:bg-black/5 hover:text-beyond-ink"
       >
-        <svg
-          viewBox="0 0 24 24"
-          width="20"
-          height="20"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={1.8}
-          strokeLinecap="round"
-          aria-hidden="true"
-        >
-          <path d="M4 7h16M4 12h16M4 17h16" />
-        </svg>
+        <PanelLeft className="h-[18px] w-[18px]" strokeWidth={1.8} />
       </button>
 
       {/* Main view */}

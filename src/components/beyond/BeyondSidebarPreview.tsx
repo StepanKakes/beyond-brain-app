@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
+import { Search, Settings } from 'lucide-react';
+import BeyondGlyph, { initialsFor } from './BeyondGlyph';
 import { useBeyondClients, type BeyondClient } from './useBeyondClients';
 
 /**
@@ -75,15 +77,22 @@ export default function BeyondSidebarPreview({
 
   return (
     <div className="flex h-full w-full flex-col border-r border-beyond-line bg-white">
-      {/* Search — underline only, no border box */}
+      {/* Search — underline only, leading lucide icon */}
       <div className="flex-shrink-0 px-5 pb-2 pt-6">
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Hledat"
-          className="w-full border-0 border-b border-beyond-line bg-transparent py-2 text-[15px] text-beyond-ink placeholder:text-beyond-faint focus:border-beyond-ink focus:outline-none"
-        />
+        <div className="flex items-center gap-2 border-b border-beyond-line transition-colors focus-within:border-beyond-ink">
+          <Search
+            className="h-[15px] w-[15px] flex-shrink-0 text-beyond-faint"
+            strokeWidth={1.8}
+            aria-hidden
+          />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Hledat"
+            className="w-full border-0 bg-transparent py-2 text-[15px] text-beyond-ink placeholder:text-beyond-faint focus:outline-none focus:ring-0"
+          />
+        </div>
       </div>
 
       {/* Clients — tiny gradient avatars + name + W## */}
@@ -100,26 +109,20 @@ export default function BeyondSidebarPreview({
         </ul>
       </nav>
 
-      {/* Bottom: settings pill */}
+      {/* Bottom: settings pill with cog icon */}
       <div className="flex-shrink-0 px-4 pb-5 pt-3">
         <button
           type="button"
           onClick={onOpenSettings}
           className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[13px] text-beyond-faint transition-colors hover:bg-black/[0.04] hover:text-beyond-ink"
-          aria-label="Settings"
+          aria-label="Nastavení"
         >
+          <Settings className="h-[14px] w-[14px]" strokeWidth={1.8} aria-hidden />
           Nastavení
         </button>
       </div>
     </div>
   );
-}
-
-function initialsFor(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return '?';
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
 function ClientRow({ client, onClick }: { client: Client; onClick?: () => void }) {
@@ -132,18 +135,7 @@ function ClientRow({ client, onClick }: { client: Client; onClick?: () => void }
       }`}
       whileHover={{}}
     >
-      <span
-        className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white/95"
-        style={{
-          background:
-            'radial-gradient(circle at 32% 28%, #f6d8e4 0%, #d4dff2 38%, #c9bce3 72%, #ad9fd1 100%)',
-          boxShadow:
-            '0 2px 6px -2px rgba(173, 159, 209, 0.5), inset 0 1px 1px rgba(255,255,255,0.5)',
-        }}
-        aria-hidden
-      >
-        {initialsFor(client.name)}
-      </span>
+      <BeyondGlyph size={28} initials={initialsFor(client.name)} />
       <span
         className={`min-w-0 flex-1 truncate text-[14px] transition-all ${
           client.selected

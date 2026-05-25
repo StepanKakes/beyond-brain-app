@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { ArrowUp, Paperclip } from 'lucide-react';
+import BeyondGlyph from './BeyondGlyph';
 import { useWebSocket } from '../../contexts/WebSocketContext';
 
 /**
@@ -142,15 +144,7 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
           Left padding leaves room for the shell's hamburger toggle (~52px). */}
       <header className="flex flex-shrink-0 items-center px-4 pb-3 pl-16 pr-4 pt-4 sm:px-6 sm:pl-20 sm:pr-6 sm:pt-5">
         <div className="mx-auto flex w-full max-w-[760px] items-center gap-3 rounded-2xl bg-white px-4 py-3 shadow-[0_2px_16px_-8px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.04]">
-          <div
-            className="h-7 w-7 flex-shrink-0 rounded-full"
-            style={{
-              background:
-                'radial-gradient(circle at 32% 28%, #f6d8e4 0%, #d4dff2 38%, #c9bce3 72%, #ad9fd1 100%)',
-              boxShadow: '0 2px 6px -2px rgba(173, 159, 209, 0.5), inset 0 1px 1px rgba(255,255,255,0.5)',
-            }}
-            aria-hidden
-          />
+          <BeyondGlyph size={28} />
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-[14px] font-medium leading-tight text-beyond-ink">
               {client.name}
@@ -203,8 +197,16 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
       {/* Composer — floating rounded card. */}
       <div className="flex-shrink-0 px-4 pb-6 pt-3 sm:px-6 sm:pb-8 sm:pt-4">
         <div className="mx-auto w-full max-w-[760px]">
-          <div className="rounded-[24px] bg-white px-5 py-4 shadow-[0_4px_24px_-8px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.04] focus-within:shadow-[0_8px_32px_-8px_rgba(0,0,0,0.12)] focus-within:ring-black/[0.06]">
-            <div className="flex items-end gap-3">
+          <div className="rounded-[24px] bg-white px-4 py-3 shadow-[0_4px_24px_-8px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.04] focus-within:shadow-[0_8px_32px_-8px_rgba(0,0,0,0.12)] focus-within:ring-black/[0.06]">
+            <div className="flex items-end gap-2">
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-label="Příloha"
+                className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-black/[0.04] hover:text-beyond-dim"
+              >
+                <Paperclip className="h-[18px] w-[18px]" strokeWidth={1.8} />
+              </button>
               <textarea
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
@@ -216,7 +218,7 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
                 }}
                 placeholder="Napiš, co řešíme…"
                 rows={1}
-                className="min-h-[40px] flex-1 resize-none border-0 bg-transparent py-1 text-[16px] leading-snug text-beyond-ink placeholder:text-beyond-faint focus:outline-none focus:ring-0"
+                className="min-h-[40px] flex-1 resize-none border-0 bg-transparent py-2 text-[16px] leading-snug text-beyond-ink placeholder:text-beyond-faint focus:outline-none focus:ring-0"
               />
               <button
                 type="button"
@@ -225,9 +227,7 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
                 aria-label="Pošli"
                 className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-beyond-ink text-white shadow-[0_2px_8px_-2px_rgba(0,0,0,0.25)] transition-all hover:scale-105 disabled:bg-black/[0.08] disabled:text-black/30 disabled:shadow-none disabled:hover:scale-100"
               >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-                  <path d="M8 13V3M8 3L3.5 7.5M8 3L12.5 7.5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
+                <ArrowUp className="h-[18px] w-[18px]" strokeWidth={2.2} />
               </button>
             </div>
 
