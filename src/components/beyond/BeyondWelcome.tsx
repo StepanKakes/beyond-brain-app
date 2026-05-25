@@ -1,44 +1,29 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 
 /**
- * Beyond Brain — v2 Welcome.
+ * Beyond Brain — v2 Welcome (Copilot-style).
  *
- * Hyperminimal. Powder-blue → cream gradient (welcome-only), generous empty
- * space, content centered horizontally but pushed slightly above center
- * (~40% from top). Hero greeting in Instrument Serif italic, two lines:
- *   "Dobré ráno, Štěpáne."
- *   "Co dnes řešíme?"
- * Underneath: three soft-gray pill buttons, text-only, no icons.
+ * Hyperminimal. Soft powder-blue → cream gradient (welcome-only).
+ * Layout:
+ *   - small avatar/glyph at top
+ *   - greeting "Dobré ráno, Štěpáne." centered
+ *   - chat input centered below greeting — THE focal point
+ *   - NO predefined pill suggestions (user types freely)
  */
 
-type Suggestion = {
-  label: string;
-  prompt: string;
-};
-
 type Props = {
-  /** First name in greeting. Defaults to "Štěpáne" per VISION.md. */
+  /** First name in greeting. Defaults to "Štěpáne". */
   name?: string;
-  /** Three pill suggestions. Defaults match VISION.md. */
-  suggestions?: Suggestion[];
-  /** Called when a pill is clicked — parent starts a new session. */
-  onSuggestionClick?: (suggestion: Suggestion) => void;
+  /** Called when user submits a message — parent opens a new chat session. */
+  onSubmit?: (message: string) => void;
 };
-
-const DEFAULT_SUGGESTIONS: Suggestion[] = [
-  { label: 'Co je u Ivany?', prompt: 'Co je nového u Ivany Juříkové?' },
-  { label: 'Sliby Patrika',  prompt: 'Ukaž otevřené sliby u Patrika Kruntorada.' },
-  { label: 'Sync all',       prompt: 'Spusť sync všech klientů z Notion.' },
-];
 
 /** Greeting per VISION.md v2:
  *  5-11  Dobré ráno
  *  11-17 Ahoj
  *  17-22 Dobrý večer
  *  22-5  Tady jsem.
- *
- *  ?bg=morning|day|evening|night overrides for screenshots.
  */
 function getGreeting(name: string): string {
   let hour = new Date().getHours();
@@ -55,58 +40,108 @@ function getGreeting(name: string): string {
   return 'Tady jsem.';
 }
 
-const QUESTION = 'Co dnes řešíme?';
-
 export default function BeyondWelcome({
   name = 'Štěpáne',
-  suggestions = DEFAULT_SUGGESTIONS,
-  onSuggestionClick,
+  onSubmit,
 }: Props) {
   const greeting = useMemo(() => getGreeting(name), [name]);
+  const [value, setValue] = useState('');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-grow textarea
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+  }, [value]);
+
+  // Focus on mount
+  useEffect(() => {
+    textareaRef.current?.focus();
+  }, []);
+
+  function handleSubmit(e?: React.FormEvent) {
+    e?.preventDefault();
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    onSubmit?.(trimmed);
+    setValue('');
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit();
+    }
+  }
+
+  const canSubmit = value.trim().length > 0;
 
   return (
-    <div className="beyond-hero-gradient relative flex h-full min-h-screen w-full flex-col items-center px-6 pb-16 pt-[28vh] sm:pt-[32vh]">
+    <div className="beyond-hero-gradient relative flex h-full min-h-screen w-full flex-col items-center justify-center px-6 py-16">
+      {/* Avatar — placeholder Beyond glyph (soft gradient circle, animated subtle pulse) */}
       <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 1.2, ease: [0.21, 1.02, 0.73, 1] }}
-        className="mx-auto w-full max-w-3xl text-center"
+        initial={{ opacity: 0, scale: 0.92 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 1.0, ease: [0.21, 1.02, 0.73, 1] }}
+        className="mb-10"
       >
-        <h1 className="font-hero italic text-[2.5rem] leading-[1.05] text-beyond-ink sm:text-[3.25rem] md:text-[3.5rem]">
-          {greeting}
-        </h1>
-        <p className="font-hero italic mt-2 text-[1.5rem] leading-snug text-beyond-dim sm:text-[2rem]">
-          {QUESTION}
-        </p>
+        <motion.div
+          className="h-14 w-14 rounded-full"
+          style={{
+            background: 'radial-gradient(circle at 35% 30%, #d4e3f5 0%, #c1d4e8 45%, #a8bdd4 100%)',
+            boxShadow: '0 8px 24px -8px rgba(168, 189, 212, 0.45)',
+          }}
+          animate={{ scale: [1, 1.04, 1] }}
+          transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+          aria-hidden
+        />
       </motion.div>
 
-      {suggestions.length > 0 && (
-        <motion.div
-          initial="hidden"
-          animate="show"
-          variants={{
-            hidden: {},
-            show: { transition: { staggerChildren: 0.08, delayChildren: 0.6 } },
-          }}
-          className="mt-12 flex w-full max-w-2xl flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-3"
-        >
-          {suggestions.map((s) => (
-            <motion.button
-              key={s.label}
-              type="button"
-              onClick={() => onSuggestionClick?.(s)}
-              className="beyond-pill"
-              variants={{
-                hidden: { opacity: 0, y: 8 },
-                show: { opacity: 1, y: 0 },
-              }}
-              transition={{ duration: 0.45, ease: 'easeOut' }}
-            >
-              {s.label}
-            </motion.button>
-          ))}
-        </motion.div>
-      )}
+      {/* Greeting */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 1.0, delay: 0.15, ease: [0.21, 1.02, 0.73, 1] }}
+        className="mx-auto w-full max-w-3xl text-center"
+      >
+        <h1 className="font-hero italic text-[2rem] leading-[1.1] text-beyond-ink sm:text-[2.5rem] md:text-[3rem]">
+          {greeting}
+        </h1>
+      </motion.div>
+
+      {/* Chat input — THE focal point */}
+      <motion.form
+        onSubmit={handleSubmit}
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 1.0, delay: 0.35, ease: [0.21, 1.02, 0.73, 1] }}
+        className="mt-10 w-full max-w-2xl"
+      >
+        <div className="relative rounded-3xl bg-white/85 shadow-[0_2px_24px_-8px_rgba(0,0,0,0.08)] backdrop-blur-sm ring-1 ring-black/5 transition-shadow focus-within:shadow-[0_4px_32px_-8px_rgba(0,0,0,0.12)] focus-within:ring-black/10">
+          <textarea
+            ref={textareaRef}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            rows={1}
+            placeholder="Napiš, co řešíme…"
+            className="block w-full resize-none border-none bg-transparent px-6 py-5 pr-16 text-[16px] leading-relaxed text-beyond-ink placeholder:text-beyond-faint focus:outline-none focus:ring-0"
+            style={{ minHeight: '60px', maxHeight: '200px' }}
+          />
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            aria-label="Pošli"
+            className="absolute right-3 bottom-3 flex h-10 w-10 items-center justify-center rounded-full bg-beyond-ink text-white transition-all hover:scale-105 disabled:bg-black/10 disabled:text-black/30 disabled:hover:scale-100"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+              <path d="M8 13V3M8 3L3.5 7.5M8 3L12.5 7.5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        </div>
+      </motion.form>
     </div>
   );
 }

@@ -76,7 +76,7 @@ export default function BeyondApp() {
             <BeyondChat client={activeClient} initialPrompt={initialPrompt} />
           ) : (
             <BeyondWelcome
-              onSuggestionClick={(s) => handleWelcomePrompt(s.prompt)}
+              onSubmit={(message) => handleWelcomePrompt(message)}
             />
           )}
         </motion.div>
