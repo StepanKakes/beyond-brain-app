@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
-import { Search, Settings } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Search, Settings, Plus, Check, MessagesSquare, Trash2 } from 'lucide-react';
 import BeyondGlyph, { initialsFor } from './BeyondGlyph';
 import { useBeyondClients, type BeyondClient } from './useBeyondClients';
 import BeyondRepoStatus from './BeyondRepoStatus';
 import BeyondFileTree from './BeyondFileTree';
+import { useBeyondSessions, type BeyondSession } from './useBeyondSessions';
 
 /**
  * Beyond Brain — v2 Sidebar (hyperminimal).
@@ -115,6 +116,9 @@ export default function BeyondSidebarPreview({
           {filtered.map((c) => (
             <li key={c.slug}>
               <ClientRow client={c} onClick={() => onSelectClient?.(c.slug)} />
+              {c.selected && (
+                <ClientSessions slug={c.slug} />
+              )}
             </li>
           ))}
           {filtered.length === 0 && (
@@ -172,5 +176,88 @@ function ClientRow({ client, onClick }: { client: Client; onClick?: () => void }
         <span className="flex-shrink-0 text-[11px] text-beyond-faint">{client.week}</span>
       )}
     </motion.button>
+  );
+}
+
+/** Inline list of chat sessions for the currently-selected client. */
+function ClientSessions({ slug }: { slug: string }) {
+  const { sessions, activeUuid } = useBeyondSessions(slug);
+
+  const handleNew = () => {
+    window.dispatchEvent(new CustomEvent('beyond:new-session', { detail: { slug } }));
+  };
+  const handleSwitch = (uuid: string) => {
+    window.dispatchEvent(new CustomEvent('beyond:switch-session', { detail: { slug, uuid } }));
+  };
+  const handleDelete = (s: BeyondSession) => {
+    if (!window.confirm(`Smazat chat „${s.title}" z indexu?\n(transkript na disku zůstane.)`)) {
+      return;
+    }
+    window.dispatchEvent(
+      new CustomEvent('beyond:delete-session', { detail: { slug, uuid: s.uuid } }),
+    );
+  };
+
+  return (
+    <AnimatePresence initial={false}>
+      <motion.div
+        key="sessions"
+        initial={{ height: 0, opacity: 0 }}
+        animate={{ height: 'auto', opacity: 1 }}
+        exit={{ height: 0, opacity: 0 }}
+        transition={{ duration: 0.2, ease: 'easeOut' }}
+        className="overflow-hidden"
+      >
+        <div className="ml-9 mt-1 flex flex-col gap-0.5 border-l border-black/[0.06] pl-2">
+          <button
+            type="button"
+            onClick={handleNew}
+            className="flex items-center gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-black/[0.04]"
+          >
+            <Plus className="h-[11px] w-[11px] flex-shrink-0 text-beyond-faint" strokeWidth={2} />
+            <span className="text-[12px] text-beyond-dim">Nový chat</span>
+          </button>
+
+          {sessions.length === 0 ? (
+            <p className="px-2 py-1 text-[11px] text-beyond-faint">Žádné chaty.</p>
+          ) : (
+            sessions.map((s) => {
+              const active = s.uuid === activeUuid;
+              return (
+                <div
+                  key={s.uuid}
+                  className={`group flex items-center gap-1.5 rounded-md px-2 py-1 transition-colors ${active ? 'bg-black/[0.04]' : 'hover:bg-black/[0.025]'}`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => handleSwitch(s.uuid)}
+                    className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+                  >
+                    {active ? (
+                      <Check className="h-[11px] w-[11px] flex-shrink-0 text-beyond-ink" strokeWidth={2.2} />
+                    ) : (
+                      <MessagesSquare className="h-[11px] w-[11px] flex-shrink-0 text-beyond-faint" strokeWidth={1.8} />
+                    )}
+                    <span
+                      className={`truncate text-[12px] leading-tight ${active ? 'font-medium text-beyond-ink' : 'text-beyond-dim'}`}
+                    >
+                      {s.title}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(s)}
+                    title="Odebrat z indexu"
+                    className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint opacity-0 transition-all hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
+                  >
+                    <Trash2 className="h-[10px] w-[10px]" strokeWidth={1.8} />
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </motion.div>
+    </AnimatePresence>
   );
 }

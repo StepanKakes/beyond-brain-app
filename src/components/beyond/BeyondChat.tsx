@@ -83,6 +83,9 @@ function writeSessions(slug: string, sessions: BeyondSession[]): void {
   } catch {
     /* ignore */
   }
+  // Notify observers (sidebar) within the same tab — `storage` events only
+  // fire across tabs.
+  window.dispatchEvent(new CustomEvent('beyond:sessions-changed', { detail: { slug } }));
 }
 
 function shortTitle(text: string): string {
@@ -328,6 +331,38 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
     window.addEventListener('beyond:insert-text', handler);
     return () => window.removeEventListener('beyond:insert-text', handler);
   }, []);
+
+  // Sidebar can drive session actions remotely via custom events; the chat
+  // owns the actual switch/new/delete logic so all clients stay consistent.
+  useEffect(() => {
+    const matchClient = (detail: unknown) =>
+      detail && typeof detail === 'object' &&
+      (detail as { slug?: string }).slug === client.slug;
+
+    const onSwitch = (e: Event) => {
+      const detail = (e as CustomEvent<{ slug: string; uuid: string }>).detail;
+      if (!matchClient(detail) || !detail.uuid) return;
+      switchToSession(detail.uuid);
+    };
+    const onNew = (e: Event) => {
+      const detail = (e as CustomEvent<{ slug: string }>).detail;
+      if (!matchClient(detail)) return;
+      startNewSession();
+    };
+    const onDelete = (e: Event) => {
+      const detail = (e as CustomEvent<{ slug: string; uuid: string }>).detail;
+      if (!matchClient(detail) || !detail.uuid) return;
+      deleteSession(detail.uuid);
+    };
+    window.addEventListener('beyond:switch-session', onSwitch);
+    window.addEventListener('beyond:new-session', onNew);
+    window.addEventListener('beyond:delete-session', onDelete);
+    return () => {
+      window.removeEventListener('beyond:switch-session', onSwitch);
+      window.removeEventListener('beyond:new-session', onNew);
+      window.removeEventListener('beyond:delete-session', onDelete);
+    };
+  }, [client.slug, switchToSession, startNewSession, deleteSession]);
 
   const ingestFile = useCallback(async (file: File) => {
     const isImage = file.type.startsWith('image/');
