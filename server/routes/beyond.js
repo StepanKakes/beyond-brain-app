@@ -10,6 +10,10 @@ import express from 'express';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
 
 const router = express.Router();
 
@@ -178,6 +182,249 @@ async function checkGit() {
     return { ok: null, label: 'git: žádné repo' };
   }
 }
+
+/** Run `git ...` inside BRAIN_PATH. Returns stdout, throws on non-zero exit
+ *  unless `okExitCodes` includes the code. */
+async function git(args, { okExitCodes = [] } = {}) {
+  try {
+    const { stdout } = await execFileAsync('git', args, {
+      cwd: BRAIN_PATH,
+      maxBuffer: 8 * 1024 * 1024,
+    });
+    return { ok: true, stdout: stdout.trim(), code: 0 };
+  } catch (err) {
+    const code = typeof err.code === 'number' ? err.code : 1;
+    if (okExitCodes.includes(code)) {
+      return { ok: true, stdout: (err.stdout || '').trim(), code };
+    }
+    return {
+      ok: false,
+      stdout: (err.stdout || '').trim(),
+      stderr: (err.stderr || err.message || '').trim(),
+      code,
+    };
+  }
+}
+
+/** Detailed repo state — branch, ahead/behind, dirty files, last fetch. */
+async function repoStatus({ fetch = false } = {}) {
+  try {
+    await fs.stat(path.join(BRAIN_PATH, '.git'));
+  } catch {
+    return { exists: false };
+  }
+
+  if (fetch) {
+    await git(['fetch', '--quiet', 'origin']);
+  }
+
+  const branchRes = await git(['rev-parse', '--abbrev-ref', 'HEAD']);
+  const branch = branchRes.ok ? branchRes.stdout : 'main';
+
+  // Find upstream remote ref, fallback to origin/<branch>.
+  const upstreamRes = await git([
+    'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}',
+  ]);
+  const upstream = upstreamRes.ok && upstreamRes.stdout
+    ? upstreamRes.stdout
+    : `origin/${branch}`;
+
+  const aheadBehind = await git([
+    'rev-list', '--left-right', '--count', `${upstream}...HEAD`,
+  ]);
+  let behind = 0;
+  let ahead = 0;
+  if (aheadBehind.ok && aheadBehind.stdout) {
+    const [b, a] = aheadBehind.stdout.split(/\s+/);
+    behind = Number.parseInt(b, 10) || 0;
+    ahead = Number.parseInt(a, 10) || 0;
+  }
+
+  const statusRes = await git(['status', '--porcelain']);
+  const dirtyLines = statusRes.ok && statusRes.stdout
+    ? statusRes.stdout.split('\n').filter(Boolean)
+    : [];
+  const dirty = dirtyLines.length > 0;
+
+  let lastFetchAt = null;
+  try {
+    const head = path.join(BRAIN_PATH, '.git', 'FETCH_HEAD');
+    const stat = await fs.stat(head);
+    lastFetchAt = stat.mtime.toISOString();
+  } catch {
+    /* ignore — repo never fetched */
+  }
+
+  const inSync = !dirty && ahead === 0 && behind === 0;
+  let label;
+  if (!inSync && dirty && ahead === 0 && behind === 0) label = 'lokální změny';
+  else if (dirty && (ahead || behind)) label = `lokální + ${ahead}↑/${behind}↓`;
+  else if (ahead && behind) label = `${ahead}↑ / ${behind}↓ (diverged)`;
+  else if (ahead) label = `${ahead} k pushnutí`;
+  else if (behind) label = `${behind} k pullnutí`;
+  else label = 'aktuální';
+
+  return {
+    exists: true,
+    branch,
+    upstream,
+    ahead,
+    behind,
+    dirty,
+    dirtyCount: dirtyLines.length,
+    dirtyFiles: dirtyLines.slice(0, 20).map((line) => ({
+      status: line.slice(0, 2).trim(),
+      path: line.slice(3),
+    })),
+    inSync,
+    label,
+    lastFetchAt,
+  };
+}
+
+router.get('/repo-status', async (req, res) => {
+  const doFetch = req.query.fetch === '1';
+  try {
+    const status = await repoStatus({ fetch: doFetch });
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'repo-status failed' });
+  }
+});
+
+/** Filtered file tree of the brain — `clients/aktivni/*` and select workspace
+ *  subfolders. Recursive but depth-capped so the payload stays small. */
+async function buildTree(absPath, relPath, depth = 0, maxDepth = 4) {
+  let entries;
+  try {
+    entries = await fs.readdir(absPath, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+
+  const children = [];
+  for (const e of entries) {
+    if (e.name.startsWith('.')) continue;
+    if (e.name === 'node_modules' || e.name === 'raw') continue; // raw = bulky JSON
+    const child = path.join(absPath, e.name);
+    const rel = path.posix.join(relPath, e.name);
+    if (e.isDirectory()) {
+      const sub = depth + 1 < maxDepth
+        ? await buildTree(child, rel, depth + 1, maxDepth)
+        : { type: 'dir', name: e.name, path: rel, children: [] };
+      if (sub) children.push(sub);
+    } else if (e.isFile()) {
+      let size = 0;
+      try {
+        const st = await fs.stat(child);
+        size = st.size;
+      } catch {
+        /* ignore */
+      }
+      children.push({ type: 'file', name: e.name, path: rel, size });
+    }
+  }
+
+  children.sort((a, b) => {
+    if (a.type !== b.type) return a.type === 'dir' ? -1 : 1;
+    return a.name.localeCompare(b.name, 'cs');
+  });
+
+  return { type: 'dir', name: path.basename(absPath), path: relPath, children };
+}
+
+router.get('/tree', async (_req, res) => {
+  try {
+    const roots = [
+      { rel: 'clients/aktivni', max: 3 },
+      { rel: 'workspace/drafty', max: 3 },
+      { rel: 'workspace/briefy', max: 3 },
+      { rel: 'workspace/reporty', max: 3 },
+    ];
+    const out = [];
+    for (const { rel, max } of roots) {
+      const abs = path.join(BRAIN_PATH, rel);
+      const tree = await buildTree(abs, rel, 0, max);
+      if (tree) out.push({ ...tree, name: rel });
+    }
+    res.json({ roots: out });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'tree failed' });
+  }
+});
+
+router.post('/sync', async (_req, res) => {
+  try {
+    // Always fetch first so we have an accurate ahead/behind view.
+    const fetchRes = await git(['fetch', '--quiet', 'origin']);
+    if (!fetchRes.ok) {
+      return res.status(502).json({
+        action: 'fetch',
+        ok: false,
+        error: fetchRes.stderr || 'git fetch failed',
+      });
+    }
+
+    const status = await repoStatus({ fetch: false });
+
+    if (!status.exists) {
+      return res.status(400).json({ ok: false, error: 'No git repo at brain path' });
+    }
+
+    // Decide what to do based on state.
+    if (status.dirty) {
+      return res.status(409).json({
+        ok: false,
+        action: 'blocked',
+        reason: 'dirty',
+        message: `Lokální změny (${status.dirtyCount}). Commitni je dřív než sync.`,
+        status,
+      });
+    }
+
+    if (status.ahead > 0 && status.behind > 0) {
+      return res.status(409).json({
+        ok: false,
+        action: 'blocked',
+        reason: 'diverged',
+        message: `Branch se rozešel (${status.ahead}↑ / ${status.behind}↓). Vyřeš ručně.`,
+        status,
+      });
+    }
+
+    if (status.behind > 0) {
+      const pull = await git(['pull', '--rebase', '--quiet', 'origin', status.branch]);
+      if (!pull.ok) {
+        return res.status(502).json({
+          ok: false,
+          action: 'pull',
+          error: pull.stderr || 'git pull failed',
+          status,
+        });
+      }
+      const after = await repoStatus({ fetch: false });
+      return res.json({ ok: true, action: 'pull', pulled: status.behind, status: after });
+    }
+
+    if (status.ahead > 0) {
+      const push = await git(['push', '--quiet', 'origin', status.branch]);
+      if (!push.ok) {
+        return res.status(502).json({
+          ok: false,
+          action: 'push',
+          error: push.stderr || 'git push failed',
+          status,
+        });
+      }
+      const after = await repoStatus({ fetch: false });
+      return res.json({ ok: true, action: 'push', pushed: status.ahead, status: after });
+    }
+
+    return res.json({ ok: true, action: 'noop', status });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message || 'sync failed' });
+  }
+});
 
 async function checkRawAge() {
   try {

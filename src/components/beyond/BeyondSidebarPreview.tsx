@@ -3,6 +3,8 @@ import { motion } from 'framer-motion';
 import { Search, Settings } from 'lucide-react';
 import BeyondGlyph, { initialsFor } from './BeyondGlyph';
 import { useBeyondClients, type BeyondClient } from './useBeyondClients';
+import BeyondRepoStatus from './BeyondRepoStatus';
+import BeyondFileTree from './BeyondFileTree';
 
 /**
  * Beyond Brain — v2 Sidebar (hyperminimal).
@@ -46,8 +48,14 @@ export default function BeyondSidebarPreview({
   onSelectClient,
   onOpenSettings,
 }: Props) {
-  const { clients: apiClients, loading } = useBeyondClients();
+  const { clients: apiClients, loading, refresh: refreshClients } = useBeyondClients();
   const [query, setQuery] = useState('');
+  const [treeKey, setTreeKey] = useState(0);
+
+  const handleSynced = () => {
+    setTreeKey((k) => k + 1);
+    refreshClients?.();
+  };
 
   // Use API clients when available; fall back to static list in preview / no-auth contexts.
   const clients: Client[] = useMemo(() => {
@@ -77,8 +85,11 @@ export default function BeyondSidebarPreview({
 
   return (
     <div className="flex h-full w-full flex-col border-r border-beyond-line bg-white">
+      {/* Repo status card — green/amber/red dot, sync button, expandable detail */}
+      <BeyondRepoStatus onSynced={handleSynced} />
+
       {/* Search — underline only, leading lucide icon */}
-      <div className="flex-shrink-0 px-5 pb-2 pt-6">
+      <div className="flex-shrink-0 px-5 pb-2 pt-4">
         <div className="flex items-center gap-2 border-b border-beyond-line transition-colors focus-within:border-beyond-ink">
           <Search
             className="h-[15px] w-[15px] flex-shrink-0 text-beyond-faint"
@@ -95,9 +106,12 @@ export default function BeyondSidebarPreview({
         </div>
       </div>
 
-      {/* Clients — tiny gradient avatars + name + W## */}
-      <nav className="mt-4 flex-1 overflow-y-auto px-3">
-        <ul className="flex flex-col gap-0.5">
+      {/* Clients + file tree share the scroll area */}
+      <nav className="mt-3 flex-1 overflow-y-auto">
+        <p className="mb-1 px-5 text-[10px] uppercase tracking-wider text-beyond-faint">
+          Klienti
+        </p>
+        <ul className="flex flex-col gap-0.5 px-3">
           {filtered.map((c) => (
             <li key={c.slug}>
               <ClientRow client={c} onClick={() => onSelectClient?.(c.slug)} />
@@ -107,6 +121,8 @@ export default function BeyondSidebarPreview({
             <li className="px-4 py-6 text-[14px] text-beyond-faint">Nic.</li>
           )}
         </ul>
+
+        <BeyondFileTree refreshKey={treeKey} />
       </nav>
 
       {/* Bottom: settings pill with cog icon */}
