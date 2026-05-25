@@ -122,7 +122,14 @@ export default function BeyondSidebarPreview({
           )}
         </ul>
 
-        <BeyondFileTree refreshKey={treeKey} />
+        <BeyondFileTree
+          refreshKey={treeKey}
+          onFileClick={(filePath) => {
+            window.dispatchEvent(
+              new CustomEvent('beyond:insert-text', { detail: `@${filePath} ` }),
+            );
+          }}
+        />
       </nav>
 
       {/* Bottom: settings pill with cog icon */}

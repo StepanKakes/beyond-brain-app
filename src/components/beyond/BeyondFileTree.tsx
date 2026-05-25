@@ -17,7 +17,14 @@ type TreeNode =
 
 type TreeResponse = { roots: TreeNode[] };
 
-export default function BeyondFileTree({ refreshKey = 0 }: { refreshKey?: number }) {
+export default function BeyondFileTree({
+  refreshKey = 0,
+  onFileClick,
+}: {
+  refreshKey?: number;
+  /** Called with the repo-relative path when user clicks a file row. */
+  onFileClick?: (path: string) => void;
+}) {
   const [roots, setRoots] = useState<TreeNode[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -65,7 +72,13 @@ export default function BeyondFileTree({ refreshKey = 0 }: { refreshKey?: number
       </p>
       <ul className="flex flex-col">
         {roots.map((root) => (
-          <TreeRow key={root.path} node={root} depth={0} defaultOpen={root.name === 'clients/aktivni'} />
+          <TreeRow
+            key={root.path}
+            node={root}
+            depth={0}
+            defaultOpen={root.name === 'clients/aktivni'}
+            onFileClick={onFileClick}
+          />
         ))}
       </ul>
     </div>
@@ -76,10 +89,12 @@ function TreeRow({
   node,
   depth,
   defaultOpen = false,
+  onFileClick,
 }: {
   node: TreeNode;
   depth: number;
   defaultOpen?: boolean;
+  onFileClick?: (path: string) => void;
 }) {
   const [open, setOpen] = useState(defaultOpen);
 
@@ -88,9 +103,10 @@ function TreeRow({
       <li>
         <button
           type="button"
-          className="flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left transition-colors hover:bg-black/[0.025]"
+          onClick={() => onFileClick?.(node.path)}
+          className="flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left transition-colors hover:bg-black/[0.04]"
           style={{ paddingLeft: 8 + depth * 12 }}
-          title={node.path}
+          title={`Vložit @${node.path} do chatu`}
         >
           <FileText
             className="h-[12px] w-[12px] flex-shrink-0 text-beyond-faint"
@@ -125,7 +141,7 @@ function TreeRow({
       {open && node.children.length > 0 && (
         <ul className="flex flex-col">
           {node.children.map((child) => (
-            <TreeRow key={child.path} node={child} depth={depth + 1} />
+            <TreeRow key={child.path} node={child} depth={depth + 1} onFileClick={onFileClick} />
           ))}
         </ul>
       )}

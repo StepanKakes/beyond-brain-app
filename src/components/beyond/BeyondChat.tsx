@@ -16,6 +16,9 @@ import {
   Square,
   Trash2,
   Settings as SettingsIcon,
+  X,
+  File as FileIcon,
+  Upload,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -78,6 +81,21 @@ type PermRequest = {
   toolName: string;
   input: unknown;
 };
+
+type PendingAttachment = {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  kind: 'image' | 'text';
+  /** Images: data:image/...;base64,... — text: raw UTF-8 content. */
+  data: string;
+};
+
+const TEXT_LIKE_MIME = /^(text\/|application\/(json|xml|javascript|typescript|x-yaml|yaml))/;
+const TEXT_LIKE_EXT = /\.(md|txt|json|ya?ml|csv|tsv|log|html?|css|js|ts|tsx|jsx|py|sh|toml|ini|env|jsonl)$/i;
+const MAX_TEXT_BYTES = 256 * 1024;
+const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
 
 const ALLOWED_TOOLS_STORAGE_KEY = 'beyond.allowed-tools';
 const BYPASS_PERMISSIONS_STORAGE_KEY = 'beyond.bypass-permissions';
@@ -150,6 +168,88 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
   const allowedToolsRef = useRef<string[]>(allowedTools);
   allowedToolsRef.current = allowedTools;
   const [permsOpen, setPermsOpen] = useState(false);
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Sidebar file tree clicks dispatch `beyond:insert-text` so the chat can
+  // splice `@<path>` (or any future quick-text) into the composer without
+  // lifting composer state up the tree.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const text = (e as CustomEvent<string>).detail;
+      if (typeof text !== 'string') return;
+      setValue((prev) => (prev.endsWith(' ') || !prev ? prev + text : `${prev} ${text}`));
+      // Focus textarea so the user can keep typing.
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    };
+    window.addEventListener('beyond:insert-text', handler);
+    return () => window.removeEventListener('beyond:insert-text', handler);
+  }, []);
+
+  const ingestFile = useCallback(async (file: File) => {
+    const isImage = file.type.startsWith('image/');
+    const isText = !isImage && (TEXT_LIKE_MIME.test(file.type) || TEXT_LIKE_EXT.test(file.name));
+    if (!isImage && !isText) {
+      console.warn(`[Beyond] Unsupported attachment type: ${file.name} (${file.type})`);
+      return;
+    }
+    if (isImage && file.size > MAX_IMAGE_BYTES) {
+      console.warn(`[Beyond] Image too large: ${file.name}`);
+      return;
+    }
+    if (isText && file.size > MAX_TEXT_BYTES) {
+      console.warn(`[Beyond] Text file too large: ${file.name}`);
+      return;
+    }
+    const id = uid();
+    if (isImage) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const data = String(reader.result || '');
+        if (!data.startsWith('data:')) return;
+        setAttachments((prev) => [
+          ...prev,
+          { id, name: file.name, mimeType: file.type, size: file.size, kind: 'image', data },
+        ]);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      const text = await file.text();
+      setAttachments((prev) => [
+        ...prev,
+        {
+          id,
+          name: file.name,
+          mimeType: file.type || 'text/plain',
+          size: file.size,
+          kind: 'text',
+          data: text,
+        },
+      ]);
+    }
+  }, []);
+
+  const removeAttachment = useCallback((id: string) => {
+    setAttachments((prev) => prev.filter((a) => a.id !== id));
+  }, []);
+
+  // Drag & drop, plus clipboard-paste of images, anywhere inside the chat.
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of items) {
+        if (item.kind === 'file') {
+          const file = item.getAsFile();
+          if (file) ingestFile(file);
+        }
+      }
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, [ingestFile]);
 
   const removeAllow = useCallback((entry: string) => {
     setAllowedTools((prev) => {
@@ -387,9 +487,39 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
   const send = useCallback(
     (text: string) => {
       const trimmed = text.trim();
-      if (!trimmed || !isConnected) return;
-      setMessages((prev) => [...prev, { id: uid(), role: 'user', kind: 'text', text: trimmed }]);
+      if (!trimmed && attachments.length === 0) return;
+      if (!isConnected) return;
+
+      // Build the user-visible bubble. We render attachment chips below it so
+      // the prompt stays readable even after we inline text-file contents.
+      const userPreview = trimmed || (attachments.length > 0 ? '📎' : '');
+      const attachmentNote = attachments
+        .map((a) => `  · ${a.name} (${a.kind === 'image' ? 'obrázek' : 'text'})`)
+        .join('\n');
+      const userBubble = attachments.length > 0
+        ? `${userPreview}\n${attachmentNote}`
+        : userPreview;
+      setMessages((prev) => [...prev, { id: uid(), role: 'user', kind: 'text', text: userBubble }]);
+
+      // Compose the full prompt: text + inlined text-file contents. Images
+      // are sent separately as data URLs so the server can save them and
+      // hand the file paths to Claude.
+      const textFiles = attachments.filter((a) => a.kind === 'text');
+      const images = attachments
+        .filter((a) => a.kind === 'image')
+        .map((a) => ({ data: a.data, mimeType: a.mimeType, name: a.name }));
+
+      let composedCommand = trimmed;
+      if (textFiles.length > 0) {
+        const block = textFiles
+          .map((f) => `\n\n=== Přiložený soubor: ${f.name} ===\n${f.data}\n=== /soubor ===`)
+          .join('');
+        composedCommand = composedCommand ? composedCommand + block : block.trim();
+      }
+      if (!composedCommand) composedCommand = '(uživatel poslal přílohy bez textu)';
+
       setValue('');
+      setAttachments([]);
       setThinking(true);
 
       // Only resume when we already have a real SDK-issued UUID. On the very
@@ -397,12 +527,13 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
       const resumeId = sessionIdRef.current;
       sendMessage({
         type: 'claude-command',
-        command: trimmed,
+        command: composedCommand,
         options: {
           projectPath: BRAIN_PROJECT_PATH,
           cwd: BRAIN_PROJECT_PATH,
           ...(resumeId ? { sessionId: resumeId, resume: true } : {}),
           sessionSummary: `Beyond · ${client.name}`,
+          ...(images.length > 0 ? { images } : {}),
           toolsSettings: {
             // Exact tool names match server-side `matchesToolPermission`.
             // Wildcard entries (e.g. `mcp__waha__*`) are still pre-handled by
@@ -414,7 +545,7 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
         },
       });
     },
-    [client.name, isConnected, sendMessage],
+    [attachments, bypassPermissions, client.name, isConnected, sendMessage],
   );
 
   const stop = useCallback(() => {
@@ -440,7 +571,49 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
   }, [client.name, client.week]);
 
   return (
-    <div className="flex h-full w-full flex-col bg-[#fafafa]">
+    <div
+      className="relative flex h-full w-full flex-col bg-[#fafafa]"
+      onDragEnter={(e) => {
+        if (e.dataTransfer?.types?.includes('Files')) {
+          e.preventDefault();
+          setDragOver(true);
+        }
+      }}
+      onDragOver={(e) => {
+        if (e.dataTransfer?.types?.includes('Files')) {
+          e.preventDefault();
+        }
+      }}
+      onDragLeave={(e) => {
+        // Only collapse when leaving the entire chat container.
+        if (e.currentTarget === e.target) setDragOver(false);
+      }}
+      onDrop={(e) => {
+        if (!e.dataTransfer?.files?.length) return;
+        e.preventDefault();
+        setDragOver(false);
+        for (const f of Array.from(e.dataTransfer.files)) {
+          void ingestFile(f);
+        }
+      }}
+    >
+      <AnimatePresence>
+        {dragOver && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="pointer-events-none absolute inset-3 z-50 flex items-center justify-center rounded-3xl border-2 border-dashed border-beyond-ink/30 bg-white/70 backdrop-blur-sm"
+          >
+            <div className="flex flex-col items-center gap-2 text-beyond-dim">
+              <Upload className="h-6 w-6" strokeWidth={1.8} />
+              <p className="text-[14px] font-medium">Pusť soubor sem</p>
+              <p className="text-[12px] text-beyond-faint">Obrázky a textové soubory</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* Header — floating rounded card with Beyond glyph avatar.
           Left padding leaves room for the shell's hamburger toggle (~52px). */}
       <header className="flex flex-shrink-0 items-center px-4 pb-3 pl-16 pr-4 pt-4 sm:px-6 sm:pl-20 sm:pr-6 sm:pt-5">
@@ -539,8 +712,26 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
             />
           )}
 
-          {permRequest && (
-            <BeyondPermissionPanel request={permRequest} onDecision={handlePermDecision} />
+          {permRequest && isWhatsAppSendTool(permRequest.toolName) ? (
+            <BeyondWhatsAppActionCard
+              request={permRequest}
+              onSend={(updatedInput) => {
+                respondPermission(permRequest.requestId, { allow: true, updatedInput });
+                setPermRequest(null);
+                setThinking(true);
+              }}
+              onCancel={() => {
+                respondPermission(permRequest.requestId, {
+                  allow: false,
+                  message: 'Uživatel zrušil odeslání.',
+                });
+                setPermRequest(null);
+              }}
+            />
+          ) : (
+            permRequest && (
+              <BeyondPermissionPanel request={permRequest} onDecision={handlePermDecision} />
+            )
           )}
 
           {!isConnected && (
@@ -558,16 +749,38 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
       <div className="flex-shrink-0 px-4 pb-6 pt-3 sm:px-6 sm:pb-8 sm:pt-4">
         <div className="mx-auto w-full max-w-[760px]">
           <div className="rounded-[24px] bg-white px-4 py-3 shadow-[0_4px_24px_-8px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.04] focus-within:shadow-[0_8px_32px_-8px_rgba(0,0,0,0.12)] focus-within:ring-black/[0.06]">
+            {attachments.length > 0 && (
+              <div className="mb-2 flex flex-wrap gap-1.5 pb-1">
+                {attachments.map((a) => (
+                  <AttachmentChip key={a.id} attachment={a} onRemove={() => removeAttachment(a.id)} />
+                ))}
+              </div>
+            )}
             <div className="flex items-end gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/*,.md,.txt,.json,.csv,.yaml,.yml,.log,.html,.css,.js,.ts,.tsx,.jsx,.py,.sh,.toml,.ini,.env,.jsonl"
+                className="hidden"
+                onChange={async (e) => {
+                  const files = Array.from(e.target.files || []);
+                  for (const f of files) await ingestFile(f);
+                  if (fileInputRef.current) fileInputRef.current.value = '';
+                }}
+              />
               <button
                 type="button"
+                onClick={() => fileInputRef.current?.click()}
                 tabIndex={-1}
                 aria-label="Příloha"
+                title="Přidat soubor (obrázek nebo text)"
                 className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-black/[0.04] hover:text-beyond-dim"
               >
                 <Paperclip className="h-[18px] w-[18px]" strokeWidth={1.8} />
               </button>
               <textarea
+                ref={textareaRef}
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
                 onKeyDown={(e) => {
@@ -594,7 +807,7 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
                 <button
                   type="button"
                   onClick={() => send(value)}
-                  disabled={!value.trim() || !isConnected}
+                  disabled={(!value.trim() && attachments.length === 0) || !isConnected}
                   aria-label="Pošli"
                   className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-beyond-ink text-white shadow-[0_2px_8px_-2px_rgba(0,0,0,0.25)] transition-all hover:scale-105 disabled:bg-black/[0.08] disabled:text-black/30 disabled:shadow-none disabled:hover:scale-100"
                 >
@@ -1277,6 +1490,174 @@ function BeyondPermissionsSheet({
           </button>
         </div>
       </motion.div>
+    </motion.div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Composer attachment chip                                            */
+/* ------------------------------------------------------------------ */
+
+function AttachmentChip({
+  attachment,
+  onRemove,
+}: {
+  attachment: PendingAttachment;
+  onRemove: () => void;
+}) {
+  const kb = Math.max(1, Math.round(attachment.size / 1024));
+  if (attachment.kind === 'image') {
+    return (
+      <div className="group relative flex items-center gap-2 rounded-xl bg-black/[0.04] py-1 pl-1 pr-2">
+        <img
+          src={attachment.data}
+          alt={attachment.name}
+          className="h-9 w-9 flex-shrink-0 rounded-lg object-cover"
+        />
+        <div className="min-w-0">
+          <p className="truncate text-[12px] font-medium text-beyond-ink">{attachment.name}</p>
+          <p className="text-[10px] text-beyond-faint">{kb} kB</p>
+        </div>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-black/[0.08] hover:text-beyond-ink"
+          aria-label="Odebrat"
+        >
+          <X className="h-[12px] w-[12px]" strokeWidth={2} />
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="group relative flex items-center gap-2 rounded-xl bg-black/[0.04] px-2 py-1.5">
+      <FileIcon
+        className="h-[14px] w-[14px] flex-shrink-0 text-beyond-faint"
+        strokeWidth={1.8}
+      />
+      <div className="min-w-0">
+        <p className="truncate text-[12px] font-medium text-beyond-ink">{attachment.name}</p>
+        <p className="text-[10px] text-beyond-faint">{kb} kB · text</p>
+      </div>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-black/[0.08] hover:text-beyond-ink"
+        aria-label="Odebrat"
+      >
+        <X className="h-[12px] w-[12px]" strokeWidth={2} />
+      </button>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* WhatsApp send action card — preview + edit + send                  */
+/* ------------------------------------------------------------------ */
+
+function isWhatsAppSendTool(name: string): boolean {
+  return (
+    name === 'mcp__waha__send-text' ||
+    name === 'mcp__waha__send-image' ||
+    name === 'mcp__waha__send-file'
+  );
+}
+
+function BeyondWhatsAppActionCard({
+  request,
+  onSend,
+  onCancel,
+}: {
+  request: PermRequest;
+  onSend: (updatedInput: Record<string, unknown>) => void;
+  onCancel: () => void;
+}) {
+  const original = (request.input || {}) as Record<string, unknown>;
+  const chatId = typeof original.chatId === 'string' ? original.chatId : '';
+  const isText = request.toolName === 'mcp__waha__send-text';
+  const initialText = typeof original.text === 'string'
+    ? original.text
+    : typeof original.caption === 'string'
+      ? original.caption
+      : '';
+
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(initialText);
+
+  const chatLabel = chatId
+    ? chatId.replace(/@c\.us$/, '').replace(/@g\.us$/, ' (skupina)')
+    : 'WhatsApp';
+
+  const handleSend = () => {
+    const updated: Record<string, unknown> = { ...original };
+    if (isText) updated.text = text;
+    else if ('caption' in original) updated.caption = text;
+    onSend(updated);
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.22, ease: 'easeOut' }}
+      className="overflow-hidden rounded-2xl bg-white shadow-[0_4px_24px_-8px_rgba(0,0,0,0.08)] ring-1 ring-emerald-200"
+    >
+      <div className="flex items-center gap-2 border-b border-emerald-100 bg-emerald-50/60 px-5 py-3">
+        <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-700">
+          <MessageCircle className="h-[15px] w-[15px]" strokeWidth={1.9} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[12px] font-medium uppercase tracking-wide text-emerald-700">
+            WhatsApp · {isText ? 'zpráva' : request.toolName.replace('mcp__waha__send-', '')}
+          </p>
+          <p className="truncate text-[12px] text-beyond-faint">
+            Pro: <span className="text-beyond-dim">{chatLabel}</span>
+          </p>
+        </div>
+      </div>
+
+      <div className="px-5 py-4">
+        {editing ? (
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            rows={Math.max(3, text.split('\n').length)}
+            className="w-full resize-none rounded-[14px] border border-black/[0.08] bg-white px-3 py-2 text-[14px] leading-relaxed text-beyond-ink focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+            autoFocus
+          />
+        ) : (
+          <div className="rounded-[18px] rounded-bl-[6px] bg-emerald-50 px-4 py-3">
+            <p className="whitespace-pre-line text-[14px] leading-relaxed text-beyond-ink">
+              {text || <span className="italic text-beyond-faint">(prázdné)</span>}
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center justify-end gap-2 border-t border-black/[0.04] bg-black/[0.015] px-5 py-3">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-full px-3 py-1.5 text-[12px] text-beyond-faint transition-colors hover:bg-black/[0.04] hover:text-beyond-dim"
+        >
+          Zrušit
+        </button>
+        <button
+          type="button"
+          onClick={() => setEditing((v) => !v)}
+          className="rounded-full bg-black/[0.04] px-3.5 py-1.5 text-[12px] font-medium text-beyond-ink transition-colors hover:bg-black/[0.08]"
+        >
+          {editing ? 'Hotovo' : 'Upravit'}
+        </button>
+        <button
+          type="button"
+          onClick={handleSend}
+          disabled={!text.trim()}
+          className="rounded-full bg-emerald-500 px-4 py-1.5 text-[12px] font-medium text-white shadow-[0_2px_8px_-2px_rgba(16,185,129,0.4)] transition-all hover:bg-emerald-600 hover:shadow-[0_4px_12px_-2px_rgba(16,185,129,0.5)] disabled:bg-black/[0.08] disabled:text-black/30 disabled:shadow-none"
+        >
+          Odeslat
+        </button>
+      </div>
     </motion.div>
   );
 }
