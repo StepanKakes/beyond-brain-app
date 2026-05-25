@@ -11,6 +11,8 @@ import {
   Globe,
   Wrench,
   MessageCircle,
+  ShieldOff,
+  Shield,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -68,6 +70,43 @@ type AskRequest = {
   input: { questions: AskQuestion[] } & Record<string, unknown>;
 };
 
+type PermRequest = {
+  requestId: string;
+  toolName: string;
+  input: unknown;
+};
+
+const ALLOWED_TOOLS_STORAGE_KEY = 'beyond.allowed-tools';
+const BYPASS_PERMISSIONS_STORAGE_KEY = 'beyond.bypass-permissions';
+
+/** Reads persisted allow rules: exact tool names + `mcp__server__*` prefixes. */
+function readAllowedTools(): string[] {
+  try {
+    const raw = localStorage.getItem(ALLOWED_TOOLS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((v) => typeof v === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistAllowedTools(entries: string[]): void {
+  try {
+    localStorage.setItem(ALLOWED_TOOLS_STORAGE_KEY, JSON.stringify(entries));
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Match an allow entry against an actual tool name. Supports exact match
+ *  and trailing-`*` wildcards (e.g. `mcp__waha__*`). */
+function matchAllowEntry(entry: string, toolName: string): boolean {
+  if (entry === toolName) return true;
+  if (entry.endsWith('*')) return toolName.startsWith(entry.slice(0, -1));
+  return false;
+}
+
 type Props = {
   /** Selected client. Used for the header label and as a stable session key. */
   client: { slug: string; name: string; week?: string | null };
@@ -95,7 +134,68 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [value, setValue] = useState('');
   const [askRequest, setAskRequest] = useState<AskRequest | null>(null);
+  const [permRequest, setPermRequest] = useState<PermRequest | null>(null);
+  const [bypassPermissions, setBypassPermissions] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(BYPASS_PERMISSIONS_STORAGE_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const allowedToolsRef = useRef<string[]>(readAllowedTools());
+
+  const toggleBypass = useCallback(() => {
+    setBypassPermissions((prev) => {
+      const next = !prev;
+      try {
+        if (next) localStorage.setItem(BYPASS_PERMISSIONS_STORAGE_KEY, '1');
+        else localStorage.removeItem(BYPASS_PERMISSIONS_STORAGE_KEY);
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
+
+  const respondPermission = useCallback(
+    (
+      requestId: string,
+      decision: { allow: boolean; updatedInput?: unknown; message?: string; rememberEntry?: string },
+    ) => {
+      sendMessage({
+        type: 'claude-permission-response',
+        requestId,
+        ...decision,
+      });
+    },
+    [sendMessage],
+  );
+
+  const handlePermDecision = useCallback(
+    (
+      decision:
+        | { kind: 'allow-once' }
+        | { kind: 'always-allow'; entry: string }
+        | { kind: 'deny' },
+    ) => {
+      if (!permRequest) return;
+      const { requestId, input } = permRequest;
+      if (decision.kind === 'deny') {
+        respondPermission(requestId, { allow: false, message: 'Uživatel odmítl.' });
+      } else if (decision.kind === 'allow-once') {
+        respondPermission(requestId, { allow: true, updatedInput: input });
+      } else {
+        const next = Array.from(new Set([...allowedToolsRef.current, decision.entry]));
+        allowedToolsRef.current = next;
+        persistAllowedTools(next);
+        respondPermission(requestId, { allow: true, updatedInput: input, rememberEntry: decision.entry });
+      }
+      setPermRequest(null);
+      setThinking(true);
+    },
+    [permRequest, respondPermission],
+  );
 
   // Load persisted session id + history when switching clients. Claude Code
   // stores the transcript as JSONL under ~/.claude/projects; claudecodeui's
@@ -213,19 +313,38 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
       const toolName = String(m.toolName ?? '');
       const requestId = String(m.requestId ?? '');
       if (!requestId) return;
-      // Only AskUserQuestion gets a rich panel; other tool approvals are
-      // auto-allowed in bypass mode (see claude-sdk.js canUseTool).
+
       if (toolName === 'AskUserQuestion') {
         const input = (m.input as AskRequest['input']) || { questions: [] };
         setAskRequest({ requestId, input });
         setThinking(false);
+        return;
       }
+
+      // Auto-allow tools the user has previously approved with "Always allow".
+      const allowed = allowedToolsRef.current.some((entry) =>
+        matchAllowEntry(entry, toolName),
+      );
+      if (allowed) {
+        sendMessage({
+          type: 'claude-permission-response',
+          requestId,
+          allow: true,
+          updatedInput: m.input,
+        });
+        return;
+      }
+
+      // Otherwise surface a Beyond-styled permission prompt.
+      setPermRequest({ requestId, toolName, input: m.input });
+      setThinking(false);
       return;
     }
 
     if (kind === 'permission_cancelled') {
       const requestId = String(m.requestId ?? '');
       setAskRequest((prev) => (prev && prev.requestId === requestId ? null : prev));
+      setPermRequest((prev) => (prev && prev.requestId === requestId ? null : prev));
       return;
     }
 
@@ -268,6 +387,14 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
           cwd: BRAIN_PROJECT_PATH,
           ...(resumeId ? { sessionId: resumeId, resume: true } : {}),
           sessionSummary: `Beyond · ${client.name}`,
+          toolsSettings: {
+            // Exact tool names match server-side `matchesToolPermission`.
+            // Wildcard entries (e.g. `mcp__waha__*`) are still pre-handled by
+            // the frontend allow logic before the server prompt fires.
+            allowedTools: allowedToolsRef.current.filter((e) => !e.endsWith('*')),
+            disallowedTools: [],
+            skipPermissions: bypassPermissions,
+          },
         },
       });
     },
@@ -304,6 +431,25 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
               <p className="truncate text-[12px] leading-tight text-beyond-faint">{client.week}</p>
             )}
           </div>
+          <button
+            type="button"
+            onClick={toggleBypass}
+            title={
+              bypassPermissions
+                ? 'Bypass režim aktivní — agent neprosí o povolení. Klik vypne.'
+                : 'Zapnout bypass režim (dangerously skip permissions)'
+            }
+            aria-pressed={bypassPermissions}
+            className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full transition-colors ${bypassPermissions
+              ? 'bg-amber-50 text-amber-600 hover:bg-amber-100'
+              : 'text-beyond-faint hover:bg-black/[0.04] hover:text-beyond-dim'}`}
+          >
+            {bypassPermissions ? (
+              <ShieldOff className="h-[16px] w-[16px]" strokeWidth={1.8} />
+            ) : (
+              <Shield className="h-[16px] w-[16px]" strokeWidth={1.8} />
+            )}
+          </button>
         </div>
       </header>
 
@@ -321,7 +467,7 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
           ))}
 
           <AnimatePresence>
-            {thinking && !askRequest && (
+            {thinking && !askRequest && !permRequest && (
               <motion.div
                 key="thinking"
                 initial={{ opacity: 0, y: 6 }}
@@ -360,6 +506,10 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
                 setThinking(true);
               }}
             />
+          )}
+
+          {permRequest && (
+            <BeyondPermissionPanel request={permRequest} onDecision={handlePermDecision} />
           )}
 
           {!isConnected && (
@@ -889,6 +1039,109 @@ function BeyondAskPanel({
           className="rounded-full bg-beyond-ink px-4 py-1.5 text-[12px] font-medium text-white shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2)] transition-all hover:shadow-[0_4px_12px_-2px_rgba(0,0,0,0.25)] disabled:bg-black/[0.08] disabled:text-black/30 disabled:shadow-none"
         >
           Odeslat
+        </button>
+      </div>
+    </motion.div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Generic permission request — Allow / Always / Deny                 */
+/* ------------------------------------------------------------------ */
+
+function BeyondPermissionPanel({
+  request,
+  onDecision,
+}: {
+  request: PermRequest;
+  onDecision: (
+    decision:
+      | { kind: 'allow-once' }
+      | { kind: 'always-allow'; entry: string }
+      | { kind: 'deny' },
+  ) => void;
+}) {
+  const { toolName, input } = request;
+  const { label, detail } = describeTool(toolName, input);
+  const Icon = iconForTool(toolName);
+
+  // Suggest a sensible "always allow" scope. For MCP tools we offer the whole
+  // server (`mcp__server__*`), otherwise just the exact tool name.
+  const mcpMatch = toolName.match(/^mcp__([^_]+)__/);
+  const alwaysScope = mcpMatch ? `mcp__${mcpMatch[1]}__*` : toolName;
+  const alwaysScopeLabel = mcpMatch ? `všechny ${mcpMatch[1]} tooly` : toolName;
+
+  const inputPreview = (() => {
+    if (input == null) return '';
+    if (typeof input === 'string') return input;
+    try {
+      return JSON.stringify(input, null, 2);
+    } catch {
+      return String(input);
+    }
+  })();
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.22, ease: 'easeOut' }}
+      className="overflow-hidden rounded-2xl bg-white shadow-[0_4px_24px_-8px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.04]"
+    >
+      <div className="px-5 py-4">
+        <div className="mb-3 flex items-center gap-2">
+          <span className="rounded-full bg-black/[0.04] px-2 py-0.5 text-[11px] uppercase tracking-wide text-beyond-faint">
+            Povolení
+          </span>
+          <span className="text-[11px] text-beyond-faint">Agent chce použít nástroj</span>
+        </div>
+
+        <div className="mb-3 flex items-center gap-2.5">
+          <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-black/[0.04] text-beyond-dim">
+            <Icon className="h-[15px] w-[15px]" strokeWidth={1.8} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[14px] font-medium text-beyond-ink">{label}</p>
+            {detail && (
+              <p className="truncate text-[12px] text-beyond-faint">{detail}</p>
+            )}
+          </div>
+        </div>
+
+        {inputPreview && (
+          <details className="mb-1 text-[12px] text-beyond-faint">
+            <summary className="cursor-pointer select-none text-beyond-dim hover:text-beyond-ink">
+              Detaily volání
+            </summary>
+            <pre className="mt-2 max-h-[200px] overflow-auto whitespace-pre-wrap break-words rounded-[10px] bg-black/[0.04] px-3 py-2 font-mono text-[11px] leading-relaxed text-beyond-dim">
+              {inputPreview}
+            </pre>
+          </details>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-end gap-2 border-t border-black/[0.04] bg-black/[0.015] px-5 py-3">
+        <button
+          type="button"
+          onClick={() => onDecision({ kind: 'deny' })}
+          className="rounded-full px-3 py-1.5 text-[12px] text-beyond-faint transition-colors hover:bg-black/[0.04] hover:text-beyond-dim"
+        >
+          Odmítnout
+        </button>
+        <button
+          type="button"
+          onClick={() => onDecision({ kind: 'allow-once' })}
+          className="rounded-full bg-black/[0.04] px-3.5 py-1.5 text-[12px] font-medium text-beyond-ink transition-colors hover:bg-black/[0.08]"
+        >
+          Jednou
+        </button>
+        <button
+          type="button"
+          onClick={() => onDecision({ kind: 'always-allow', entry: alwaysScope })}
+          className="rounded-full bg-beyond-ink px-3.5 py-1.5 text-[12px] font-medium text-white shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2)] transition-all hover:shadow-[0_4px_12px_-2px_rgba(0,0,0,0.25)]"
+          title={`Při dalším volání automaticky povolit ${alwaysScopeLabel}`}
+        >
+          Vždy povolit {mcpMatch ? `(${alwaysScopeLabel})` : ''}
         </button>
       </div>
     </motion.div>
