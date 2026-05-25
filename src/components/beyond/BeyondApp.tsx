@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import BeyondShell from './BeyondShell';
 import BeyondWelcome from './BeyondWelcome';
 import BeyondChat from './BeyondChat';
@@ -57,15 +58,29 @@ export default function BeyondApp() {
     return { slug: activeSlug, name: prettifySlug(activeSlug), week: null };
   }, [activeSlug, clients]);
 
+  // Page transition: subtle blur + cross-fade between welcome ↔ chat.
+  const viewKey = activeClient ? `chat:${activeClient.slug}` : 'welcome';
+
   return (
     <BeyondShell selectedSlug={activeSlug} onSelectClient={handleSelectClient}>
-      {activeClient ? (
-        <BeyondChat key={activeClient.slug} client={activeClient} initialPrompt={initialPrompt} />
-      ) : (
-        <BeyondWelcome
-          onSuggestionClick={(s) => handleWelcomePrompt(s.prompt)}
-        />
-      )}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={viewKey}
+          initial={{ opacity: 0, filter: 'blur(6px)' }}
+          animate={{ opacity: 1, filter: 'blur(0px)' }}
+          exit={{ opacity: 0, filter: 'blur(6px)' }}
+          transition={{ duration: 0.22, ease: 'easeOut' }}
+          className="h-full w-full"
+        >
+          {activeClient ? (
+            <BeyondChat client={activeClient} initialPrompt={initialPrompt} />
+          ) : (
+            <BeyondWelcome
+              onSuggestionClick={(s) => handleWelcomePrompt(s.prompt)}
+            />
+          )}
+        </motion.div>
+      </AnimatePresence>
     </BeyondShell>
   );
 }

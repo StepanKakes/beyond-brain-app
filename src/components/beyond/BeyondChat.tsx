@@ -138,8 +138,9 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
 
   return (
     <div className="flex h-full w-full flex-col bg-white">
-      {/* Header — minimal context label */}
-      <header className="flex flex-shrink-0 items-center px-6 pb-4 pt-5 pl-16 sm:px-8 sm:pl-20">
+      {/* Header — minimal context label. Left padding leaves room for the
+          shell's hamburger toggle (~52px). */}
+      <header className="flex flex-shrink-0 items-center pb-4 pl-16 pr-6 pt-5 sm:pl-20 sm:pr-8">
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-[15px] font-medium text-beyond-ink">
             {client.name}
@@ -239,7 +240,8 @@ function MessageBlock({ message, isFirst }: { message: ChatMessage; isFirst: boo
     hidden: { opacity: 0, y: 8 },
     show: { opacity: 1, y: 0 },
   };
-  const transition = { duration: 0.3, ease: [0.21, 1.02, 0.73, 1] as const };
+  // 100ms fade-up per VISION.md — subtle, not flashy.
+  const transition = { duration: 0.1, ease: 'easeOut' as const };
 
   const divider = isFirst ? null : (
     <div className="my-8 h-px w-full border-t border-beyond-line" aria-hidden="true" />
