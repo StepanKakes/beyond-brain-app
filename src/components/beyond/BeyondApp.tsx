@@ -1,8 +1,9 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import BeyondShell from './BeyondShell';
 import BeyondWelcome from './BeyondWelcome';
 import BeyondChat from './BeyondChat';
+import BeyondFilePreview from './BeyondFilePreview';
 import { useBeyondClients, type BeyondClient } from './useBeyondClients';
 
 /**
@@ -23,6 +24,20 @@ export default function BeyondApp() {
   const { clients } = useBeyondClients();
   const [activeSlug, setActiveSlug] = useState<ActiveSlug>(null);
   const [initialPrompt, setInitialPrompt] = useState<string | undefined>(undefined);
+  const [previewPath, setPreviewPath] = useState<string | null>(null);
+
+  // Sidebar file tree dispatches `beyond:open-file` with the repo-relative
+  // path; we surface a slide-in preview sheet over the current view.
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const detail = (e as CustomEvent<{ path?: string }>).detail;
+      if (detail && typeof detail.path === 'string') {
+        setPreviewPath(detail.path);
+      }
+    };
+    window.addEventListener('beyond:open-file', onOpen);
+    return () => window.removeEventListener('beyond:open-file', onOpen);
+  }, []);
 
   const handleSelectClient = useCallback(
     (slug: string) => {
@@ -80,6 +95,15 @@ export default function BeyondApp() {
             />
           )}
         </motion.div>
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {previewPath && (
+          <BeyondFilePreview
+            path={previewPath}
+            onClose={() => setPreviewPath(null)}
+          />
+        )}
       </AnimatePresence>
     </BeyondShell>
   );

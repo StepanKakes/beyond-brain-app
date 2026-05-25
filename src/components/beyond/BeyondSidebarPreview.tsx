@@ -130,7 +130,7 @@ export default function BeyondSidebarPreview({
           refreshKey={treeKey}
           onFileClick={(filePath) => {
             window.dispatchEvent(
-              new CustomEvent('beyond:insert-text', { detail: `@${filePath} ` }),
+              new CustomEvent('beyond:open-file', { detail: { path: filePath } }),
             );
           }}
         />

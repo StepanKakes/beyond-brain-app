@@ -106,7 +106,7 @@ function TreeRow({
           onClick={() => onFileClick?.(node.path)}
           className="flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left transition-colors hover:bg-black/[0.04]"
           style={{ paddingLeft: 8 + depth * 12 }}
-          title={`Vložit @${node.path} do chatu`}
+          title={`Otevřít náhled ${node.path}`}
         >
           <FileText
             className="h-[12px] w-[12px] flex-shrink-0 text-beyond-faint"

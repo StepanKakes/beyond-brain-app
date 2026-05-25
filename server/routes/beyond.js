@@ -333,6 +333,61 @@ async function buildTree(absPath, relPath, depth = 0, maxDepth = 4) {
   return { type: 'dir', name: path.basename(absPath), path: relPath, children };
 }
 
+/** Read a file from the brain repo. Only paths under BRAIN_PATH are allowed —
+ *  no traversal, no symlinks out, max 1 MB returned. */
+router.get('/file', async (req, res) => {
+  try {
+    const rel = typeof req.query.path === 'string' ? req.query.path : '';
+    if (!rel || rel.includes('..') || rel.startsWith('/')) {
+      return res.status(400).json({ error: 'Invalid path' });
+    }
+    const abs = path.resolve(BRAIN_PATH, rel);
+    const root = path.resolve(BRAIN_PATH);
+    if (!abs.startsWith(root + path.sep) && abs !== root) {
+      return res.status(403).json({ error: 'Path outside brain' });
+    }
+    let stat;
+    try {
+      stat = await fs.stat(abs);
+    } catch {
+      return res.status(404).json({ error: 'Not found' });
+    }
+    if (!stat.isFile()) {
+      return res.status(400).json({ error: 'Not a file' });
+    }
+    const MAX_BYTES = 1024 * 1024;
+    if (stat.size > MAX_BYTES) {
+      return res.status(413).json({
+        error: `Soubor je velký (${Math.round(stat.size / 1024)} kB > 1024 kB)`,
+        size: stat.size,
+      });
+    }
+    const buf = await fs.readFile(abs);
+    // Best-effort utf-8 check — return base64 only for clearly binary content.
+    let content = buf.toString('utf8');
+    const looksBinary = content.includes(' ');
+    if (looksBinary) {
+      return res.json({
+        path: rel,
+        size: stat.size,
+        binary: true,
+        content: buf.toString('base64'),
+        encoding: 'base64',
+      });
+    }
+    res.json({
+      path: rel,
+      size: stat.size,
+      binary: false,
+      content,
+      encoding: 'utf8',
+      mtime: stat.mtime.toISOString(),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'file read failed' });
+  }
+});
+
 router.get('/tree', async (_req, res) => {
   try {
     const roots = [
