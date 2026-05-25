@@ -13,6 +13,9 @@ import {
   MessageCircle,
   ShieldOff,
   Shield,
+  Square,
+  Trash2,
+  Settings as SettingsIcon,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -143,7 +146,18 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
     }
   });
   const scrollerRef = useRef<HTMLDivElement>(null);
-  const allowedToolsRef = useRef<string[]>(readAllowedTools());
+  const [allowedTools, setAllowedTools] = useState<string[]>(() => readAllowedTools());
+  const allowedToolsRef = useRef<string[]>(allowedTools);
+  allowedToolsRef.current = allowedTools;
+  const [permsOpen, setPermsOpen] = useState(false);
+
+  const removeAllow = useCallback((entry: string) => {
+    setAllowedTools((prev) => {
+      const next = prev.filter((e) => e !== entry);
+      persistAllowedTools(next);
+      return next;
+    });
+  }, []);
 
   const toggleBypass = useCallback(() => {
     setBypassPermissions((prev) => {
@@ -186,9 +200,11 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
       } else if (decision.kind === 'allow-once') {
         respondPermission(requestId, { allow: true, updatedInput: input });
       } else {
-        const next = Array.from(new Set([...allowedToolsRef.current, decision.entry]));
-        allowedToolsRef.current = next;
-        persistAllowedTools(next);
+        setAllowedTools((prev) => {
+          const next = Array.from(new Set([...prev, decision.entry]));
+          persistAllowedTools(next);
+          return next;
+        });
         respondPermission(requestId, { allow: true, updatedInput: input, rememberEntry: decision.entry });
       }
       setPermRequest(null);
@@ -401,6 +417,13 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
     [client.name, isConnected, sendMessage],
   );
 
+  const stop = useCallback(() => {
+    const sid = sessionIdRef.current;
+    if (!sid) return;
+    sendMessage({ type: 'abort-session', sessionId: sid, provider: 'claude' });
+    setThinking(false);
+  }, [sendMessage]);
+
   // Auto-send any initial prompt once when the client mounts.
   const sentInitialRef = useRef(false);
   useEffect(() => {
@@ -431,6 +454,14 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
               <p className="truncate text-[12px] leading-tight text-beyond-faint">{client.week}</p>
             )}
           </div>
+          <button
+            type="button"
+            onClick={() => setPermsOpen(true)}
+            title="Nastavení oprávnění"
+            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-black/[0.04] hover:text-beyond-dim"
+          >
+            <SettingsIcon className="h-[16px] w-[16px]" strokeWidth={1.8} />
+          </button>
           <button
             type="button"
             onClick={toggleBypass}
@@ -549,15 +580,27 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
                 rows={1}
                 className="min-h-[40px] flex-1 resize-none border-0 bg-transparent py-2 text-[16px] leading-snug text-beyond-ink placeholder:text-beyond-faint focus:outline-none focus:ring-0"
               />
-              <button
-                type="button"
-                onClick={() => send(value)}
-                disabled={!value.trim() || !isConnected}
-                aria-label="Pošli"
-                className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-beyond-ink text-white shadow-[0_2px_8px_-2px_rgba(0,0,0,0.25)] transition-all hover:scale-105 disabled:bg-black/[0.08] disabled:text-black/30 disabled:shadow-none disabled:hover:scale-100"
-              >
-                <ArrowUp className="h-[18px] w-[18px]" strokeWidth={2.2} />
-              </button>
+              {thinking ? (
+                <button
+                  type="button"
+                  onClick={stop}
+                  aria-label="Zastav"
+                  title="Zastav agenta"
+                  className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-beyond-ink text-white shadow-[0_2px_8px_-2px_rgba(0,0,0,0.25)] transition-all hover:scale-105"
+                >
+                  <Square className="h-[14px] w-[14px] fill-current" strokeWidth={0} />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => send(value)}
+                  disabled={!value.trim() || !isConnected}
+                  aria-label="Pošli"
+                  className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-beyond-ink text-white shadow-[0_2px_8px_-2px_rgba(0,0,0,0.25)] transition-all hover:scale-105 disabled:bg-black/[0.08] disabled:text-black/30 disabled:shadow-none disabled:hover:scale-100"
+                >
+                  <ArrowUp className="h-[18px] w-[18px]" strokeWidth={2.2} />
+                </button>
+              )}
             </div>
 
             <div className="mt-2 flex flex-wrap items-center gap-1">
@@ -575,6 +618,16 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
           </div>
         </div>
       </div>
+
+      <AnimatePresence>
+        {permsOpen && (
+          <BeyondPermissionsSheet
+            entries={allowedTools}
+            onRemove={removeAllow}
+            onClose={() => setPermsOpen(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -1144,6 +1197,86 @@ function BeyondPermissionPanel({
           Vždy povolit {mcpMatch ? `(${alwaysScopeLabel})` : ''}
         </button>
       </div>
+    </motion.div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Permissions sheet — list + revoke saved allowlist entries          */
+/* ------------------------------------------------------------------ */
+
+function BeyondPermissionsSheet({
+  entries,
+  onRemove,
+  onClose,
+}: {
+  entries: string[];
+  onRemove: (entry: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.18 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4 backdrop-blur-[2px]"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 12, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 12, scale: 0.98 }}
+        transition={{ duration: 0.22, ease: 'easeOut' }}
+        className="w-full max-w-[480px] overflow-hidden rounded-2xl bg-white shadow-[0_24px_64px_-16px_rgba(0,0,0,0.28)] ring-1 ring-black/[0.04]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="border-b border-black/[0.06] px-5 py-4">
+          <h3 className="text-[15px] font-medium text-beyond-ink">Povolené nástroje</h3>
+          <p className="mt-0.5 text-[12px] text-beyond-faint">
+            Agent může používat tyto nástroje bez ptaní. Hvězdička (`*`) značí celý MCP server.
+          </p>
+        </div>
+
+        <div className="max-h-[360px] overflow-y-auto px-3 py-2">
+          {entries.length === 0 ? (
+            <p className="px-3 py-6 text-center text-[13px] text-beyond-faint">
+              Žádné uložené povolení. Když agent zažádá o nástroj, vyber „Vždy povolit".
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-1">
+              {entries.map((entry) => (
+                <li
+                  key={entry}
+                  className="group flex items-center gap-2 rounded-[12px] px-3 py-2 hover:bg-black/[0.03]"
+                >
+                  <code className="flex-1 truncate font-mono text-[12.5px] text-beyond-ink">
+                    {entry}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={() => onRemove(entry)}
+                    title="Odebrat"
+                    className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint opacity-0 transition-all hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
+                  >
+                    <Trash2 className="h-[14px] w-[14px]" strokeWidth={1.8} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 border-t border-black/[0.06] bg-black/[0.015] px-5 py-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full bg-black/[0.04] px-3.5 py-1.5 text-[12px] font-medium text-beyond-ink transition-colors hover:bg-black/[0.08]"
+          >
+            Hotovo
+          </button>
+        </div>
+      </motion.div>
     </motion.div>
   );
 }
