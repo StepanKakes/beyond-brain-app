@@ -222,6 +222,12 @@ function mapCliOptionsToSDK(options = {}) {
     sdkOptions.resume = sessionId;
   }
 
+  // Stream raw content_block_delta events so the UI can render text as it's
+  // produced (the Claude provider normalizer maps them to `stream_delta`).
+  if (options.includePartialMessages !== false) {
+    sdkOptions.includePartialMessages = true;
+  }
+
   return sdkOptions;
 }
 

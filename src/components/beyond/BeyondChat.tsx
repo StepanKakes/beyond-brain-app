@@ -1,28 +1,60 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowUp, Paperclip } from 'lucide-react';
+import {
+  ArrowUp,
+  Paperclip,
+  ChevronRight,
+  FileText,
+  FilePen,
+  Terminal,
+  Search,
+  Globe,
+  Wrench,
+  MessageCircle,
+} from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import BeyondGlyph from './BeyondGlyph';
 import { useWebSocket } from '../../contexts/WebSocketContext';
+import { authenticatedFetch } from '../../utils/api';
 
 /**
  * Beyond Brain — real chat (v2, hyperminimal).
  *
  * Talks to claudecodeui's existing WebSocket using `claude-command` messages.
- * The working directory for the spawned `claude` CLI is the brain repo for
- * the selected client (~/Documents/GitHub/beyond-brain). Session continuity
- * per client is handled by the server: we pass a stable `sessionId` (the
- * client slug) so the same conversation can be resumed across reloads.
+ * cwd for the Claude SDK is the brain repo (~/Documents/GitHub/beyond-brain).
+ *
+ * Session continuity per client: the Claude Agent SDK assigns a real UUID on
+ * the first turn (arrives as `kind: 'session_created'`). We persist that UUID
+ * in localStorage keyed by client slug, then pass it as `sessionId` + `resume:
+ * true` on subsequent turns so the same conversation survives reloads.
  */
 
 const BRAIN_PROJECT_PATH = '/Users/stepankakes/Documents/GitHub/beyond-brain';
 
+function sessionStorageKey(slug: string): string {
+  return `beyond.session.${slug}`;
+}
+
 type Role = 'user' | 'assistant';
-type ChatMessage = {
+
+type ToolStep = {
   id: string;
-  role: Role;
-  text: string;
-  tool?: string;
+  /** Server-issued tool call id, used to match the eventual tool_result. */
+  toolId: string;
+  name: string;
+  input?: unknown;
+  output?: string;
+  isError?: boolean;
+  status: 'running' | 'done' | 'error';
 };
+
+/** One row in the transcript. Tool calls coalesce into a `steps` block, plain
+ *  assistant prose lives in `text`, and the user side is just a bubble. */
+type ChatMessage =
+  | { id: string; role: 'user'; kind: 'text'; text: string }
+  | { id: string; role: 'assistant'; kind: 'text'; text: string }
+  | { id: string; role: 'assistant'; kind: 'steps'; steps: ToolStep[] };
 
 type Props = {
   /** Selected client. Used for the header label and as a stable session key. */
@@ -40,58 +72,142 @@ function uid() {
 export default function BeyondChat({ client, initialPrompt }: Props) {
   const { sendMessage, latestMessage, isConnected } = useWebSocket();
 
-  // Stable session id per client — server will resume if it exists.
-  const sessionIdRef = useRef<string>(`beyond-${client.slug}`);
-  useEffect(() => {
-    sessionIdRef.current = `beyond-${client.slug}`;
-    setMessages([]);
-    setThinking(false);
-  }, [client.slug]);
+  // Claude Agent SDK session UUID for this client. Loaded from localStorage on
+  // mount; updated whenever the server emits `session_created`. We only pass
+  // `resume: true` once we actually have a UUID — otherwise the SDK tries to
+  // resume a non-existent transcript and silently hangs.
+  const sessionIdRef = useRef<string | null>(null);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [thinking, setThinking] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const [value, setValue] = useState('');
   const scrollerRef = useRef<HTMLDivElement>(null);
 
-  // Stream handler.
+  // Load persisted session id + history when switching clients. Claude Code
+  // stores the transcript as JSONL under ~/.claude/projects; claudecodeui's
+  // session watcher indexes it into a sessions DB which the providers route
+  // exposes at /api/providers/sessions/<uuid>/messages.
+  useEffect(() => {
+    let cancelled = false;
+    let persisted: string | null = null;
+    try {
+      persisted = localStorage.getItem(sessionStorageKey(client.slug));
+    } catch {
+      persisted = null;
+    }
+    sessionIdRef.current = persisted;
+    setMessages([]);
+    setThinking(false);
+
+    if (!persisted) {
+      setLoadingHistory(false);
+      return;
+    }
+
+    setLoadingHistory(true);
+    authenticatedFetch(`/api/providers/sessions/${encodeURIComponent(persisted)}/messages`)
+      .then(async (res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !data) return;
+        const rebuilt = rebuildHistory(data.messages || []);
+        setMessages(rebuilt);
+      })
+      .catch(() => {
+        /* watcher may not have indexed the session yet — silent */
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingHistory(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [client.slug]);
+
+  // Stream handler — server emits NormalizedMessage shapes with `kind`.
   useEffect(() => {
     if (!latestMessage) return;
-    // claudecodeui WS protocol — incremental assistant tokens arrive as
-    // `claude-response` with `data.message` or similar shapes. Be defensive.
     const m = latestMessage as Record<string, unknown>;
-    const type = String(m.type ?? '');
+    const kind = String(m.kind ?? '');
+    if (!kind) return;
 
-    if (!type) return;
-
-    // Heuristics — handle the common types only. Unknown shapes are ignored
-    // gracefully so the chat surface stays functional even if the backend
-    // sends extra event kinds.
-    if (type === 'claude-output' || type === 'claude-response') {
-      const text = extractText(m);
-      if (!text) return;
-      // Streaming append to the latest assistant message, or create one.
-      setMessages((prev) => {
-        const last = prev[prev.length - 1];
-        if (last && last.role === 'assistant') {
-          return [...prev.slice(0, -1), { ...last, text: last.text + text }];
+    if (kind === 'session_created') {
+      const newId =
+        (m.newSessionId as string | undefined) ||
+        (m.sessionId as string | undefined) ||
+        null;
+      if (newId) {
+        sessionIdRef.current = newId;
+        try {
+          localStorage.setItem(sessionStorageKey(client.slug), newId);
+        } catch {
+          /* ignore */
         }
-        return [...prev, { id: uid(), role: 'assistant', text }];
-      });
-    } else if (type === 'claude-tool-use' || type === 'tool-use') {
-      const tool = extractToolLabel(m);
-      if (!tool) return;
-      setMessages((prev) => [
-        ...prev,
-        { id: uid(), role: 'assistant', text: '', tool },
-      ]);
-    } else if (type === 'claude-complete' || type === 'session-complete') {
-      setThinking(false);
-    } else if (type === 'claude-error' || type === 'session-error') {
-      setThinking(false);
-      const err = extractText(m) || 'Hm, něco se rozbilo. Zkusíme znovu?';
-      setMessages((prev) => [...prev, { id: uid(), role: 'assistant', text: err }]);
+      }
+      return;
     }
-  }, [latestMessage]);
+
+    if (kind === 'stream_delta') {
+      const text = (m.content as string | undefined) || '';
+      if (!text) return;
+      appendAssistantText(setMessages, text);
+      return;
+    }
+
+    if (kind === 'text') {
+      // The server re-emits both user echoes and assistant text under the same
+      // kind. We've already appended the user message locally on send, so only
+      // accept assistant-role text here.
+      if (m.role && m.role !== 'assistant') return;
+      const text = (m.content as string | undefined) || '';
+      if (!text) return;
+      setMessages((prev) => [...prev, { id: uid(), role: 'assistant', kind: 'text', text }]);
+      return;
+    }
+
+    if (kind === 'thinking') {
+      // Show the thinking dot — actual content is not surfaced in v2 UI.
+      setThinking(true);
+      return;
+    }
+
+    if (kind === 'tool_use') {
+      const name = String(m.toolName ?? '');
+      const toolId = String(m.toolId ?? uid());
+      if (!name) return;
+      const step: ToolStep = {
+        id: uid(),
+        toolId,
+        name,
+        input: m.toolInput,
+        status: 'running',
+      };
+      setMessages((prev) => appendStep(prev, step));
+      return;
+    }
+
+    if (kind === 'tool_result') {
+      const toolId = String(m.toolId ?? '');
+      if (!toolId) return;
+      const output = typeof m.content === 'string' ? m.content : '';
+      const isError = Boolean(m.isError);
+      setMessages((prev) => updateStep(prev, toolId, output, isError));
+      return;
+    }
+
+    if (kind === 'complete') {
+      setThinking(false);
+      return;
+    }
+
+    if (kind === 'error') {
+      setThinking(false);
+      const err = (m.content as string | undefined) || 'Hm, něco se rozbilo. Zkusíme znovu?';
+      setMessages((prev) => [...prev, { id: uid(), role: 'assistant', kind: 'text', text: err }]);
+      return;
+    }
+  }, [client.slug, latestMessage]);
 
   // Autoscroll to bottom on new messages.
   useEffect(() => {
@@ -104,18 +220,20 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
     (text: string) => {
       const trimmed = text.trim();
       if (!trimmed || !isConnected) return;
-      setMessages((prev) => [...prev, { id: uid(), role: 'user', text: trimmed }]);
+      setMessages((prev) => [...prev, { id: uid(), role: 'user', kind: 'text', text: trimmed }]);
       setValue('');
       setThinking(true);
 
+      // Only resume when we already have a real SDK-issued UUID. On the very
+      // first turn we let the SDK assign one and pick it up via session_created.
+      const resumeId = sessionIdRef.current;
       sendMessage({
         type: 'claude-command',
         command: trimmed,
         options: {
           projectPath: BRAIN_PROJECT_PATH,
           cwd: BRAIN_PROJECT_PATH,
-          sessionId: sessionIdRef.current,
-          resume: true,
+          ...(resumeId ? { sessionId: resumeId, resume: true } : {}),
           sessionSummary: `Beyond · ${client.name}`,
         },
       });
@@ -157,10 +275,12 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
       </header>
 
       {/* Messages */}
-      <div ref={scrollerRef} className="flex-1 overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-[760px] flex-col gap-6 px-4 py-8 sm:px-6 sm:py-10">
+      <div ref={scrollerRef} className="flex-1 overflow-y-auto overflow-x-hidden">
+        <div className="mx-auto flex w-full min-w-0 max-w-[760px] flex-col gap-6 px-4 py-8 sm:px-6 sm:py-10">
           {messages.length === 0 && !thinking && (
-            <p className="text-center text-[15px] text-beyond-faint">Tady jsem.</p>
+            <p className="text-center text-[15px] text-beyond-faint">
+              {loadingHistory ? 'Načítám historii…' : 'Tady jsem.'}
+            </p>
           )}
 
           {messages.map((m) => (
@@ -267,11 +387,24 @@ function MessageBlock({ message }: { message: ChatMessage }) {
         transition={transition}
         className="flex justify-end"
       >
-        <div className="max-w-[85%] rounded-[22px] rounded-br-[6px] bg-white px-4 py-3 shadow-[0_2px_12px_-6px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.04]">
-          <p className="whitespace-pre-line text-[15px] leading-relaxed text-beyond-ink">
+        <div className="max-w-[85%] min-w-0 rounded-[22px] rounded-br-[6px] bg-white px-4 py-3 shadow-[0_2px_12px_-6px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.04]">
+          <p className="whitespace-pre-line break-words text-[15px] leading-relaxed text-beyond-ink">
             {message.text}
           </p>
         </div>
+      </motion.div>
+    );
+  }
+
+  if (message.kind === 'steps') {
+    return (
+      <motion.div
+        initial="hidden"
+        animate="show"
+        variants={variants}
+        transition={transition}
+      >
+        <StepList steps={message.steps} />
       </motion.div>
     );
   }
@@ -282,18 +415,194 @@ function MessageBlock({ message }: { message: ChatMessage }) {
       animate="show"
       variants={variants}
       transition={transition}
-      className="flex flex-col gap-2 border-l border-black/[0.06] pl-4"
+      className="beyond-prose min-w-0 break-words text-[15px] leading-relaxed text-beyond-ink [&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1 [&_strong]:font-semibold [&_em]:italic [&_h1]:mb-2 [&_h1]:mt-4 [&_h1]:text-[18px] [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-[16px] [&_h2]:font-semibold [&_h3]:mb-1 [&_h3]:mt-3 [&_h3]:text-[15px] [&_h3]:font-semibold"
     >
-      {message.tool && (
-        <p className="text-[13px] italic text-beyond-faint">{message.tool}</p>
-      )}
-      {message.text && (
-        <p className="whitespace-pre-line text-[15px] leading-relaxed text-beyond-ink">
-          {message.text}
-        </p>
-      )}
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          a: ({ ...rest }) => (
+            <a
+              {...rest}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-beyond-ink underline decoration-black/20 underline-offset-2 hover:decoration-black/50"
+            />
+          ),
+          code: ({ className, children, ...rest }) => {
+            const isBlock = /\n/.test(String(children ?? ''));
+            if (isBlock) {
+              return (
+                <pre className="my-2 overflow-x-auto rounded-[14px] bg-black/[0.04] px-4 py-3 text-[13px]">
+                  <code className={className} {...rest}>{children}</code>
+                </pre>
+              );
+            }
+            return (
+              <code className="rounded-md bg-black/[0.05] px-1.5 py-0.5 font-mono text-[0.9em] text-beyond-ink">
+                {children}
+              </code>
+            );
+          },
+        }}
+      >
+        {message.text}
+      </ReactMarkdown>
     </motion.div>
   );
+}
+
+function StepList({ steps }: { steps: ToolStep[] }) {
+  return (
+    <div className="relative flex flex-col gap-2">
+      {steps.map((step, idx) => (
+        <StepRow key={step.id} step={step} isLast={idx === steps.length - 1} />
+      ))}
+    </div>
+  );
+}
+
+function StepRow({ step, isLast }: { step: ToolStep; isLast: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  const { label, detail } = describeTool(step.name, step.input);
+  const Icon = iconForTool(step.name);
+  const expandable = Boolean(step.output) || Boolean(step.input);
+
+  return (
+    <div className="relative flex gap-3">
+      {/* Vertical connector — drawn through the icon column. */}
+      {!isLast && (
+        <span
+          aria-hidden
+          className="absolute left-[11px] top-7 h-[calc(100%-12px)] w-px bg-black/[0.08]"
+        />
+      )}
+
+      {/* Icon badge */}
+      <div className="relative z-10 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-black/[0.04] text-beyond-dim">
+        <Icon className="h-[14px] w-[14px]" strokeWidth={1.8} />
+      </div>
+
+      {/* Content */}
+      <div className="min-w-0 flex-1 pt-0.5">
+        <button
+          type="button"
+          onClick={() => expandable && setExpanded((v) => !v)}
+          className={`group flex w-full items-center gap-1.5 text-left text-[14px] ${expandable ? 'cursor-pointer' : 'cursor-default'}`}
+        >
+          <span className="font-medium text-beyond-ink">{label}</span>
+          {detail && (
+            <span className="truncate text-beyond-faint">{detail}</span>
+          )}
+          {step.status === 'running' && (
+            <span className="beyond-dot ml-1" aria-hidden />
+          )}
+          {expandable && (
+            <ChevronRight
+              className={`ml-auto h-[14px] w-[14px] flex-shrink-0 text-beyond-faint transition-transform ${expanded ? 'rotate-90' : ''}`}
+              strokeWidth={1.8}
+            />
+          )}
+        </button>
+
+        <AnimatePresence initial={false}>
+          {expanded && expandable && (
+            <motion.div
+              key="expand"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.18, ease: 'easeOut' }}
+              className="overflow-hidden"
+            >
+              <div className="mt-2 space-y-2">
+                {step.input != null && (
+                  <PreBlock label="Vstup" content={formatInput(step.input)} />
+                )}
+                {step.output && (
+                  <PreBlock
+                    label={step.isError ? 'Chyba' : 'Výstup'}
+                    content={step.output}
+                    tone={step.isError ? 'error' : 'default'}
+                  />
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}
+
+function PreBlock({
+  label,
+  content,
+  tone = 'default',
+}: {
+  label: string;
+  content: string;
+  tone?: 'default' | 'error';
+}) {
+  return (
+    <div>
+      <p className="mb-1 text-[11px] uppercase tracking-wide text-beyond-faint">{label}</p>
+      <pre
+        className={`max-h-[260px] overflow-auto whitespace-pre-wrap break-words rounded-[10px] px-3 py-2 font-mono text-[12px] leading-relaxed ${tone === 'error' ? 'bg-red-50 text-red-700' : 'bg-black/[0.04] text-beyond-dim'}`}
+      >
+        {content}
+      </pre>
+    </div>
+  );
+}
+
+function describeTool(name: string, input: unknown): { label: string; detail: string } {
+  const inp = (input && typeof input === 'object' ? (input as Record<string, unknown>) : {}) || {};
+  const path = typeof inp.file_path === 'string' ? inp.file_path : typeof inp.path === 'string' ? inp.path : '';
+  const command = typeof inp.command === 'string' ? inp.command : '';
+  const pattern = typeof inp.pattern === 'string' ? inp.pattern : '';
+  const url = typeof inp.url === 'string' ? inp.url : '';
+  const query = typeof inp.query === 'string' ? inp.query : '';
+
+  switch (name) {
+    case 'Read':
+      return { label: 'Read', detail: shortenPath(path) };
+    case 'Write':
+      return { label: 'Write', detail: shortenPath(path) };
+    case 'Edit':
+    case 'MultiEdit':
+      return { label: 'Edit', detail: shortenPath(path) };
+    case 'Bash':
+      return { label: 'Bash', detail: command.split('\n')[0].slice(0, 80) };
+    case 'Grep':
+      return { label: 'Grep', detail: pattern };
+    case 'Glob':
+      return { label: 'Glob', detail: pattern };
+    case 'WebFetch':
+      return { label: 'WebFetch', detail: url };
+    case 'WebSearch':
+      return { label: 'WebSearch', detail: query };
+    default:
+      return { label: name, detail: '' };
+  }
+}
+
+function iconForTool(name: string) {
+  if (name === 'Read') return FileText;
+  if (name === 'Write' || name === 'Edit' || name === 'MultiEdit') return FilePen;
+  if (name === 'Bash') return Terminal;
+  if (name === 'Grep' || name === 'Glob') return Search;
+  if (name === 'WebFetch' || name === 'WebSearch') return Globe;
+  if (name === 'AskUserQuestion') return MessageCircle;
+  return Wrench;
+}
+
+function formatInput(input: unknown): string {
+  if (typeof input === 'string') return input;
+  try {
+    return JSON.stringify(input, null, 2);
+  } catch {
+    return String(input);
+  }
 }
 
 function quickPrompt(label: string, clientName: string): string {
@@ -313,48 +622,83 @@ function quickPrompt(label: string, clientName: string): string {
 /* defensive helpers for variable-shape backend payloads               */
 /* ------------------------------------------------------------------ */
 
-function extractText(m: Record<string, unknown>): string {
-  // try a few common locations
-  const candidates: unknown[] = [
-    m.text,
-    m.data,
-    m.content,
-    m.message,
-    (m.message as Record<string, unknown> | undefined)?.text,
-    (m.message as Record<string, unknown> | undefined)?.content,
-    (m.payload as Record<string, unknown> | undefined)?.text,
-  ];
-  for (const c of candidates) {
-    if (typeof c === 'string' && c.length > 0) return c;
-    if (Array.isArray(c)) {
-      const joined = c
-        .map((part) => {
-          if (typeof part === 'string') return part;
-          if (part && typeof part === 'object' && typeof (part as Record<string, unknown>).text === 'string') {
-            return (part as Record<string, unknown>).text as string;
-          }
-          return '';
-        })
-        .join('');
-      if (joined) return joined;
+function appendAssistantText(
+  setMessages: Dispatch<SetStateAction<ChatMessage[]>>,
+  text: string,
+): void {
+  setMessages((prev) => {
+    const last = prev[prev.length - 1];
+    // Stream into the previous assistant text bubble; a tool-step block ends
+    // the streaming bubble so a fresh text block appears below the steps.
+    if (last && last.role === 'assistant' && last.kind === 'text') {
+      return [...prev.slice(0, -1), { ...last, text: last.text + text }];
     }
-  }
-  return '';
+    return [...prev, { id: uid(), role: 'assistant', kind: 'text', text }];
+  });
 }
 
-function extractToolLabel(m: Record<string, unknown>): string {
-  const name =
-    (m.tool as string | undefined) ||
-    (m.name as string | undefined) ||
-    ((m.data as Record<string, unknown> | undefined)?.tool as string | undefined) ||
-    ((m.data as Record<string, unknown> | undefined)?.name as string | undefined);
-  if (!name) return '';
-  // Friendlier wording per VISION.md
-  if (/read|file/i.test(name)) return `Čtu ${shortenPath((m.data as Record<string, unknown> | undefined)?.path as string | undefined) || 'soubor'}…`;
-  if (/write/i.test(name)) return `Píšu ${shortenPath((m.data as Record<string, unknown> | undefined)?.path as string | undefined) || 'soubor'}…`;
-  if (/bash|shell/i.test(name)) return `Spouštím příkaz…`;
-  if (/grep|search/i.test(name)) return `Hledám…`;
-  return `${name}…`;
+/** Turn a sequence of stored NormalizedMessages into our local ChatMessage[]. */
+function rebuildHistory(raw: unknown[]): ChatMessage[] {
+  const out: ChatMessage[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') continue;
+    const m = entry as Record<string, unknown>;
+    const kind = String(m.kind ?? '');
+    const role = (m.role as string | undefined) || undefined;
+    const content = (m.content as string | undefined) || '';
+
+    if (kind === 'text' && role === 'user' && content) {
+      out.push({ id: uid(), role: 'user', kind: 'text', text: content });
+    } else if (kind === 'text' && role === 'assistant' && content) {
+      out.push({ id: uid(), role: 'assistant', kind: 'text', text: content });
+    } else if (kind === 'tool_use' && m.toolName) {
+      const toolResult = m.toolResult as
+        | { content?: string; isError?: boolean }
+        | undefined;
+      const step: ToolStep = {
+        id: uid(),
+        toolId: String(m.toolId ?? uid()),
+        name: String(m.toolName),
+        input: m.toolInput,
+        output: toolResult?.content,
+        isError: toolResult?.isError,
+        status: toolResult ? (toolResult.isError ? 'error' : 'done') : 'done',
+      };
+      const last = out[out.length - 1];
+      if (last && last.role === 'assistant' && last.kind === 'steps') {
+        out[out.length - 1] = { ...last, steps: [...last.steps, step] };
+      } else {
+        out.push({ id: uid(), role: 'assistant', kind: 'steps', steps: [step] });
+      }
+    }
+  }
+  return out;
+}
+
+function appendStep(prev: ChatMessage[], step: ToolStep): ChatMessage[] {
+  const last = prev[prev.length - 1];
+  if (last && last.role === 'assistant' && last.kind === 'steps') {
+    return [...prev.slice(0, -1), { ...last, steps: [...last.steps, step] }];
+  }
+  return [...prev, { id: uid(), role: 'assistant', kind: 'steps', steps: [step] }];
+}
+
+function updateStep(
+  prev: ChatMessage[],
+  toolId: string,
+  output: string,
+  isError: boolean,
+): ChatMessage[] {
+  return prev.map((msg) => {
+    if (msg.role !== 'assistant' || msg.kind !== 'steps') return msg;
+    let touched = false;
+    const nextSteps = msg.steps.map((s) => {
+      if (s.toolId !== toolId) return s;
+      touched = true;
+      return { ...s, output, isError, status: isError ? ('error' as const) : ('done' as const) };
+    });
+    return touched ? { ...msg, steps: nextSteps } : msg;
+  });
 }
 
 function shortenPath(p?: string): string {
