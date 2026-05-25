@@ -6,8 +6,7 @@ import { TaskMasterProvider } from './contexts/TaskMasterContext';
 import { TasksSettingsProvider } from './contexts/TasksSettingsContext';
 import { WebSocketProvider } from './contexts/WebSocketContext';
 import { PluginsProvider } from './contexts/PluginsContext';
-import AppContent from './components/app/AppContent';
-import BeyondBackground from './components/beyond/BeyondBackground';
+import BeyondApp from './components/beyond/BeyondApp';
 import BeyondPreview from './components/beyond/BeyondPreview';
 import i18n from './i18n/config.js';
 
@@ -18,7 +17,6 @@ export default function App() {
     return (
       <I18nextProvider i18n={i18n}>
         <ThemeProvider>
-          <BeyondBackground />
           <BeyondPreview />
         </ThemeProvider>
       </I18nextProvider>
@@ -28,22 +26,19 @@ export default function App() {
   return (
     <I18nextProvider i18n={i18n}>
       <ThemeProvider>
-        {/* Beyond Brain — time-of-day pastel gradient. Mounted outside ProtectedRoute
-            so it paints behind login & onboarding too. */}
-        <BeyondBackground />
         <AuthProvider>
           <WebSocketProvider>
             <PluginsProvider>
               <TasksSettingsProvider>
                 <TaskMasterProvider>
-                <ProtectedRoute>
-                  <Router basename={window.__ROUTER_BASENAME__ || ''}>
-                    <Routes>
-                      <Route path="/" element={<AppContent />} />
-                      <Route path="/session/:sessionId" element={<AppContent />} />
-                    </Routes>
-                  </Router>
-                </ProtectedRoute>
+                  <ProtectedRoute>
+                    <Router basename={window.__ROUTER_BASENAME__ || ''}>
+                      <Routes>
+                        {/* All paths fall through to the same Beyond surface. */}
+                        <Route path="*" element={<BeyondApp />} />
+                      </Routes>
+                    </Router>
+                  </ProtectedRoute>
                 </TaskMasterProvider>
               </TasksSettingsProvider>
             </PluginsProvider>

@@ -57,16 +57,16 @@ export default function LoginForm() {
   return (
     <AuthScreenLayout
       title="Vítej zpátky"
-      description="Beyond Brain — tvůj druhý mozek"
-      footerText="Přihlas se a pokračujte tam, kde jsme skončili."
+      description="Beyond — tvůj druhý mozek."
+      footerText="Přihlas se a pokračujeme tam, kde jsme skončili."
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-6">
         <AuthInputField
           id="username"
           label={t('login.username')}
           value={formState.username}
           onChange={(value) => updateField('username', value)}
-          placeholder={t('login.placeholders.username')}
+          placeholder=""
           isDisabled={isSubmitting}
           autoComplete="username"
         />
@@ -76,7 +76,7 @@ export default function LoginForm() {
           label={t('login.password')}
           value={formState.password}
           onChange={(value) => updateField('password', value)}
-          placeholder={t('login.placeholders.password')}
+          placeholder=""
           isDisabled={isSubmitting}
           type="password"
           autoComplete="current-password"
@@ -84,13 +84,15 @@ export default function LoginForm() {
 
         <AuthErrorAlert errorMessage={errorMessage} />
 
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="w-full rounded-full bg-beyond-charcoal px-4 py-2.5 text-sm font-medium text-white shadow-soft transition-all duration-200 hover:-translate-y-px hover:shadow-glass-sm disabled:opacity-60 dark:bg-white dark:text-beyond-charcoal"
-        >
-          {isSubmitting ? 'Přihlašuju…' : 'Přihlásit se'}
-        </button>
+        <div className="flex justify-center pt-2">
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="beyond-pill disabled:opacity-50"
+          >
+            {isSubmitting ? 'Přihlašuju…' : 'Přihlásit se'}
+          </button>
+        </div>
       </form>
     </AuthScreenLayout>
   );

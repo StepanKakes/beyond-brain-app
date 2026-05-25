@@ -82,19 +82,18 @@ export default function SetupForm() {
 
   return (
     <AuthScreenLayout
-      title="Welcome to CloudCLI"
-      description="Set up your account to get started"
-      footerText="This is a single-user system. Only one account can be created."
-      logo={<img src="/logo.svg" alt="CloudCLI" className="h-16 w-16" />}
+      title="Beyond"
+      description="Tvůj druhý mozek. Začneme."
+      footerText="Tohle je jednouživatelský systém."
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-6">
         <AuthInputField
           id="username"
           name="username"
-          label="Username"
+          label="Uživatel"
           value={formState.username}
           onChange={(value) => updateField('username', value)}
-          placeholder="Enter your username"
+          placeholder=""
           isDisabled={isSubmitting}
           autoComplete="username"
         />
@@ -102,10 +101,10 @@ export default function SetupForm() {
         <AuthInputField
           id="password"
           name="password"
-          label="Password"
+          label="Heslo"
           value={formState.password}
           onChange={(value) => updateField('password', value)}
-          placeholder="Enter your password"
+          placeholder=""
           isDisabled={isSubmitting}
           type="password"
           autoComplete="new-password"
@@ -114,10 +113,10 @@ export default function SetupForm() {
         <AuthInputField
           id="confirmPassword"
           name="confirmPassword"
-          label="Confirm Password"
+          label="Heslo znovu"
           value={formState.confirmPassword}
           onChange={(value) => updateField('confirmPassword', value)}
-          placeholder="Confirm your password"
+          placeholder=""
           isDisabled={isSubmitting}
           type="password"
           autoComplete="new-password"
@@ -125,13 +124,15 @@ export default function SetupForm() {
 
         <AuthErrorAlert errorMessage={errorMessage} />
 
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="w-full rounded-md bg-blue-600 px-4 py-2 font-medium text-white transition-colors duration-200 hover:bg-blue-700 disabled:bg-blue-400"
-        >
-          {isSubmitting ? 'Setting up...' : 'Create Account'}
-        </button>
+        <div className="flex justify-center pt-2">
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="beyond-pill disabled:opacity-50"
+          >
+            {isSubmitting ? 'Zakládám…' : 'Vytvořit účet'}
+          </button>
+        </div>
       </form>
     </AuthScreenLayout>
   );

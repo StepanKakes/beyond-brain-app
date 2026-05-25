@@ -11,10 +11,7 @@ type AuthInputFieldProps = {
 };
 
 /**
- * A labelled input field for authentication forms.
- * Renders a `<label>` / `<input>` pair and forwards browser autofill hints
- * (`name`, `autoComplete`) so that password managers can identify and fill
- * the field correctly.
+ * Beyond v2 — underline-only input field. No bordered box, no glass.
  */
 export default function AuthInputField({
   id,
@@ -29,7 +26,10 @@ export default function AuthInputField({
 }: AuthInputFieldProps) {
   return (
     <div>
-      <label htmlFor={id} className="mb-1.5 block text-xs font-medium tracking-wide text-beyond-secondary">
+      <label
+        htmlFor={id}
+        className="mb-1.5 block text-[11px] uppercase tracking-[0.14em] text-beyond-faint"
+      >
         {label}
       </label>
       <input
@@ -39,10 +39,10 @@ export default function AuthInputField({
         autoComplete={autoComplete}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded-xl border border-white/40 bg-white/70 px-3.5 py-2.5 text-sm text-beyond-primary placeholder:text-beyond-muted/70 backdrop-blur-md focus:border-transparent focus:bg-white/95 focus:outline-none focus:ring-2 focus:ring-beyond-dusk/30 dark:border-white/10 dark:bg-white/5"
         placeholder={placeholder}
         required
         disabled={isDisabled}
+        className="w-full border-0 border-b border-beyond-line bg-transparent py-2 text-[16px] text-beyond-ink placeholder:text-beyond-faint focus:border-beyond-ink focus:outline-none"
       />
     </div>
   );
