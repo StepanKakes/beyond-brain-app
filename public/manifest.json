@@ -1,12 +1,12 @@
 {
-  "name": "Beyond Brain",
+  "name": "Beyond",
   "short_name": "Beyond",
-  "description": "Beyond Brain — osobní AI asistent pro mentoring (Tim Trnka).",
+  "description": "Beyond — tvůj druhý mozek (Tim Trnka).",
   "lang": "cs",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#FAF6F1",
-  "theme_color": "#FAF6F1",
+  "background_color": "#ffffff",
+  "theme_color": "#fafafa",
   "orientation": "portrait-primary",
   "scope": "/",
   "icons": [
