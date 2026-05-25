@@ -46,9 +46,9 @@ export default function BeyondPreview() {
     );
   }
 
-  // default: welcome
+  // default: welcome (welcome v2 handles its own gradient + layout)
   return (
-    <div className="relative z-10 flex h-screen w-screen items-center justify-center">
+    <div className="relative z-10 h-screen w-screen overflow-hidden">
       <BeyondWelcome />
     </div>
   );
