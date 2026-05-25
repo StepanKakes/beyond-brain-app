@@ -29,8 +29,21 @@ function Refresh-Path {
 }
 
 function Install-WingetPkg {
-  param([string]$Name, [string]$Id, [string]$CheckCmd)
-  if (Get-Command $CheckCmd -ErrorAction SilentlyContinue) {
+  param([string]$Name, [string]$Id, [string]$CheckCmd, [int]$MinMajorVersion = 0)
+  $cmd = Get-Command $CheckCmd -ErrorAction SilentlyContinue
+  if ($cmd) {
+    if ($MinMajorVersion -gt 0) {
+      $verOutput = & $CheckCmd --version 2>$null
+      if ($verOutput -match 'v?(\d+)\.') {
+        $major = [int]$matches[1]
+        if ($major -lt $MinMajorVersion) {
+          Write-Step 'UPG' "$Name verze $major je stara (>= $MinMajorVersion), upgrade..." 'Yellow'
+          winget upgrade --id $Id --accept-package-agreements --accept-source-agreements --silent --disable-interactivity 2>$null
+          Refresh-Path
+          return
+        }
+      }
+    }
     Write-Step 'OK' "$Name uz nainstalovany." 'Green'
     return
   }
@@ -53,8 +66,9 @@ if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
 }
 
 # --- 1. system packages ---
-Install-WingetPkg -Name 'Node.js LTS'  -Id 'OpenJS.NodeJS.LTS'    -CheckCmd 'node'
-Install-WingetPkg -Name 'Git'          -Id 'Git.Git'              -CheckCmd 'git'
+Install-WingetPkg -Name 'Node.js LTS'  -Id 'OpenJS.NodeJS.LTS'      -CheckCmd 'node'   -MinMajorVersion 20
+Install-WingetPkg -Name 'Python 3.12'  -Id 'Python.Python.3.12'     -CheckCmd 'python'
+Install-WingetPkg -Name 'Git'          -Id 'Git.Git'                -CheckCmd 'git'
 Install-WingetPkg -Name 'cloudflared'  -Id 'Cloudflare.cloudflared' -CheckCmd 'cloudflared'
 
 Write-Step 'INFO' "node $(node -v),  npm $(npm -v),  git $(git --version),  cloudflared $(cloudflared --version | Select-Object -First 1)"
