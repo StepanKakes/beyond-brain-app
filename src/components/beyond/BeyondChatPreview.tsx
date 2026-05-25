@@ -1,10 +1,20 @@
-import { ArrowUp, Paperclip, Sparkles } from 'lucide-react';
-import { motion } from 'framer-motion';
-import BeyondAssistantAvatar from './BeyondAssistantAvatar';
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+
+/**
+ * Beyond Brain — v2 Chat surface (hyperminimal).
+ *
+ * No bubbles, no avatars, no glass. Messages are text blocks on white.
+ * AI is dark text, user is muted/lighter and right-indented.
+ * Tool calls are extra-subtle italic gray lines inline.
+ * Loading = pulsing dot + "Přemýšlím".
+ * Composer = bare textarea + a single pill send button.
+ */
 
 type SeedMessage = {
   role: 'user' | 'assistant';
   text: string;
+  /** Optional tool-call breadcrumb, shown above the assistant text in italic gray. */
   tool?: string;
 };
 
@@ -15,9 +25,9 @@ const SEED: SeedMessage[] = [
   },
   {
     role: 'assistant',
+    tool: 'Čtu profil.md a _action-items.md…',
     text:
-      'Tady je rychlý přehled za poslední 2 dny:\n\n— **Call (úterý):** Probrali jste cenotvorbu pro premium klienty.\n— **Otevřené sliby:** 2 — *(1) Připravit ceník verze v3*, *(2) Naplánovat onboarding na 6/3*.\n— **Stav:** W18, posun stabilní.\n\nChceš, abych připravil draft ceníku?',
-    tool: 'Čtu profil.md a _action-items.md...',
+      'Rychlý přehled za poslední 2 dny:\n\n— Call (úterý): Probrali jste cenotvorbu pro premium klienty.\n— Otevřené sliby: 2 — (1) Připravit ceník verze v3, (2) Naplánovat onboarding na 6/3.\n— Stav: W18, posun stabilní.\n\nChceš, abych připravil draft ceníku?',
   },
   {
     role: 'user',
@@ -25,28 +35,26 @@ const SEED: SeedMessage[] = [
   },
 ];
 
+const QUICK_ACTIONS = ['Action items', 'Brief', 'Sync'];
+
 export default function BeyondChatPreview() {
+  const [thinking] = useState(true);
+  const [value, setValue] = useState('');
+
   return (
-    <div className="flex h-full w-full flex-col">
-      {/* Top header (glass) */}
-      <div className="flex flex-shrink-0 items-center gap-3 border-b border-white/30 bg-white/45 px-3 py-3 backdrop-blur-xl backdrop-saturate-150 dark:border-white/5 dark:bg-beyond-ink/45 sm:px-4">
-        <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-beyond-peach via-beyond-coral to-beyond-plum font-medium text-white shadow-soft">
-          IJ
-        </div>
+    <div className="flex h-full w-full flex-col bg-white">
+      {/* Minimal top bar — just context label. No avatar circle, no badges. */}
+      <header className="flex flex-shrink-0 items-center px-6 pb-4 pt-5 sm:px-8">
         <div className="min-w-0 flex-1">
-          <h2 className="truncate font-serif text-lg leading-tight text-beyond-primary">
+          <h2 className="truncate text-[15px] font-medium text-beyond-ink">
             Ivana Juříková
           </h2>
-          <p className="truncate text-xs text-beyond-secondary">W18 · 2 otevřené sliby</p>
+          <p className="truncate text-[13px] text-beyond-faint">W18</p>
         </div>
-        <button className="beyond-chip flex-shrink-0" type="button">
-          <Sparkles className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">Sync</span>
-        </button>
-      </div>
+      </header>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-8">
+      {/* Messages — text-only, generous spacing, optional faint dividers. */}
+      <div className="flex-1 overflow-y-auto">
         <motion.div
           initial="hidden"
           animate="show"
@@ -54,60 +62,60 @@ export default function BeyondChatPreview() {
             hidden: {},
             show: { transition: { staggerChildren: 0.12, delayChildren: 0.1 } },
           }}
-          className="mx-auto flex max-w-2xl flex-col gap-6"
+          className="mx-auto flex w-full max-w-[720px] flex-col px-6 py-10 sm:px-8 sm:py-14"
         >
           {SEED.map((m, i) => (
-            <Message key={i} message={m} />
+            <Message key={i} message={m} isFirst={i === 0} />
           ))}
 
-          {/* "Přemýšlím..." status pill */}
-          <motion.div
-            variants={{
-              hidden: { opacity: 0, y: 6 },
-              show: { opacity: 1, y: 0 },
-            }}
-            transition={{ duration: 0.4, ease: 'easeOut' }}
-            className="flex items-center justify-center pt-2"
-          >
-            <div className="flex items-center gap-2 rounded-full border border-white/40 bg-white/65 px-3.5 py-1.5 shadow-soft backdrop-blur-xl backdrop-saturate-150 dark:border-white/10 dark:bg-beyond-ink/55">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-beyond-coral" />
-              <span className="text-xs font-medium text-beyond-primary">Přemýšlím</span>
-              <span className="text-xs text-beyond-secondary">…</span>
-            </div>
-          </motion.div>
+          <AnimatePresence>
+            {thinking && (
+              <motion.div
+                key="thinking"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.4, ease: 'easeOut' }}
+                className="mt-6 flex items-center gap-2.5 text-[14px] text-beyond-dim"
+              >
+                <span className="beyond-dot" aria-hidden="true" />
+                <span>Přemýšlím</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.div>
       </div>
 
-      {/* Composer */}
-      <div className="flex-shrink-0 p-4 pb-6">
-        <div className="mx-auto w-full max-w-2xl">
-          <div className="beyond-card flex items-end gap-2 p-3">
-            <button
-              type="button"
-              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-beyond-secondary transition hover:bg-white/60 hover:text-beyond-primary dark:hover:bg-white/10"
-              aria-label="Attach"
-            >
-              <Paperclip className="h-4 w-4" />
-            </button>
+      {/* Composer — bare textarea, pill send button, optional quick chips. */}
+      <div className="flex-shrink-0 border-t border-beyond-line/60 bg-white px-6 pb-8 pt-5 sm:px-8">
+        <div className="mx-auto w-full max-w-[720px]">
+          <div className="flex items-end gap-3">
             <textarea
-              defaultValue=""
-              placeholder="Jak ti můžu pomoct?"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              placeholder="Napiš, co řešíme…"
               rows={1}
-              className="flex-1 resize-none bg-transparent px-1.5 py-2 text-sm text-beyond-primary placeholder:text-beyond-muted/70 focus:outline-none"
+              className="min-h-[44px] flex-1 resize-none bg-transparent py-3 text-[16px] leading-snug text-beyond-ink placeholder:text-beyond-faint focus:outline-none"
             />
             <button
               type="button"
-              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-beyond-charcoal text-white shadow-soft transition hover:-translate-y-px hover:shadow-glass-sm dark:bg-white dark:text-beyond-charcoal"
+              className="beyond-pill flex-shrink-0"
               aria-label="Send"
             >
-              <ArrowUp className="h-4 w-4" />
+              Pošli
             </button>
           </div>
-          {/* Quick action chips below */}
-          <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-            <button type="button" className="beyond-chip">📋 Action items</button>
-            <button type="button" className="beyond-chip">📝 Brief na příští call</button>
-            <button type="button" className="beyond-chip">🌅 Sync z Notion</button>
+
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            {QUICK_ACTIONS.map((label) => (
+              <button
+                key={label}
+                type="button"
+                className="rounded-full px-3 py-1.5 text-[13px] text-beyond-dim transition-colors hover:text-beyond-ink"
+              >
+                {label}
+              </button>
+            ))}
           </div>
         </div>
       </div>
@@ -115,50 +123,46 @@ export default function BeyondChatPreview() {
   );
 }
 
-function Message({ message }: { message: SeedMessage }) {
+function Message({ message, isFirst }: { message: SeedMessage; isFirst: boolean }) {
   const variants = {
     hidden: { opacity: 0, y: 8 },
     show: { opacity: 1, y: 0 },
   };
   const transition = { duration: 0.45, ease: [0.21, 1.02, 0.73, 1] as const };
 
+  // Subtle horizontal rule above every message except the first.
+  const divider = isFirst ? null : (
+    <div className="my-8 h-px w-full border-t border-beyond-line" aria-hidden="true" />
+  );
+
   if (message.role === 'user') {
     return (
-      <motion.div variants={variants} transition={transition} className="flex justify-end">
-        <div className="max-w-[80%] rounded-3xl rounded-br-lg bg-beyond-charcoal/95 px-4 py-2.5 text-sm leading-relaxed text-white shadow-glass-sm backdrop-blur-md dark:bg-white/95 dark:text-beyond-charcoal">
-          {message.text}
-        </div>
-      </motion.div>
+      <>
+        {divider}
+        <motion.div
+          variants={variants}
+          transition={transition}
+          className="flex justify-end"
+        >
+          <p className="max-w-[85%] whitespace-pre-line text-right text-[16px] leading-relaxed text-beyond-dim">
+            {message.text}
+          </p>
+        </motion.div>
+      </>
     );
   }
-  return (
-    <motion.div variants={variants} transition={transition} className="flex items-start gap-3">
-      <BeyondAssistantAvatar />
-      <div className="flex max-w-[85%] flex-col gap-2">
-        {message.tool && (
-          <p className="text-xs italic text-beyond-secondary">
-            <span aria-hidden="true">📄</span> {message.tool}
-          </p>
-        )}
-        <div className="beyond-card whitespace-pre-line p-4 text-sm leading-relaxed text-beyond-primary">
-          {renderMd(message.text)}
-        </div>
-      </div>
-    </motion.div>
-  );
-}
 
-/** Tiny markdown subset for the preview only. */
-function renderMd(text: string) {
-  return text.split('\n').map((line, i) => (
-    <span key={i}>
-      {line.split(/\*\*([^*]+)\*\*/g).map((part, j) =>
-        j % 2 === 1 ? <strong key={j} className="font-semibold">{part}</strong> :
-        part.split(/\*([^*]+)\*/g).map((sub, k) =>
-          k % 2 === 1 ? <em key={k} className="italic text-beyond-secondary">{sub}</em> : sub,
-        ),
-      )}
-      {'\n'}
-    </span>
-  ));
+  return (
+    <>
+      {divider}
+      <motion.div variants={variants} transition={transition} className="flex flex-col gap-3">
+        {message.tool && (
+          <p className="text-[13px] italic text-beyond-faint">{message.tool}</p>
+        )}
+        <p className="whitespace-pre-line text-[16px] leading-relaxed text-beyond-ink">
+          {message.text}
+        </p>
+      </motion.div>
+    </>
+  );
 }

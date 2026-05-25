@@ -1133,5 +1133,24 @@
     background-size: 200% 100%;
     animation: shimmer 1.8s linear infinite;
   }
+
+  /* ---------------------------------------------------------- */
+  /*  KEYFRAMES (Beyond v2)                                     */
+  /* ---------------------------------------------------------- */
+
+  @keyframes beyond-pulse-dot {
+    0%, 100% { opacity: 0.35; transform: scale(0.92); }
+    50%      { opacity: 1;    transform: scale(1.08); }
+  }
+
+  @keyframes beyond-hero-drift {
+    0%, 100% { background-position:   0% 30%; }
+    50%      { background-position: 100% 70%; }
+  }
+
+  @keyframes shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
 }
 
