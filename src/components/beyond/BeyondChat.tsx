@@ -1,46 +1,31 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ArrowUp,
   Paperclip,
   ChevronRight,
-  FileText,
-  FilePen,
-  Terminal,
-  Search,
-  Globe,
-  Wrench,
-  MessageCircle,
   ShieldOff,
   Shield,
   Square,
-  Trash2,
   Settings as SettingsIcon,
-  X,
-  File as FileIcon,
   Upload,
   Plus,
-  MessagesSquare,
-  Check,
   Sparkles,
-  ChevronDown,
   PanelRight,
   Mic,
 } from 'lucide-react';
-import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { remarkBeyondFilePaths, parseBeyondFileHref, BEYOND_FILE_SCHEME } from './beyondFilePaths';
+
 import { CLAUDE_MODELS } from '../../../shared/modelConstants';
+import { useWebSocket } from '../../contexts/WebSocketContext';
+import { authenticatedFetch } from '../../utils/api';
 import {
   fetchBeyondModels,
   fallbackModelOptions,
   type BeyondModelOption,
 } from './beyondModels';
-import BeyondCodeBlock from './BeyondCodeBlock';
 import BeyondLoader, { readLoaderKind, type LoaderKind } from './BeyondLoader';
 import BeyondBrainMark from './BeyondBrainMark';
 import BeyondThinkingStates from './BeyondThinkingStates';
-import StreamingText from './StreamingText';
 import BeyondSlashMenu from './BeyondSlashMenu';
 import { useBeyondSpeech } from './useBeyondSpeech';
 import { useBeyondSlashCommands } from './useBeyondSlashCommands';
@@ -51,8 +36,6 @@ import {
   type BeyondAppAction,
   type BeyondSlashCommand,
 } from './beyondCommands';
-import { useWebSocket } from '../../contexts/WebSocketContext';
-import { authenticatedFetch } from '../../utils/api';
 import {
   fetchSessionIndex,
   persistSessionIndex,
@@ -63,8 +46,53 @@ import {
 } from './beyondSessionsApi';
 import { useBrainPath } from './useBrainPath';
 
+import MessageBlock from './chat/MessageBlock';
+import ModelPicker from './chat/ModelPicker';
+import TokenBudgetChip from './chat/TokenBudgetChip';
+import AskPanel from './chat/AskPanel';
+import PermissionPanel from './chat/PermissionPanel';
+import PermissionsSheet from './chat/PermissionsSheet';
+import AttachmentChip from './chat/AttachmentChip';
+import WhatsAppActionCard from './chat/WhatsAppActionCard';
+import SessionsMenu from './chat/SessionsMenu';
+import {
+  MAX_IMAGE_BYTES,
+  MAX_TEXT_BYTES,
+  TEXT_LIKE_EXT,
+  TEXT_LIKE_MIME,
+} from './chat/attachments';
+import { notifySessionsChanged, shortTitle } from './chat/format';
+import {
+  BYPASS_PERMISSIONS_STORAGE_KEY,
+  MODEL_STORAGE_KEY,
+  matchAllowEntry,
+  persistAllowedTools,
+  readAllowedTools,
+} from './chat/prefs';
+import { isWhatsAppSendTool } from './chat/toolDisplay';
+import {
+  appendAssistantTextById,
+  appendStep,
+  rebuildHistory,
+  uid,
+  updateStep,
+} from './chat/transcript';
+import type {
+  AskRequest,
+  ChatMessage,
+  PendingAttachment,
+  PermRequest,
+  TokenBudget,
+  ToolStep,
+} from './chat/types';
+
 /**
- * Beyond Brain — real chat.
+ * Beyond Brain — the chat surface.
+ *
+ * This file owns the turn lifecycle only: WebSocket wiring, which session is
+ * live, streaming state, tool approvals, attachments and the composer. Every
+ * piece of the transcript and every panel it can raise lives under `chat/`, and
+ * the pure transforms behind them are in `chat/transcript.ts`.
  *
  * Talks to claudecodeui's existing WebSocket using `claude-command` messages.
  * cwd for the Claude SDK is the brain repo, whose real location comes from the
@@ -76,113 +104,6 @@ import { useBrainPath } from './useBrainPath';
  * in localStorage keyed by client slug, then pass it as `sessionId` + `resume:
  * true` on subsequent turns so the same conversation survives reloads.
  */
-
-/** Notify same-tab observers (sidebar dropdown etc.) that the per-client
- *  session index changed. Cross-PC continuity is handled by the server side. */
-function notifySessionsChanged(slug: string): void {
-  window.dispatchEvent(new CustomEvent('beyond:sessions-changed', { detail: { slug } }));
-}
-
-function shortTitle(text: string): string {
-  const oneLine = text.replace(/\s+/g, ' ').trim();
-  return oneLine.length > 60 ? oneLine.slice(0, 60) + '…' : oneLine;
-}
-
-function relativeTime(ts: number): string {
-  const diff = Date.now() - ts;
-  const min = 60 * 1000;
-  const h = 60 * min;
-  const d = 24 * h;
-  if (diff < min) return 'teď';
-  if (diff < h) return `${Math.round(diff / min)} min`;
-  if (diff < d) return `${Math.round(diff / h)} h`;
-  return `${Math.round(diff / d)} d`;
-}
-
-type Role = 'user' | 'assistant';
-
-type ToolStep = {
-  id: string;
-  /** Server-issued tool call id, used to match the eventual tool_result. */
-  toolId: string;
-  name: string;
-  input?: unknown;
-  output?: string;
-  isError?: boolean;
-  status: 'running' | 'done' | 'error';
-};
-
-/** One row in the transcript. Tool calls coalesce into a `steps` block, plain
- *  assistant prose lives in `text`, and the user side is just a bubble. */
-type ChatMessage =
-  | { id: string; role: 'user'; kind: 'text'; text: string }
-  | { id: string; role: 'assistant'; kind: 'text'; text: string }
-  | { id: string; role: 'assistant'; kind: 'steps'; steps: ToolStep[] };
-
-type AskOption = { label: string; description?: string };
-type AskQuestion = {
-  question: string;
-  header?: string;
-  multiSelect?: boolean;
-  options: AskOption[];
-};
-type AskRequest = {
-  requestId: string;
-  input: { questions: AskQuestion[] } & Record<string, unknown>;
-};
-
-type PermRequest = {
-  requestId: string;
-  toolName: string;
-  input: unknown;
-};
-
-type PendingAttachment = {
-  id: string;
-  name: string;
-  mimeType: string;
-  size: number;
-  kind: 'image' | 'text';
-  /** Images: data:image/...;base64,... — text: raw UTF-8 content. */
-  data: string;
-};
-
-const TEXT_LIKE_MIME = /^(text\/|application\/(json|xml|javascript|typescript|x-yaml|yaml))/;
-const TEXT_LIKE_EXT = /\.(md|txt|json|ya?ml|csv|tsv|log|html?|css|js|ts|tsx|jsx|py|sh|toml|ini|env|jsonl)$/i;
-const MAX_TEXT_BYTES = 256 * 1024;
-const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
-
-const ALLOWED_TOOLS_STORAGE_KEY = 'beyond.allowed-tools';
-const BYPASS_PERMISSIONS_STORAGE_KEY = 'beyond.bypass-permissions';
-const MODEL_STORAGE_KEY = 'beyond.model';
-
-/** Reads persisted allow rules: exact tool names + `mcp__server__*` prefixes. */
-function readAllowedTools(): string[] {
-  try {
-    const raw = localStorage.getItem(ALLOWED_TOOLS_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed) ? parsed.filter((v) => typeof v === 'string') : [];
-  } catch {
-    return [];
-  }
-}
-
-function persistAllowedTools(entries: string[]): void {
-  try {
-    localStorage.setItem(ALLOWED_TOOLS_STORAGE_KEY, JSON.stringify(entries));
-  } catch {
-    /* ignore */
-  }
-}
-
-/** Match an allow entry against an actual tool name. Supports exact match
- *  and trailing-`*` wildcards (e.g. `mcp__waha__*`). */
-function matchAllowEntry(entry: string, toolName: string): boolean {
-  if (entry === toolName) return true;
-  if (entry.endsWith('*')) return toolName.startsWith(entry.slice(0, -1));
-  return false;
-}
 
 type Props = {
   /** Selected client. Used for the header label and as a stable session key. */
@@ -196,12 +117,6 @@ type Props = {
    *  Only consulted on mount; bump the parent's epoch key to apply a new value. */
   sessionOverride?: { uuid: string | null };
 };
-
-const QUICK_ACTIONS = ['Action items', 'Brief', 'Sync'];
-
-function uid() {
-  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
-}
 
 export default function BeyondChat({ client, initialPrompt, sessionOverride }: Props) {
   const { sendMessage, latestMessage, isConnected, subscribeMessages } = useWebSocket();
@@ -304,12 +219,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
   // each turn. `used` is what's in Claude's context window right now —
   // re-sent every turn — not cumulative spend. `autoCompactThreshold` (if
   // provided) is where the SDK will auto-compact. Reset on session switch.
-  const [tokenBudget, setTokenBudget] = useState<{
-    used: number;
-    total: number;
-    autoCompactThreshold?: number | null;
-    isAutoCompactEnabled?: boolean;
-  } | null>(null);
+  const [tokenBudget, setTokenBudget] = useState<TokenBudget | null>(null);
 
   // Per-client sessions index — now server-backed (`/api/beyond/sessions/:slug`)
   // so PC1/PC2 share the same thread list with each client. Transcripts still
@@ -1513,7 +1423,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
 
         <AnimatePresence>
           {sessionsOpen && (
-            <BeyondSessionsMenu
+            <SessionsMenu
               sessions={sessions}
               activeUuid={sessionIdRef.current}
               onPick={switchToSession}
@@ -1555,12 +1465,13 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
               >
                 <BeyondBrainMark size={34} side={0.76} animate="pulse" />
                 <BeyondThinkingStates />
+                <BeyondLoader kind={loader} />
               </motion.div>
             )}
           </AnimatePresence>
 
           {askRequest && (
-            <BeyondAskPanel
+            <AskPanel
               request={askRequest}
               onAnswer={(answers) => {
                 sendMessage({
@@ -1586,7 +1497,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
           )}
 
           {permRequest && isWhatsAppSendTool(permRequest.toolName) ? (
-            <BeyondWhatsAppActionCard
+            <WhatsAppActionCard
               request={permRequest}
               onSend={(updatedInput) => {
                 respondPermission(permRequest.requestId, { allow: true, updatedInput });
@@ -1603,7 +1514,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
             />
           ) : (
             permRequest && (
-              <BeyondPermissionPanel request={permRequest} onDecision={handlePermDecision} />
+              <PermissionPanel request={permRequest} onDecision={handlePermDecision} />
             )
           )}
 
@@ -1735,7 +1646,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
 
       <AnimatePresence>
         {permsOpen && (
-          <BeyondPermissionsSheet
+          <PermissionsSheet
             entries={allowedTools}
             onRemove={removeAllow}
             onClose={() => setPermsOpen(false)}
@@ -1743,1169 +1654,5 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
         )}
       </AnimatePresence>
     </div>
-  );
-}
-
-function MessageBlock({ message, streaming = false }: { message: ChatMessage; streaming?: boolean }) {
-  const variants = {
-    hidden: { opacity: 0, y: 8 },
-    show: { opacity: 1, y: 0 },
-  };
-  // 100ms fade-up per VISION.md — subtle, not flashy.
-  const transition = { duration: 0.18, ease: 'easeOut' as const };
-
-  if (message.role === 'user') {
-    return (
-      <motion.div
-        initial="hidden"
-        animate="show"
-        variants={variants}
-        transition={transition}
-        className="bb-user"
-      >
-        <div className="bb-user__col">
-          <div className="bb-bubble min-w-0">
-            <p className="whitespace-pre-line break-words">{message.text}</p>
-          </div>
-        </div>
-      </motion.div>
-    );
-  }
-
-  if (message.kind === 'steps') {
-    return (
-      <motion.div
-        initial="hidden"
-        animate="show"
-        variants={variants}
-        transition={transition}
-      >
-        <StepList steps={message.steps} />
-      </motion.div>
-    );
-  }
-
-  return (
-    <motion.div
-      initial="hidden"
-      animate="show"
-      variants={variants}
-      transition={transition}
-      className="beyond-prose flex gap-2.5 min-w-0 break-words text-[15px] leading-relaxed text-beyond-ink [&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1 [&_li]:pl-1 [&_li>ul]:my-1 [&_li>ol]:my-1 [&_strong]:font-semibold [&_em]:italic [&_h1]:mb-2 [&_h1]:mt-4 [&_h1]:text-[18px] [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-[16px] [&_h2]:font-semibold [&_h3]:mb-1 [&_h3]:mt-3 [&_h3]:text-[15px] [&_h3]:font-semibold [&_h4]:mb-1 [&_h4]:mt-3 [&_h4]:text-[14px] [&_h4]:font-semibold [&_hr]:my-4 [&_hr]:border-0 [&_hr]:border-t [&_hr]:border-black/10 [&_blockquote]:my-3 [&_blockquote]:border-l-2 [&_blockquote]:border-black/15 [&_blockquote]:pl-3 [&_blockquote]:text-beyond-dim [&_thead]:bg-black/[0.025] [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:text-[12.5px] [&_th]:font-semibold [&_th]:text-beyond-dim [&_th]:whitespace-nowrap [&_td]:px-3 [&_td]:py-2 [&_td]:align-top [&_td]:border-t [&_td]:border-black/[0.06] [&_td]:text-[14px]"
-    >
-      <BeyondBrainMark size={42} animate="in" className="mt-[2px] shrink-0 text-beyond-dim" title="Beyond" />
-      <div className="min-w-0 flex-1">
-      {streaming ? (
-        <StreamingText text={message.text} />
-      ) : (
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkBeyondFilePaths]}
-        // react-markdown sanitises hrefs to a safe-protocol allowlist, which
-        // strips our custom `beyondfile:` scheme (→ empty href → navigates to
-        // the app root). Preserve our scheme; delegate everything else to the
-        // default sanitiser.
-        urlTransform={(url) =>
-          url.startsWith(BEYOND_FILE_SCHEME) ? url : defaultUrlTransform(url)
-        }
-        components={{
-          a: ({ href, children, ...rest }) => {
-            const filePath = parseBeyondFileHref(href);
-            if (filePath) {
-              // A bare file path the agent mentioned — open the preview sheet
-              // instead of navigating away.
-              return (
-                <button
-                  type="button"
-                  onClick={() =>
-                    window.dispatchEvent(
-                      new CustomEvent('beyond:open-file', { detail: { path: filePath } }),
-                    )
-                  }
-                  title={`Otevřít ${filePath}`}
-                  className="bb-fileref inline rounded px-1 py-0.5 font-mono text-[0.85em] underline underline-offset-2 transition-colors"
-                >
-                  {children}
-                </button>
-              );
-            }
-            return (
-              <a
-                {...rest}
-                href={href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-beyond-ink underline decoration-black/20 underline-offset-2 hover:decoration-black/50"
-              >
-                {children}
-              </a>
-            );
-          },
-          code: ({ className, children }) => {
-            const raw = String(children ?? '');
-            const isBlock = /\n/.test(raw);
-            if (isBlock) {
-              return <BeyondCodeBlock code={raw.replace(/\n$/, '')} className={className} />;
-            }
-            return (
-              <code className="bb-inlinecode rounded-md px-1.5 py-0.5 font-mono text-[0.9em]">
-                {children}
-              </code>
-            );
-          },
-          // GFM tables — wrap in a rounded, horizontally-scrollable card so wide
-          // tables never blow out the chat column.
-          table: ({ children }) => (
-            <div className="my-3 overflow-x-auto rounded-[12px] border border-black/[0.07]">
-              <table className="w-full border-collapse text-left">{children}</table>
-            </div>
-          ),
-        }}
-      >
-        {message.text}
-      </ReactMarkdown>
-      )}
-      </div>
-    </motion.div>
-  );
-}
-
-function StepList({ steps }: { steps: ToolStep[] }) {
-  return (
-    <div className="relative flex flex-col gap-2">
-      {steps.map((step, idx) => (
-        <StepRow key={step.id} step={step} isLast={idx === steps.length - 1} />
-      ))}
-    </div>
-  );
-}
-
-function StepRow({ step, isLast }: { step: ToolStep; isLast: boolean }) {
-  const [expanded, setExpanded] = useState(false);
-  const { label, detail } = describeTool(step.name, step.input);
-  const Icon = iconForTool(step.name);
-  const expandable = Boolean(step.output) || Boolean(step.input);
-
-  return (
-    <div className="relative flex gap-3">
-      {/* Vertical connector — drawn through the icon column. */}
-      {!isLast && (
-        <span
-          aria-hidden
-          className="bb-step-line absolute left-[11px] top-7 h-[calc(100%-12px)] w-px"
-        />
-      )}
-
-      {/* Icon badge */}
-      <div className="bb-step-badge relative z-10 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md text-beyond-dim">
-        <Icon className="h-[14px] w-[14px]" strokeWidth={1.8} />
-      </div>
-
-      {/* Content */}
-      <div className="min-w-0 flex-1 pt-0.5">
-        <button
-          type="button"
-          onClick={() => expandable && setExpanded((v) => !v)}
-          className={`group flex w-full items-center gap-1.5 text-left text-[14px] ${expandable ? 'cursor-pointer' : 'cursor-default'}`}
-        >
-          <span className="font-medium text-beyond-ink">{label}</span>
-          {detail && (
-            <span className="truncate text-beyond-faint">{detail}</span>
-          )}
-          {step.status === 'running' && (
-            <span className="beyond-dot ml-1" aria-hidden />
-          )}
-          {expandable && (
-            <ChevronRight
-              className={`ml-auto h-[14px] w-[14px] flex-shrink-0 text-beyond-faint transition-transform ${expanded ? 'rotate-90' : ''}`}
-              strokeWidth={1.8}
-            />
-          )}
-        </button>
-
-        <AnimatePresence initial={false}>
-          {expanded && expandable && (
-            <motion.div
-              key="expand"
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.18, ease: 'easeOut' }}
-              className="overflow-hidden"
-            >
-              <div className="mt-2 space-y-2">
-                {step.input != null && (
-                  <PreBlock label="Vstup" content={formatInput(step.input)} />
-                )}
-                {step.output && (
-                  <PreBlock
-                    label={step.isError ? 'Chyba' : 'Výstup'}
-                    content={step.output}
-                    tone={step.isError ? 'error' : 'default'}
-                  />
-                )}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-    </div>
-  );
-}
-
-function PreBlock({
-  label,
-  content,
-  tone = 'default',
-}: {
-  label: string;
-  content: string;
-  tone?: 'default' | 'error';
-}) {
-  return (
-    <div>
-      <p className="mb-1 text-[11px] uppercase tracking-wide text-beyond-faint">{label}</p>
-      <pre
-        className={`max-h-[260px] overflow-auto whitespace-pre-wrap break-words rounded-[10px] px-3 py-2 font-mono text-[12px] leading-relaxed ${tone === 'error' ? 'bb-pre--error' : 'bb-pre'}`}
-      >
-        {content}
-      </pre>
-    </div>
-  );
-}
-
-function describeTool(name: string, input: unknown): { label: string; detail: string } {
-  const inp = (input && typeof input === 'object' ? (input as Record<string, unknown>) : {}) || {};
-  const path = typeof inp.file_path === 'string' ? inp.file_path : typeof inp.path === 'string' ? inp.path : '';
-  const command = typeof inp.command === 'string' ? inp.command : '';
-  const pattern = typeof inp.pattern === 'string' ? inp.pattern : '';
-  const url = typeof inp.url === 'string' ? inp.url : '';
-  const query = typeof inp.query === 'string' ? inp.query : '';
-
-  switch (name) {
-    case 'Read':
-      return { label: 'Read', detail: shortenPath(path) };
-    case 'Write':
-      return { label: 'Write', detail: shortenPath(path) };
-    case 'Edit':
-    case 'MultiEdit':
-      return { label: 'Edit', detail: shortenPath(path) };
-    case 'Bash':
-      return { label: 'Bash', detail: command.split('\n')[0].slice(0, 80) };
-    case 'Grep':
-      return { label: 'Grep', detail: pattern };
-    case 'Glob':
-      return { label: 'Glob', detail: pattern };
-    case 'WebFetch':
-      return { label: 'WebFetch', detail: url };
-    case 'WebSearch':
-      return { label: 'WebSearch', detail: query };
-    default:
-      return { label: name, detail: '' };
-  }
-}
-
-function iconForTool(name: string) {
-  if (name === 'Read') return FileText;
-  if (name === 'Write' || name === 'Edit' || name === 'MultiEdit') return FilePen;
-  if (name === 'Bash') return Terminal;
-  if (name === 'Grep' || name === 'Glob') return Search;
-  if (name === 'WebFetch' || name === 'WebSearch') return Globe;
-  if (name === 'AskUserQuestion') return MessageCircle;
-  return Wrench;
-}
-
-function formatInput(input: unknown): string {
-  if (typeof input === 'string') return input;
-  try {
-    return JSON.stringify(input, null, 2);
-  } catch {
-    return String(input);
-  }
-}
-
-function quickPrompt(label: string, clientName: string): string {
-  switch (label) {
-    case 'Action items':
-      return `Ukaž otevřené action items u ${clientName}.`;
-    case 'Brief':
-      return `Připrav krátký brief na další call s ${clientName}.`;
-    case 'Sync':
-      return `Spusť sync ${clientName} z Notion do brainu.`;
-    default:
-      return label;
-  }
-}
-
-/* ------------------------------------------------------------------ */
-/* defensive helpers for variable-shape backend payloads               */
-/* ------------------------------------------------------------------ */
-
-function appendAssistantTextById(
-  setMessages: Dispatch<SetStateAction<ChatMessage[]>>,
-  id: string,
-  text: string,
-): void {
-  setMessages((prev) => {
-    const last = prev[prev.length - 1];
-    // Append into the streaming bubble (matched by its stable id) so the caller
-    // can key the word-by-word cross-blur render off that same id. A tool-step
-    // block resets the id upstream, so a fresh bubble appears below the steps.
-    if (last && last.id === id && last.role === 'assistant' && last.kind === 'text') {
-      return [...prev.slice(0, -1), { ...last, text: last.text + text }];
-    }
-    return [...prev, { id, role: 'assistant', kind: 'text', text }];
-  });
-}
-
-/** Turn a sequence of stored NormalizedMessages into our local ChatMessage[]. */
-function rebuildHistory(raw: unknown[]): ChatMessage[] {
-  const out: ChatMessage[] = [];
-  for (const entry of raw) {
-    if (!entry || typeof entry !== 'object') continue;
-    const m = entry as Record<string, unknown>;
-    const kind = String(m.kind ?? '');
-    const role = (m.role as string | undefined) || undefined;
-    const content = (m.content as string | undefined) || '';
-
-    if (kind === 'text' && role === 'user' && content) {
-      out.push({ id: uid(), role: 'user', kind: 'text', text: content });
-    } else if (kind === 'text' && role === 'assistant' && content) {
-      out.push({ id: uid(), role: 'assistant', kind: 'text', text: content });
-    } else if (kind === 'tool_use' && m.toolName) {
-      const toolResult = m.toolResult as
-        | { content?: string; isError?: boolean }
-        | undefined;
-      const step: ToolStep = {
-        id: uid(),
-        toolId: String(m.toolId ?? uid()),
-        name: String(m.toolName),
-        input: m.toolInput,
-        output: toolResult?.content,
-        isError: toolResult?.isError,
-        status: toolResult ? (toolResult.isError ? 'error' : 'done') : 'done',
-      };
-      const last = out[out.length - 1];
-      if (last && last.role === 'assistant' && last.kind === 'steps') {
-        out[out.length - 1] = { ...last, steps: [...last.steps, step] };
-      } else {
-        out.push({ id: uid(), role: 'assistant', kind: 'steps', steps: [step] });
-      }
-    }
-  }
-  return out;
-}
-
-function appendStep(prev: ChatMessage[], step: ToolStep): ChatMessage[] {
-  const last = prev[prev.length - 1];
-  if (last && last.role === 'assistant' && last.kind === 'steps') {
-    return [...prev.slice(0, -1), { ...last, steps: [...last.steps, step] }];
-  }
-  return [...prev, { id: uid(), role: 'assistant', kind: 'steps', steps: [step] }];
-}
-
-function updateStep(
-  prev: ChatMessage[],
-  toolId: string,
-  output: string,
-  isError: boolean,
-): ChatMessage[] {
-  return prev.map((msg) => {
-    if (msg.role !== 'assistant' || msg.kind !== 'steps') return msg;
-    let touched = false;
-    const nextSteps = msg.steps.map((s) => {
-      if (s.toolId !== toolId) return s;
-      touched = true;
-      return { ...s, output, isError, status: isError ? ('error' as const) : ('done' as const) };
-    });
-    return touched ? { ...msg, steps: nextSteps } : msg;
-  });
-}
-
-function shortenPath(p?: string): string {
-  if (!p) return '';
-  const parts = p.split('/');
-  return parts.slice(-2).join('/');
-}
-
-/** Compact context-usage chip in the composer footer. Shows the live size of
- *  Claude's current context window (re-sent every turn), not cumulative spend.
- *  Color thresholds key off the SDK's `autoCompactThreshold` when available so
- *  the user sees red exactly when auto-compact is about to fire. */
-/** Compact dropdown to pick the Anthropic model used for this chat. Options
- *  carry version-bearing names pulled from the installed Claude Code. */
-function ModelPicker({
-  value,
-  options,
-  onChange,
-}: {
-  value: string;
-  options: BeyondModelOption[];
-  onChange: (next: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    window.addEventListener('mousedown', onDoc);
-    return () => window.removeEventListener('mousedown', onDoc);
-  }, [open]);
-
-  const current = options.find((o) => o.value === value);
-  const chipLabel = current?.short || value;
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        title="Vybrat Claude model"
-        aria-expanded={open}
-        className="bb-modelbtn"
-      >
-        <Sparkles className="h-[13px] w-[13px]" strokeWidth={1.8} style={{ color: 'var(--bb-ink2)' }} />
-        {chipLabel}
-        <ChevronDown
-          className={`h-[13px] w-[13px] transition-transform ${open ? 'rotate-180' : ''}`}
-          strokeWidth={1.8}
-          style={{ color: 'var(--bb-ink2)' }}
-        />
-      </button>
-      {open && (
-        <div
-          className="bb-glass absolute bottom-full right-0 z-20 mb-2 max-h-[280px] min-w-[240px] overflow-y-auto rounded-[14px] p-1.5"
-          style={{ boxShadow: 'var(--bb-shadow-pop), inset 0 1px 0 0 var(--bb-rim)' }}
-        >
-          {options.map((o) => (
-            <button
-              key={o.value}
-              type="button"
-              onClick={() => {
-                onChange(o.value);
-                setOpen(false);
-              }}
-              className="flex w-full items-start justify-between gap-3 rounded-[10px] px-2.5 py-2 text-left transition-colors hover:bg-[var(--bb-panel2)]"
-              style={o.value === value ? { background: 'var(--bb-accent-soft)' } : undefined}
-            >
-              <span className="min-w-0">
-                <span
-                  className={`block text-[12.5px] ${
-                    o.value === value ? 'font-medium text-beyond-ink' : 'text-beyond-ink'
-                  }`}
-                >
-                  {o.short}
-                </span>
-                {o.description && (
-                  <span className="block truncate text-[11px] text-beyond-faint">
-                    {o.description}
-                  </span>
-                )}
-              </span>
-              {o.value === value && (
-                <Check className="mt-0.5 h-[13px] w-[13px] flex-shrink-0 text-beyond-ink" strokeWidth={2} />
-              )}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TokenBudgetChip({
-  budget,
-}: {
-  budget: {
-    used: number;
-    total: number;
-    autoCompactThreshold?: number | null;
-    isAutoCompactEnabled?: boolean;
-  } | null;
-}) {
-  // Always render — user wants the chip visible from the moment the chat opens,
-  // even before the first turn (or before a resumed session's backfill arrives).
-  if (!budget || budget.total <= 0) {
-    return (
-      <div
-        className="flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] text-beyond-faint"
-        title="Kontext zatím prázdný — počká na první odpověď"
-      >
-        <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-neutral-300" aria-hidden />
-        <span>—</span>
-      </div>
-    );
-  }
-  const pct = Math.min(100, (budget.used / budget.total) * 100);
-  // If the SDK gave us a real auto-compact threshold use it; otherwise pick
-  // sensible defaults (50 % blue, 75 % amber, beyond red).
-  const compactPct = budget.autoCompactThreshold
-    ? (budget.autoCompactThreshold / budget.total) * 100
-    : null;
-  const color = compactPct
-    ? pct < compactPct * 0.7
-      ? 'bg-blue-500'
-      : pct < compactPct
-        ? 'bg-amber-500'
-        : 'bg-red-500'
-    : pct < 50
-      ? 'bg-blue-500'
-      : pct < 75
-        ? 'bg-amber-500'
-        : 'bg-red-500';
-  const usedK = budget.used >= 1000 ? `${(budget.used / 1000).toFixed(1)}k` : `${budget.used}`;
-  // Render very large totals (Opus 4.7's 1M window) as "1M" instead of "1000k".
-  const totalK = budget.total >= 1_000_000
-    ? `${(budget.total / 1_000_000).toFixed(budget.total % 1_000_000 === 0 ? 0 : 1)}M`
-    : `${Math.round(budget.total / 1000)}k`;
-  const tooltipLines = [
-    `${budget.used.toLocaleString()} / ${budget.total.toLocaleString()} tokenů v kontextu`,
-  ];
-  if (budget.autoCompactThreshold) {
-    tooltipLines.push(`Auto-compact při ${budget.autoCompactThreshold.toLocaleString()} tokenech`);
-  }
-  if (budget.isAutoCompactEnabled === false) {
-    tooltipLines.push('Auto-compact je vypnutý');
-  }
-  return (
-    <div
-      className="flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] text-beyond-faint"
-      title={tooltipLines.join('\n')}
-    >
-      <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${color}`} aria-hidden />
-      <span>{pct.toFixed(0)} % · {usedK} / {totalK}</span>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* AskUserQuestion — interactive panel in Beyond style                 */
-/* ------------------------------------------------------------------ */
-
-function BeyondAskPanel({
-  request,
-  onAnswer,
-  onSkip,
-}: {
-  request: AskRequest;
-  onAnswer: (answers: Record<string, string>) => void;
-  onSkip: () => void;
-}) {
-  const questions = request.input.questions || [];
-  const [selections, setSelections] = useState<Record<number, Set<string>>>({});
-  const [customAnswers, setCustomAnswers] = useState<Record<number, string>>({});
-
-  if (questions.length === 0) return null;
-
-  const toggle = (qIdx: number, label: string, multi: boolean) => {
-    setSelections((prev) => {
-      const current = new Set(prev[qIdx] || []);
-      if (multi) {
-        if (current.has(label)) current.delete(label);
-        else current.add(label);
-      } else {
-        current.clear();
-        current.add(label);
-      }
-      return { ...prev, [qIdx]: current };
-    });
-  };
-
-  const setCustom = (qIdx: number, value: string) => {
-    setCustomAnswers((prev) => ({ ...prev, [qIdx]: value }));
-  };
-
-  // Submittable when, for every question, the user has either picked an
-  // option or typed a custom answer (or both — they're combined on submit).
-  const canSubmit = questions.every((_, idx) => {
-    const hasPick = (selections[idx]?.size ?? 0) > 0;
-    const hasCustom = (customAnswers[idx] || '').trim().length > 0;
-    return hasPick || hasCustom;
-  });
-
-  const submit = () => {
-    const answers: Record<string, string> = {};
-    questions.forEach((q, idx) => {
-      const picks = Array.from(selections[idx] || []);
-      const custom = (customAnswers[idx] || '').trim();
-      // Merge picks + custom into a single answer string the agent can read.
-      // Mirrors how Claude Code's CLI surfaces the "Other" answer: the custom
-      // free-text is the source of truth when present, optionally annotated
-      // with which preset options the user also flagged.
-      let value = '';
-      if (picks.length > 0 && custom) {
-        value = `${picks.join(', ')} — ${custom}`;
-      } else if (picks.length > 0) {
-        value = picks.join(', ');
-      } else if (custom) {
-        value = custom;
-      }
-      if (value) answers[q.question] = value;
-    });
-    onAnswer(answers);
-  };
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.22, ease: 'easeOut' }}
-      className="bb-card overflow-hidden rounded-2xl"
-    >
-      <div className="bb-vdivide flex flex-col">
-        {questions.map((q, qIdx) => {
-          const multi = Boolean(q.multiSelect);
-          const selected = selections[qIdx] || new Set<string>();
-          return (
-            <div key={qIdx} className="px-5 py-4">
-              <div className="mb-3 flex items-center gap-2">
-                {q.header && (
-                  <span className="bb-chip rounded-full px-2 py-0.5 text-[11px] uppercase tracking-wide">
-                    {q.header}
-                  </span>
-                )}
-                {multi && (
-                  <span className="text-[11px] text-beyond-faint">Více možností</span>
-                )}
-              </div>
-              <p className="mb-3 text-[15px] font-medium leading-snug text-beyond-ink">
-                {q.question}
-              </p>
-              <div className="flex flex-col gap-1.5">
-                {q.options.map((opt) => {
-                  const isOn = selected.has(opt.label);
-                  return (
-                    <button
-                      key={opt.label}
-                      type="button"
-                      onClick={() => toggle(qIdx, opt.label, multi)}
-                      data-on={isOn ? 'true' : 'false'}
-                      className="bb-optcard group flex w-full items-start gap-3 rounded-[14px] px-3.5 py-2.5 text-left"
-                    >
-                      <span
-                        data-on={isOn ? 'true' : 'false'}
-                        className="bb-radio mt-1 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full transition-colors"
-                      >
-                        {isOn && <span className="bb-radio__dot h-1.5 w-1.5 rounded-full" />}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-[14px] font-medium leading-tight text-beyond-ink">
-                          {opt.label}
-                        </span>
-                        {opt.description && (
-                          <span className="mt-0.5 block text-[12px] leading-snug text-beyond-faint">
-                            {opt.description}
-                          </span>
-                        )}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="mt-2.5">
-                <label className="mb-1 block text-[11px] uppercase tracking-wide text-beyond-faint">
-                  {selected.size > 0 ? 'Doplnit vlastními slovy' : 'Nebo napsat vlastní odpověď'}
-                </label>
-                <textarea
-                  value={customAnswers[qIdx] || ''}
-                  onChange={(e) => setCustom(qIdx, e.target.value)}
-                  onKeyDown={(e) => {
-                    // Cmd/Ctrl+Enter from inside the textarea submits the whole
-                    // panel — same shortcut as the main chat composer.
-                    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && canSubmit) {
-                      e.preventDefault();
-                      submit();
-                    }
-                  }}
-                  placeholder="Napiš odpověď přesně tak, jak ji chceš…"
-                  rows={2}
-                  className="bb-field w-full resize-y rounded-[14px] px-3.5 py-2.5 text-[14px] leading-snug"
-                />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="flex items-center justify-end gap-2 bb-card__foot px-5 py-3">
-        <button
-          type="button"
-          onClick={onSkip}
-          className="rounded-full px-3 py-1.5 text-[12px] bb-btn-ghost transition-colors"
-        >
-          Přeskočit
-        </button>
-        <button
-          type="button"
-          onClick={submit}
-          disabled={!canSubmit}
-          className="bb-btn-primary rounded-full px-4 py-1.5 text-[12px] font-medium"
-        >
-          Odeslat
-        </button>
-      </div>
-    </motion.div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Generic permission request — Allow / Always / Deny                 */
-/* ------------------------------------------------------------------ */
-
-function BeyondPermissionPanel({
-  request,
-  onDecision,
-}: {
-  request: PermRequest;
-  onDecision: (
-    decision:
-      | { kind: 'allow-once' }
-      | { kind: 'always-allow'; entry: string }
-      | { kind: 'deny' },
-  ) => void;
-}) {
-  const { toolName, input } = request;
-  const { label, detail } = describeTool(toolName, input);
-  const Icon = iconForTool(toolName);
-
-  // Suggest a sensible "always allow" scope. For MCP tools we offer the whole
-  // server (`mcp__server__*`), otherwise just the exact tool name.
-  const mcpMatch = toolName.match(/^mcp__([^_]+)__/);
-  const alwaysScope = mcpMatch ? `mcp__${mcpMatch[1]}__*` : toolName;
-  const alwaysScopeLabel = mcpMatch ? `všechny ${mcpMatch[1]} tooly` : toolName;
-
-  const inputPreview = (() => {
-    if (input == null) return '';
-    if (typeof input === 'string') return input;
-    try {
-      return JSON.stringify(input, null, 2);
-    } catch {
-      return String(input);
-    }
-  })();
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.22, ease: 'easeOut' }}
-      className="bb-card overflow-hidden rounded-2xl"
-    >
-      <div className="px-5 py-4">
-        <div className="mb-3 flex items-center gap-2">
-          <span className="bb-chip rounded-full px-2 py-0.5 text-[11px] uppercase tracking-wide">
-            Povolení
-          </span>
-          <span className="text-[11px] text-beyond-faint">Agent chce použít nástroj</span>
-        </div>
-
-        <div className="mb-3 flex items-center gap-2.5">
-          <div className="bb-step-badge flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-beyond-dim">
-            <Icon className="h-[15px] w-[15px]" strokeWidth={1.8} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[14px] font-medium text-beyond-ink">{label}</p>
-            {detail && (
-              <p className="truncate text-[12px] text-beyond-faint">{detail}</p>
-            )}
-          </div>
-        </div>
-
-        {inputPreview && (
-          <details className="mb-1 text-[12px] text-beyond-faint">
-            <summary className="cursor-pointer select-none text-beyond-dim hover:text-beyond-ink">
-              Detaily volání
-            </summary>
-            <pre className="bb-pre mt-2 max-h-[200px] overflow-auto whitespace-pre-wrap break-words rounded-[10px] px-3 py-2 font-mono text-[11px] leading-relaxed">
-              {inputPreview}
-            </pre>
-          </details>
-        )}
-      </div>
-
-      <div className="flex flex-wrap items-center justify-end gap-2 bb-card__foot px-5 py-3">
-        <button
-          type="button"
-          onClick={() => onDecision({ kind: 'deny' })}
-          className="rounded-full px-3 py-1.5 text-[12px] bb-btn-ghost transition-colors"
-        >
-          Odmítnout
-        </button>
-        <button
-          type="button"
-          onClick={() => onDecision({ kind: 'allow-once' })}
-          className="bb-btn-soft rounded-full px-3.5 py-1.5 text-[12px] font-medium"
-        >
-          Jednou
-        </button>
-        <button
-          type="button"
-          onClick={() => onDecision({ kind: 'always-allow', entry: alwaysScope })}
-          className="bb-btn-primary rounded-full px-3.5 py-1.5 text-[12px] font-medium"
-          title={`Při dalším volání automaticky povolit ${alwaysScopeLabel}`}
-        >
-          Vždy povolit {mcpMatch ? `(${alwaysScopeLabel})` : ''}
-        </button>
-      </div>
-    </motion.div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Permissions sheet — list + revoke saved allowlist entries          */
-/* ------------------------------------------------------------------ */
-
-function BeyondPermissionsSheet({
-  entries,
-  onRemove,
-  onClose,
-}: {
-  entries: string[];
-  onRemove: (entry: string) => void;
-  onClose: () => void;
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.18 }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4 backdrop-blur-[2px]"
-      onClick={onClose}
-    >
-      <motion.div
-        initial={{ opacity: 0, y: 12, scale: 0.98 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: 12, scale: 0.98 }}
-        transition={{ duration: 0.22, ease: 'easeOut' }}
-        className="bb-card w-full max-w-[480px] overflow-hidden rounded-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="px-5 py-4" style={{ borderBottom: '1px solid var(--bb-line2)' }}>
-          <h3 className="text-[15px] font-medium text-beyond-ink">Povolené nástroje</h3>
-          <p className="mt-0.5 text-[12px] text-beyond-faint">
-            Agent může používat tyto nástroje bez ptaní. Hvězdička (`*`) značí celý MCP server.
-          </p>
-        </div>
-
-        <div className="max-h-[360px] overflow-y-auto px-3 py-2">
-          {entries.length === 0 ? (
-            <p className="px-3 py-6 text-center text-[13px] text-beyond-faint">
-              Žádné uložené povolení. Když agent zažádá o nástroj, vyber „Vždy povolit".
-            </p>
-          ) : (
-            <ul className="flex flex-col gap-1">
-              {entries.map((entry) => (
-                <li
-                  key={entry}
-                  className="group flex items-center gap-2 rounded-[12px] px-3 py-2 hover:bg-black/[0.03]"
-                >
-                  <code className="flex-1 truncate font-mono text-[12.5px] text-beyond-ink">
-                    {entry}
-                  </code>
-                  <button
-                    type="button"
-                    onClick={() => onRemove(entry)}
-                    title="Odebrat"
-                    className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint opacity-0 transition-all hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
-                  >
-                    <Trash2 className="h-[14px] w-[14px]" strokeWidth={1.8} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div className="bb-card__foot flex items-center justify-end gap-2 px-5 py-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="bb-btn-soft rounded-full px-3.5 py-1.5 text-[12px] font-medium"
-          >
-            Hotovo
-          </button>
-        </div>
-      </motion.div>
-    </motion.div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Composer attachment chip                                            */
-/* ------------------------------------------------------------------ */
-
-function AttachmentChip({
-  attachment,
-  onRemove,
-}: {
-  attachment: PendingAttachment;
-  onRemove: () => void;
-}) {
-  const kb = Math.max(1, Math.round(attachment.size / 1024));
-  if (attachment.kind === 'image') {
-    return (
-      <div className="group relative flex items-center gap-2 rounded-xl bg-black/[0.04] py-1 pl-1 pr-2">
-        <img
-          src={attachment.data}
-          alt={attachment.name}
-          className="h-9 w-9 flex-shrink-0 rounded-lg object-cover"
-        />
-        <div className="min-w-0">
-          <p className="truncate text-[12px] font-medium text-beyond-ink">{attachment.name}</p>
-          <p className="text-[10px] text-beyond-faint">{kb} kB</p>
-        </div>
-        <button
-          type="button"
-          onClick={onRemove}
-          className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-black/[0.08] hover:text-beyond-ink"
-          aria-label="Odebrat"
-        >
-          <X className="h-[12px] w-[12px]" strokeWidth={2} />
-        </button>
-      </div>
-    );
-  }
-  return (
-    <div className="group relative flex items-center gap-2 rounded-xl bg-black/[0.04] px-2 py-1.5">
-      <FileIcon
-        className="h-[14px] w-[14px] flex-shrink-0 text-beyond-faint"
-        strokeWidth={1.8}
-      />
-      <div className="min-w-0">
-        <p className="truncate text-[12px] font-medium text-beyond-ink">{attachment.name}</p>
-        <p className="text-[10px] text-beyond-faint">{kb} kB · text</p>
-      </div>
-      <button
-        type="button"
-        onClick={onRemove}
-        className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-black/[0.08] hover:text-beyond-ink"
-        aria-label="Odebrat"
-      >
-        <X className="h-[12px] w-[12px]" strokeWidth={2} />
-      </button>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* WhatsApp send action card — preview + edit + send                  */
-/* ------------------------------------------------------------------ */
-
-function isWhatsAppSendTool(name: string): boolean {
-  return (
-    name === 'mcp__waha__send-text' ||
-    name === 'mcp__waha__send-image' ||
-    name === 'mcp__waha__send-file'
-  );
-}
-
-function BeyondWhatsAppActionCard({
-  request,
-  onSend,
-  onCancel,
-}: {
-  request: PermRequest;
-  onSend: (updatedInput: Record<string, unknown>) => void;
-  onCancel: () => void;
-}) {
-  const original = (request.input || {}) as Record<string, unknown>;
-  const chatId = typeof original.chatId === 'string' ? original.chatId : '';
-  const isText = request.toolName === 'mcp__waha__send-text';
-  const initialText = typeof original.text === 'string'
-    ? original.text
-    : typeof original.caption === 'string'
-      ? original.caption
-      : '';
-
-  const [editing, setEditing] = useState(false);
-  const [text, setText] = useState(initialText);
-
-  const chatLabel = chatId
-    ? chatId.replace(/@c\.us$/, '').replace(/@g\.us$/, ' (skupina)')
-    : 'WhatsApp';
-
-  const handleSend = () => {
-    const updated: Record<string, unknown> = { ...original };
-    if (isText) updated.text = text;
-    else if ('caption' in original) updated.caption = text;
-    onSend(updated);
-  };
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.22, ease: 'easeOut' }}
-      className="bb-card overflow-hidden rounded-2xl"
-    >
-      <div className="flex items-center gap-2 border-b border-emerald-100 bg-emerald-50/60 px-5 py-3">
-        <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-700">
-          <MessageCircle className="h-[15px] w-[15px]" strokeWidth={1.9} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-[12px] font-medium uppercase tracking-wide text-emerald-700">
-            WhatsApp · {isText ? 'zpráva' : request.toolName.replace('mcp__waha__send-', '')}
-          </p>
-          <p className="truncate text-[12px] text-beyond-faint">
-            Pro: <span className="text-beyond-dim">{chatLabel}</span>
-          </p>
-        </div>
-      </div>
-
-      <div className="px-5 py-4">
-        {editing ? (
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            rows={Math.max(3, text.split('\n').length)}
-            className="bb-field w-full resize-none rounded-[14px] px-3 py-2 text-[14px] leading-relaxed"
-            autoFocus
-          />
-        ) : (
-          <div className="rounded-[18px] rounded-bl-[6px] bg-emerald-50 px-4 py-3">
-            <p className="whitespace-pre-line text-[14px] leading-relaxed text-beyond-ink">
-              {text || <span className="italic text-beyond-faint">(prázdné)</span>}
-            </p>
-          </div>
-        )}
-      </div>
-
-      <div className="flex items-center justify-end gap-2 bb-card__foot px-5 py-3">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="rounded-full px-3 py-1.5 text-[12px] bb-btn-ghost transition-colors"
-        >
-          Zrušit
-        </button>
-        <button
-          type="button"
-          onClick={() => setEditing((v) => !v)}
-          className="bb-btn-soft rounded-full px-3.5 py-1.5 text-[12px] font-medium"
-        >
-          {editing ? 'Hotovo' : 'Upravit'}
-        </button>
-        <button
-          type="button"
-          onClick={handleSend}
-          disabled={!text.trim()}
-          className="rounded-full bg-emerald-500 px-4 py-1.5 text-[12px] font-medium text-white shadow-[0_2px_8px_-2px_rgba(16,185,129,0.4)] transition-all hover:bg-emerald-600 hover:shadow-[0_4px_12px_-2px_rgba(16,185,129,0.5)] disabled:bg-black/[0.08] disabled:text-black/30 disabled:shadow-none"
-        >
-          Odeslat
-        </button>
-      </div>
-    </motion.div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Per-client sessions dropdown                                        */
-/* ------------------------------------------------------------------ */
-
-function BeyondSessionsMenu({
-  sessions,
-  activeUuid,
-  onPick,
-  onDelete,
-  onNew,
-  onClose,
-}: {
-  sessions: BeyondSession[];
-  activeUuid: string | null;
-  onPick: (uuid: string) => void;
-  onDelete: (uuid: string) => void;
-  onNew: () => void;
-  onClose: () => void;
-}) {
-  return (
-    <>
-      <div
-        className="fixed inset-0 z-30"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-      <motion.div
-        initial={{ opacity: 0, y: -4, scale: 0.98 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: -4, scale: 0.98 }}
-        transition={{ duration: 0.16, ease: 'easeOut' }}
-        className="bb-glass absolute left-3 right-3 top-full z-40 mt-2 overflow-hidden rounded-2xl"
-        style={{ boxShadow: 'var(--bb-shadow-pop), inset 0 1px 0 0 var(--bb-rim)' }}
-      >
-        <button
-          type="button"
-          onClick={onNew}
-          className="flex w-full items-center gap-2.5 px-4 py-3 text-left transition-colors hover:bg-[var(--bb-panel2)]"
-        >
-          <div className="flex h-7 w-7 items-center justify-center rounded-full" style={{ background: 'var(--bb-accent)', color: 'var(--bb-on-accent)' }}>
-            <Plus className="h-[14px] w-[14px]" strokeWidth={2} />
-          </div>
-          <span className="text-[13px] font-medium text-beyond-ink">Nový chat</span>
-        </button>
-
-        <div className="max-h-[60vh] overflow-y-auto" style={{ borderTop: '1px solid var(--bb-line2)' }}>
-          {sessions.length === 0 ? (
-            <p className="px-4 py-4 text-[12px] text-beyond-faint">
-              Žádné dřívější chaty.
-            </p>
-          ) : (
-            <div className="flex flex-col py-1">
-              <p className="px-4 py-1.5 text-[10px] uppercase tracking-wider text-beyond-faint">
-                Historie ({sessions.length})
-              </p>
-              {sessions.map((s) => {
-                const active = s.uuid === activeUuid;
-                return (
-                  <div
-                    key={s.uuid}
-                    className={`group flex items-start gap-2 px-3 py-2 transition-colors ${active ? 'bg-black/[0.03]' : 'hover:bg-black/[0.025]'}`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => onPick(s.uuid)}
-                      className="flex min-w-0 flex-1 items-start gap-2 text-left"
-                    >
-                      <div className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center text-beyond-faint">
-                        {active ? (
-                          <Check className="h-[12px] w-[12px] text-beyond-ink" strokeWidth={2.2} />
-                        ) : (
-                          <MessagesSquare className="h-[12px] w-[12px]" strokeWidth={1.8} />
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p
-                          className={`truncate text-[13px] leading-tight ${active ? 'font-medium text-beyond-ink' : 'text-beyond-dim'}`}
-                        >
-                          {s.title}
-                        </p>
-                        <p className="mt-0.5 text-[10px] text-beyond-faint">
-                          {relativeTime(s.lastUsedAt)}
-                        </p>
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (window.confirm(`Smazat chat „${s.title}" z indexu?\n(transkript na disku zůstane.)`)) {
-                          onDelete(s.uuid);
-                        }
-                      }}
-                      title="Odebrat z indexu"
-                      className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint opacity-0 transition-all hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
-                    >
-                      <Trash2 className="h-[12px] w-[12px]" strokeWidth={1.8} />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </motion.div>
-    </>
   );
 }
