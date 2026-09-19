@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-  Search, Plus, Check, MessagesSquare, Trash2, Home, Plug,
+  Search, Plus, Check, MessagesSquare, Trash2, Plug,
   PanelLeftClose, Settings, Sun, Moon,
+  Gauge, Users, CalendarDays, MessageSquare,
 } from 'lucide-react';
 import { initialsFor } from './BeyondGlyph';
 import BeyondBrainMark from './BeyondBrainMark';
@@ -34,9 +35,13 @@ const FALLBACK_CLIENTS: Client[] = [
 
 type Props = {
   selectedSlug?: string | null;
+  /** Which surface is open: velin | board | client | calls | chat. */
+  section?: string;
   onSelectClient?: (slug: string) => void;
   onOpenSettings?: () => void;
   onGoHome?: () => void;
+  onOpenBoard?: () => void;
+  onOpenCalls?: () => void;
   onOpenUniversalChat?: () => void;
   onSwitchUniversalSession?: (uuid: string) => void;
   /** Collapse the sidebar (rendered as a button in the head). */
@@ -45,9 +50,12 @@ type Props = {
 
 export default function BeyondSidebarPreview({
   selectedSlug,
+  section,
   onSelectClient,
   onOpenSettings,
   onGoHome,
+  onOpenBoard,
+  onOpenCalls,
   onOpenUniversalChat,
   onSwitchUniversalSession,
   onCollapse,
@@ -128,17 +136,58 @@ export default function BeyondSidebarPreview({
 
       {/* Body — scrolling */}
       <nav className="bb-side__body">
+        {/* Primary surfaces. The velín is home; the chat is one item among
+            them rather than the whole app. */}
         {onGoHome && (
           <button
             type="button"
             className="bb-row"
-            aria-current={!selectedSlug ? 'true' : undefined}
+            aria-current={section === 'velin' ? 'true' : undefined}
             onClick={onGoHome}
           >
             <span className="bb-avatar" style={{ background: 'transparent', boxShadow: 'none' }}>
-              <Home size={15} strokeWidth={1.8} style={{ color: 'var(--bb-ink2)' }} />
+              <Gauge size={15} strokeWidth={1.8} style={{ color: 'var(--bb-ink2)' }} />
             </span>
-            <span className="bb-row__label">Domů</span>
+            <span className="bb-row__label">Velín</span>
+          </button>
+        )}
+        {onOpenBoard && (
+          <button
+            type="button"
+            className="bb-row"
+            aria-current={section === 'board' || section === 'client' ? 'true' : undefined}
+            onClick={onOpenBoard}
+          >
+            <span className="bb-avatar" style={{ background: 'transparent', boxShadow: 'none' }}>
+              <Users size={15} strokeWidth={1.8} style={{ color: 'var(--bb-ink2)' }} />
+            </span>
+            <span className="bb-row__label">Klienti</span>
+          </button>
+        )}
+        {onOpenCalls && (
+          <button
+            type="button"
+            className="bb-row"
+            aria-current={section === 'calls' ? 'true' : undefined}
+            onClick={onOpenCalls}
+          >
+            <span className="bb-avatar" style={{ background: 'transparent', boxShadow: 'none' }}>
+              <CalendarDays size={15} strokeWidth={1.8} style={{ color: 'var(--bb-ink2)' }} />
+            </span>
+            <span className="bb-row__label">Hovory</span>
+          </button>
+        )}
+        {onOpenUniversalChat && (
+          <button
+            type="button"
+            className="bb-row"
+            aria-current={section === 'chat' ? 'true' : undefined}
+            onClick={onOpenUniversalChat}
+          >
+            <span className="bb-avatar" style={{ background: 'transparent', boxShadow: 'none' }}>
+              <MessageSquare size={15} strokeWidth={1.8} style={{ color: 'var(--bb-ink2)' }} />
+            </span>
+            <span className="bb-row__label">Chat</span>
           </button>
         )}
 

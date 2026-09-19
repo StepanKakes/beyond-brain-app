@@ -32,8 +32,12 @@ function useIsDesktop() {
 
 type Props = {
   selectedSlug?: string | null;
+  /** Which surface is open, so the sidebar can mark the current item. */
+  section?: string;
   onSelectClient?: (slug: string) => void;
   onGoHome?: () => void;
+  onOpenBoard?: () => void;
+  onOpenCalls?: () => void;
   onOpenUniversalChat?: () => void;
   onSwitchUniversalSession?: (uuid: string) => void;
   children?: ReactNode;
@@ -43,8 +47,11 @@ type Props = {
 
 export default function BeyondShell({
   selectedSlug,
+  section,
   onSelectClient,
   onGoHome,
+  onOpenBoard,
+  onOpenCalls,
   onOpenUniversalChat,
   onSwitchUniversalSession,
   children,
@@ -98,8 +105,11 @@ export default function BeyondShell({
         <div className="bb-side__inner">
           <BeyondSidebarPreview
             selectedSlug={selectedSlug}
+            section={section}
             onSelectClient={handleSelect}
             onGoHome={onGoHome ? handleGoHome : undefined}
+            onOpenBoard={onOpenBoard ? () => { onOpenBoard(); closeOnMobile(); } : undefined}
+            onOpenCalls={onOpenCalls ? () => { onOpenCalls(); closeOnMobile(); } : undefined}
             onOpenUniversalChat={onOpenUniversalChat ? handleOpenUniversal : undefined}
             onSwitchUniversalSession={onSwitchUniversalSession ? handleSwitchUniversal : undefined}
             onCollapse={() => setOpen(false)}

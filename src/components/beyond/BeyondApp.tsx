@@ -8,6 +8,10 @@ import BeyondFilePreview from './BeyondFilePreview';
 import BeyondHtmlCanvas from './BeyondHtmlCanvas';
 import BeyondConnectors from './BeyondConnectors';
 import BeyondSettings from './BeyondSettings';
+import VelinPage from './velin/VelinPage';
+import ClientBoard from './velin/ClientBoard';
+import ClientDetail from './velin/ClientDetail';
+import CallsPage from './velin/CallsPage';
 import { useBeyondClients, type BeyondClient } from './useBeyondClients';
 import { UNIVERSAL_SLUG } from './beyondSessionsApi';
 
@@ -34,6 +38,29 @@ const UNIVERSAL_SEG = 'new';
 
 type ParsedRoute = { slug: string | null; uuid: string | null };
 
+/**
+ * Which surface the URL points at.
+ *
+ * `/` is the velín, not the chat: the point of opening this app in the morning
+ * is to see what needs attention, and a blank prompt cannot tell you that. The
+ * chat keeps its own address and every one of its routes unchanged.
+ */
+type View =
+  | { kind: 'velin' }
+  | { kind: 'board' }
+  | { kind: 'client'; slug: string }
+  | { kind: 'calls' }
+  | { kind: 'chat' };
+
+function parseView(pathname: string): View {
+  const parts = pathname.split('/').filter(Boolean);
+  if (parts.length === 0) return { kind: 'velin' };
+  if (parts[0] === 'klienti') return { kind: 'board' };
+  if (parts[0] === 'hovory') return { kind: 'calls' };
+  if (parts[0] === 'klient' && parts[1]) return { kind: 'client', slug: decodeURIComponent(parts[1]) };
+  return { kind: 'chat' };
+}
+
 /** Parse `/c/<slug>[/<uuid>]` out of a pathname (basename already stripped). */
 function parseBeyondPath(pathname: string): ParsedRoute {
   const parts = pathname.split('/').filter(Boolean);
@@ -54,6 +81,8 @@ export default function BeyondApp() {
   const navigate = useNavigate();
   const location = useLocation();
   const { clients } = useBeyondClients();
+
+  const view = useMemo(() => parseView(location.pathname), [location.pathname]);
 
   const { slug: activeSlug, uuid: routeUuid } = useMemo(
     () => parseBeyondPath(location.pathname),
@@ -193,19 +222,31 @@ export default function BeyondApp() {
   // universal chat (no uuid) is keyed by the history entry's key, so each
   // "+ Nový chat" — even back-to-back to the same /c/new path — remounts into a
   // clean session, while sending a message mid-chat does not remount it.
-  const viewKey = !activeClient
-    ? 'welcome'
-    : activeClient.slug !== UNIVERSAL_SLUG
-      ? `chat:${activeClient.slug}`
-      : routeUuid
-        ? `universal:${routeUuid}`
-        : `universal:fresh:${location.key}`;
+  const viewKey =
+    view.kind !== 'chat'
+      ? view.kind === 'client'
+        ? `client:${view.slug}`
+        : view.kind
+      : !activeClient
+        ? 'welcome'
+        : activeClient.slug !== UNIVERSAL_SLUG
+          ? `chat:${activeClient.slug}`
+          : routeUuid
+            ? `universal:${routeUuid}`
+            : `universal:fresh:${location.key}`;
+
+  const openClient = useCallback((slug: string) => navigate(`/klient/${encodeURIComponent(slug)}`), [navigate]);
+  const openBoard = useCallback(() => navigate('/klienti'), [navigate]);
+  const openCalls = useCallback(() => navigate('/hovory'), [navigate]);
 
   return (
     <BeyondShell
       selectedSlug={activeSlug}
+      section={view.kind}
       onSelectClient={handleSelectClient}
       onGoHome={handleGoHome}
+      onOpenBoard={openBoard}
+      onOpenCalls={openCalls}
       onOpenUniversalChat={handleOpenUniversalChat}
       onSwitchUniversalSession={handleSwitchUniversalSession}
     >
@@ -218,7 +259,15 @@ export default function BeyondApp() {
           transition={{ duration: 0.22, ease: 'easeOut' }}
           className="h-full w-full"
         >
-          {activeClient ? (
+          {view.kind === 'velin' ? (
+            <VelinPage onOpenClient={openClient} onOpenCalls={openCalls} />
+          ) : view.kind === 'board' ? (
+            <ClientBoard onOpenClient={openClient} />
+          ) : view.kind === 'client' ? (
+            <ClientDetail slug={view.slug} onBack={openBoard} onOpenChat={handleSelectClient} />
+          ) : view.kind === 'calls' ? (
+            <CallsPage onOpenClient={openClient} />
+          ) : activeClient ? (
             <BeyondChat
               client={activeClient}
               initialPrompt={initialPrompt}

@@ -39,6 +39,11 @@
   /* Semantic (kept desaturated to fit the monochrome theme) */
   --bb-danger:      #C4443B;
   --bb-danger-soft: rgba(196, 68, 59, .10);
+  /* Second semantic tone, added for the velín: severity has two levels and a
+     monochrome system cannot show "watch" without it reading as plain metadata.
+     Defined exactly like danger so the two behave as a pair. */
+  --bb-warn:        #8A6212;
+  --bb-warn-soft:   rgba(138, 98, 18, .12);
 
   /* Shape & depth */
   --bb-r:   22px;   /* composer / dialog */
@@ -108,6 +113,8 @@ html.dark, .dark {
 
   --bb-danger:      #F0655B;
   --bb-danger-soft: rgba(240, 101, 91, .14);
+  --bb-warn:        #D9A84E;
+  --bb-warn-soft:   rgba(217, 168, 78, .16);
 
   --bb-shadow:      0 1px 2px rgba(0, 0, 0, .34), 0 12px 32px -12px rgba(0, 0, 0, .6);
   --bb-shadow-lift: 0 2px 8px rgba(0, 0, 0, .4), 0 22px 48px -20px rgba(0, 0, 0, .68);
@@ -453,3 +460,114 @@ body { background: var(--bb-bg) !important; color: var(--bb-ink); font-family: v
   :root { --bb-panel: #FFFFFFE8; --bb-panel2: #FFFFFF; --bb-raise: #FFFFFF; --bb-bubble: #FFFFFF; }
   html.dark, .dark { --bb-panel: #1B1F27F2; --bb-panel2: #232833; --bb-raise: #20242D; --bb-bubble: #2A2F3A; }
 }
+
+/* ============================================================================
+   Velín — dashboards over the brain index.
+   ----------------------------------------------------------------------------
+   Operate surface: scanned, not read. Density and hierarchy beat decoration, so
+   these reuse the tokens above and add no new visual language.
+
+   Two deliberate rules:
+     · Severity is carried by FORM first (chip weight, number prominence) and
+       confirmed by tone second, because the system is monochrome by design.
+     · No status rails on the side of cards and nothing pulses. A live call is a
+       filled chip with a running count, which reads at a glance without the tic.
+   ========================================================================== */
+
+.bb-vel { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.bb-vel__in { max-width: 1080px; margin: 0 auto; padding: 22px 24px 96px; display: flex; flex-direction: column; gap: 26px; }
+@media (max-width: 720px) { .bb-vel__in { padding: 16px 14px 72px; gap: 20px; } }
+
+.bb-vel__head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.bb-vel__title { font-family: var(--bb-display); font-size: 27px; line-height: 1.12; letter-spacing: -.012em; color: var(--bb-ink); margin: 0; }
+.bb-vel__title em { font-style: italic; }
+.bb-vel__sub { font-size: 13px; color: var(--bb-ink3); margin-top: 3px; font-variant-numeric: tabular-nums; }
+
+/* --- status band: one line per fact, mono numbers ------------------------- */
+.bb-band { display: flex; flex-direction: column; border: 1px solid var(--bb-line); border-radius: var(--bb-rc); background: var(--bb-raise); overflow: hidden; }
+.bb-band__row { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-bottom: 1px solid var(--bb-line2); font-size: 13.5px; color: var(--bb-ink2); }
+.bb-band__row:last-child { border-bottom: none; }
+.bb-band__n { font-family: var(--bb-mono); font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--bb-ink); flex: none; min-width: 42px; }
+.bb-band__t { flex: 1; min-width: 0; color: var(--bb-ink); }
+.bb-band__m { flex: none; font-size: 12px; color: var(--bb-ink3); }
+
+/* --- live call ------------------------------------------------------------ */
+.bb-live { display: flex; align-items: center; gap: 12px; padding: 13px 15px; border-radius: var(--bb-rc); background: var(--bb-accent); color: var(--bb-on-accent); }
+.bb-live__tag { font-family: var(--bb-mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; opacity: .72; flex: none; }
+.bb-live__t { flex: 1; min-width: 0; font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bb-live__m { font-family: var(--bb-mono); font-size: 12px; font-variant-numeric: tabular-nums; opacity: .78; flex: none; }
+.bb-live a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+
+/* --- severity chip -------------------------------------------------------- */
+.bb-sev { display: inline-flex; align-items: center; flex: none; font-family: var(--bb-mono); font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; padding: 2px 7px; border-radius: 6px; background: var(--bb-panel2); color: var(--bb-ink3); }
+.bb-sev[data-sev="critical"] { background: var(--bb-danger-soft); color: var(--bb-danger); font-weight: 600; }
+.bb-sev[data-sev="watch"]    { background: var(--bb-warn-soft);   color: var(--bb-warn); }
+
+/* --- signal list ---------------------------------------------------------- */
+.bb-sig { display: flex; flex-direction: column; border: 1px solid var(--bb-line); border-radius: var(--bb-rc); background: var(--bb-raise); overflow: hidden; }
+.bb-sig__row { display: grid; grid-template-columns: auto 1fr auto; align-items: baseline; gap: 4px 11px; width: 100%; padding: 13px 15px; border-bottom: 1px solid var(--bb-line2); text-align: left; background: transparent; border-left: none; border-right: none; border-top: none; cursor: pointer; transition: background var(--bb-t-fast) ease; }
+.bb-sig__row:last-child { border-bottom: none; }
+.bb-sig__row:hover { background: var(--bb-panel2); }
+.bb-sig__row:focus-visible { outline: 2px solid var(--bb-accent); outline-offset: -2px; }
+.bb-sig__who { grid-column: 2; font-size: 12px; color: var(--bb-ink3); }
+.bb-sig__t { grid-column: 2; font-size: 14px; font-weight: 500; color: var(--bb-ink); }
+.bb-sig__d { grid-column: 2; font-size: 13px; color: var(--bb-ink2); line-height: 1.45; }
+.bb-sig__m { grid-column: 2; font-size: 12.5px; color: var(--bb-ink3); line-height: 1.45; }
+.bb-sig__row > .bb-sev { grid-row: 1 / span 2; grid-column: 1; align-self: start; margin-top: 1px; }
+.bb-sig__go { grid-row: 1 / span 2; grid-column: 3; align-self: center; color: var(--bb-ink3); opacity: 0; transition: opacity var(--bb-t-fast) ease; }
+.bb-sig__row:hover .bb-sig__go, .bb-sig__row:focus-visible .bb-sig__go { opacity: 1; }
+
+/* --- dense client table --------------------------------------------------- */
+.bb-tblwrap { border: 1px solid var(--bb-line); border-radius: var(--bb-rc); background: var(--bb-raise); overflow-x: auto; }
+.bb-tbl { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; min-width: 760px; }
+.bb-tbl th { text-align: left; font-family: var(--bb-mono); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; font-weight: 500; color: var(--bb-ink3); padding: 10px 12px; border-bottom: 1px solid var(--bb-line); white-space: nowrap; }
+.bb-tbl td { padding: 11px 12px; border-bottom: 1px solid var(--bb-line2); color: var(--bb-ink2); vertical-align: middle; }
+.bb-tbl tbody tr:last-child td { border-bottom: none; }
+.bb-tbl tbody tr { cursor: pointer; transition: background var(--bb-t-fast) ease; }
+.bb-tbl tbody tr:hover { background: var(--bb-panel2); }
+.bb-tbl tbody tr:focus-visible { outline: 2px solid var(--bb-accent); outline-offset: -2px; }
+.bb-tbl .num { text-align: right; font-family: var(--bb-mono); font-size: 12px; }
+.bb-tbl .who { color: var(--bb-ink); font-weight: 500; }
+.bb-tbl .dim { color: var(--bb-ink3); }
+.bb-tbl .neg { color: var(--bb-danger); }
+
+/* --- sparkline ------------------------------------------------------------ */
+.bb-spark { display: block; vertical-align: middle; flex: none; }
+.bb-spark .line { fill: none; stroke: var(--bb-ink2); stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.bb-spark .dot { fill: var(--bb-ink); }
+.bb-spark .gap { stroke: var(--bb-ink3); stroke-width: 1; stroke-dasharray: 2 2; }
+
+/* --- tabs ----------------------------------------------------------------- */
+.bb-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--bb-line); }
+.bb-tab { padding: 9px 13px; font-size: 13.5px; color: var(--bb-ink2); background: transparent; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; transition: color var(--bb-t-fast) ease, border-color var(--bb-t-fast) ease; }
+.bb-tab:hover { color: var(--bb-ink); }
+.bb-tab[aria-selected="true"] { color: var(--bb-ink); font-weight: 500; border-bottom-color: var(--bb-accent); }
+.bb-tab:focus-visible { outline: 2px solid var(--bb-accent); outline-offset: -2px; border-radius: 6px 6px 0 0; }
+
+/* --- timeline ------------------------------------------------------------- */
+.bb-tl { display: flex; flex-direction: column; }
+.bb-tl__i { display: grid; grid-template-columns: 82px 1fr; gap: 3px 14px; padding: 13px 0; border-top: 1px solid var(--bb-line2); }
+.bb-tl__i:first-child { border-top: none; }
+.bb-tl__d { grid-row: 1 / span 3; font-family: var(--bb-mono); font-size: 11.5px; color: var(--bb-ink3); padding-top: 2px; font-variant-numeric: tabular-nums; }
+.bb-tl__k { font-family: var(--bb-mono); font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--bb-ink3); }
+.bb-tl__t { font-size: 14px; font-weight: 500; color: var(--bb-ink); }
+.bb-tl__x { font-size: 13px; color: var(--bb-ink2); line-height: 1.5; }
+.bb-tl__i[data-future="true"] .bb-tl__t { color: var(--bb-ink2); }
+
+/* --- promise list --------------------------------------------------------- */
+.bb-prom { display: flex; flex-direction: column; }
+.bb-prom__i { display: flex; align-items: baseline; gap: 11px; padding: 11px 0; border-top: 1px solid var(--bb-line2); font-size: 13.5px; color: var(--bb-ink); line-height: 1.5; }
+.bb-prom__i:first-child { border-top: none; }
+.bb-prom__age { flex: none; font-family: var(--bb-mono); font-size: 11.5px; color: var(--bb-ink3); font-variant-numeric: tabular-nums; min-width: 56px; }
+.bb-prom__age[data-late="true"] { color: var(--bb-danger); }
+
+/* --- two-up grid (used sparingly, not as a default shell) ----------------- */
+.bb-grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+
+/* --- section heading with a count ---------------------------------------- */
+.bb-sec { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.bb-sec__h { font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--bb-ink3); }
+.bb-sec__n { font-family: var(--bb-mono); font-size: 11.5px; color: var(--bb-ink3); font-variant-numeric: tabular-nums; }
+
+/* --- quiet empty state ---------------------------------------------------- */
+.bb-none { padding: 22px 15px; font-size: 13.5px; color: var(--bb-ink3); border: 1px solid var(--bb-line); border-radius: var(--bb-rc); background: var(--bb-raise); }

@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt';
 import { userDb } from '../modules/database/index.js';
 import { getConnection } from '../modules/database/connection.js';
 import { generateToken, authenticateToken } from '../middleware/auth.js';
+import { personForUser } from '../services/beyond-people.js';
 
 const router = express.Router();
 const db = getConnection();
@@ -120,11 +121,76 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// Get current user (protected route)
+// Get current user (protected route), plus which Beyond person they are.
 router.get('/user', authenticateToken, (req, res) => {
+  const person = personForUser(req.user);
   res.json({
-    user: req.user
+    user: req.user,
+    person: person ? { key: person.key, displayName: person.displayName } : null,
   });
+});
+
+// The team. Two people run the client side, so the velín needs to know who is
+// who to attribute promises and calls.
+router.get('/users', authenticateToken, (req, res) => {
+  try {
+    const rows = db
+      .prepare('SELECT id, username, created_at, last_login FROM users WHERE is_active = 1 ORDER BY id')
+      .all();
+    res.json({
+      users: rows.map((u) => {
+        const person = personForUser(u);
+        return {
+          id: u.id,
+          username: u.username,
+          createdAt: u.created_at,
+          lastLogin: u.last_login,
+          person: person ? { key: person.key, displayName: person.displayName } : null,
+          isMe: u.id === req.user.id,
+        };
+      }),
+    });
+  } catch (error) {
+    console.error('List users error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Add a teammate. `/register` stays the unauthenticated first-run setup; every
+// account after that is created from inside an existing session, so opening the
+// app to a second person never opens registration to the internet.
+router.post('/users', authenticateToken, async (req, res) => {
+  try {
+    const { username, password } = req.body || {};
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Vyplň jméno i heslo' });
+    }
+    if (username.length < 3 || password.length < 6) {
+      return res
+        .status(400)
+        .json({ error: 'Jméno aspoň 3 znaky, heslo aspoň 6 znaků' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    const user = userDb.createUser(username, passwordHash);
+    const person = personForUser({ username });
+
+    console.log(`[auth] ${req.user.username} přidal uživatele ${username}`);
+    res.json({
+      success: true,
+      user: {
+        id: user.id,
+        username: user.username,
+        person: person ? { key: person.key, displayName: person.displayName } : null,
+      },
+    });
+  } catch (error) {
+    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+      return res.status(409).json({ error: 'Takové jméno už existuje' });
+    }
+    console.error('Add user error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // Logout (client-side token removal, but this endpoint can be used for logging)

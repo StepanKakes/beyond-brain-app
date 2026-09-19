@@ -68,14 +68,21 @@ Deploy pouští obojí na runneru, takže rozbitý typecheck nenasadí, ale nepr
 
 ### Frontend — `src/components/beyond/`
 
-`BeyondApp` je jediná route; URL nese, který chat je otevřený:
+`BeyondApp` je jediná route a URL nese, co je otevřené:
 
 ```
-/                    welcome
+/                    Velín: co dnes hoří
+/klienti             mřížka klientů podle naléhavosti
+/klient/<slug>       detail: časová osa, sliby, měření, vlajky
+/hovory              naplánované hovory z Cal.com
 /c/<client-slug>     chat klienta (naváže na jeho aktivní session)
 /c/new               čerstvý univerzální chat
 /c/new/<uuid>        konkrétní univerzální session
 ```
+
+Domovská obrazovka je **Velín**, ne chat. Ráno potřebuješ vidět stav, ne prázdný
+prompt. Chat zůstal plnohodnotnou položkou v sidebaru a všechny jeho routy jsou
+beze změny.
 
 `BeyondApp` se nikdy neodmountuje a parsuje `location.pathname` sám — vnořené
 `<Route>` by ho při každé změně parametru remountovaly a shodily rozepsaný chat.
@@ -86,6 +93,7 @@ Deploy pouští obojí na runneru, takže rozbitý typecheck nenasadí, ale nepr
 | `BeyondShell.tsx` | sidebar (push na desktopu, overlay pod 900 px) + hlavní sloupec |
 | `BeyondChat.tsx` | životní cyklus tahu: socket, session, streaming, schvalování nástrojů, přílohy, composer |
 | `chat/` | vše, co chat vykresluje, plus čisté transformace |
+| `velin/` | Velín, mřížka klientů, detail klienta, hovory, správa týmu |
 | `BeyondFilePreview.tsx` | náhled souboru z brain repa |
 | `BeyondHtmlCanvas.tsx` | živé HTML/SVG z odpovědi agenta |
 | `BeyondConnectors.tsx` | správa MCP konektorů |
@@ -119,6 +127,7 @@ Rozdělené z `BeyondChat.tsx`, který měl 2 900 řádků.
 
 | Mount | Auth | K čemu |
 |---|---|---|
+| `/api/beyond/velin` | JWT | Velín, mřížka, detail klienta, hovory, přestavba indexu |
 | `/api/beyond` | JWT | `config`, `clients`, `status`, `repo-status`, `file`, `raw-file`, `tree`, `models`, `sync`, `sessions/*` |
 | `/api/beyond/mcp` | JWT | CRUD konektorů, test, start OAuth |
 | `/api/beyond-mcp-oauth` | žádná (callback) | návrat z OAuth |
@@ -132,6 +141,26 @@ fantomový strom `C:\Users\stepankakes\...` na Windows boxu.
 
 Seznam aktivních klientů je taky jen jeden: adresáře v `clients/aktivni/`,
 přes `server/services/beyond-clients.js`.
+
+#### Index a signály
+
+`brain-index.js` čte klientské markdowny do dotazovatelné podoby, `brain-signals.js`
+z toho počítá příznaky úpadku. Index je projekce, ne pravda: markdown zůstává
+zdrojem a index jde kdykoli zahodit a postavit znovu.
+
+Tři pravidla, která parser drží a bez kterých by dashboard lhal:
+
+- **Prázdno není nula.** V `mereni.md` prázdná buňka znamená „nevíme", nula
+  znamená „dělal a nevyšlo". Neznámá hodnota je `null`, nikdy 0, a v grafu
+  přerušuje čáru.
+- **Páteř metrik má každý klient vlastní.** Kuba měří Lidi v DM a Hovory,
+  Fit Na Cestách Leady a Bookingy. Čte se z hlavičky souboru, nepředpokládá se.
+- **`W12` znamená dvě různé věci.** V `profil.md` je to programový týden (a bývá
+  zastaralý), v `mereni.md` ISO kalendářní týden. V kódu se jmenují jinak,
+  `programWeek*` proti `isoWeek`.
+
+Signál, který platí pro většinu portfolia, se zvedne mezi systémové stavy
+a uvede jednou. Bez toho by devět stejných řádků pohřbilo dva skutečné.
 
 #### Agentní endpoint
 

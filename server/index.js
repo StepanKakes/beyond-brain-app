@@ -70,6 +70,7 @@ import pluginsRoutes from './routes/plugins.js';
 import providerRoutes from './modules/providers/provider.routes.js';
 // Beyond Brain — client-focused endpoints (reads ~/Documents/GitHub/beyond-brain)
 import beyondRoutes from './routes/beyond.js';
+import beyondVelinRoutes from './routes/beyond-velin.js';
 // Beyond Brain — MCP connectors (add/manage/OAuth). Two routers: protected CRUD
 // + the unauthenticated OAuth callback target.
 import beyondMcpRoutes, { oauthCallbackRouter as beyondMcpOauthCallbackRouter } from './routes/beyond-mcp.js';
@@ -205,6 +206,8 @@ app.use('/api/agent', agentRoutes);
 // Beyond Brain MCP connectors — add/manage MCP servers + OAuth. Mounted BEFORE
 // the /api/beyond catch-all so /api/beyond/mcp/* resolves here, not there.
 app.use('/api/beyond/mcp', authenticateToken, beyondMcpRoutes);
+// Velín — dashboards over the brain index + Cal.com. Also before the catch-all.
+app.use('/api/beyond/velin', authenticateToken, beyondVelinRoutes);
 // OAuth redirect target for MCP connectors — NO JWT (the provider redirects the
 // user's browser here). Secured by the single-use opaque `state`.
 app.use('/api/beyond-mcp-oauth', beyondMcpOauthCallbackRouter);

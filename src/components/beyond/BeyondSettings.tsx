@@ -5,6 +5,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import BeyondLoader, { LOADER_KINDS, LOADER_STORAGE_KEY, readLoaderKind, type LoaderKind } from './BeyondLoader';
 import { fetchBeyondModels, fallbackModelOptions, type BeyondModelOption } from './beyondModels';
 import { CLAUDE_MODELS } from '../../../shared/modelConstants';
+import TeamSection from './velin/TeamSection';
 
 /**
  * Beyond Brain — Settings dialog (full handoff layout).
@@ -207,6 +208,13 @@ export default function BeyondSettings({ onClose }: { onClose: () => void }) {
                   <span style={{ display: 'block', fontSize: 12, color: 'var(--bb-ink3)' }}>Přidat a spravovat MCP servery (vč. OAuth)</span>
                 </span>
               </button>
+            </section>
+
+            {/* Team — each person needs their own login so the velín can say
+                whose task and whose call it is. */}
+            <section>
+              <div className="bb-section__label">Tým</div>
+              <TeamSection />
             </section>
           </div>
         </motion.div>
