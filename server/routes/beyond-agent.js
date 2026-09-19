@@ -29,10 +29,12 @@ import {
   touchSession,
 } from '../services/beyond-sessions-store.js';
 import { createTelegramProgressEmitter } from '../services/telegram-progress.js';
+import { listClientSlugs } from '../services/beyond-clients.js';
+import { brainPathExists, resolveBrainPath } from '../utils/brain-path.js';
 
 const router = express.Router();
 
-const BRAIN_PATH = process.env.BEYOND_BRAIN_PATH; // resolveSpawnCwd handles the fallback
+const BRAIN_PATH = resolveBrainPath();
 
 // After this much idle time on a Telegram thread we start a fresh Claude
 // session instead of resuming the previous one. Prevents per-Telegram-chat
@@ -74,27 +76,39 @@ function scheduleEviction(key) {
   }, IDEMPOTENCY_WINDOW_MS);
 }
 
-const KNOWN_CLIENT_SLUGS = [
-  'ivana-jurikova',
-  'jakub-bolek',
-  'jakub-privara',
-  'lukas-rusek',
-  'patrik-kruntorad',
-  'pavel-sedlacek',
-];
-
-function firstNameOf(slug) {
-  return slug.split('-')[0];
+/** The live roster from the brain repo (see services/beyond-clients.js). */
+async function knownClientSlugs() {
+  return listClientSlugs();
 }
 
-/** Tries to match a known client by first-name mention in the text. Returns
- *  the matching slug or `null`. Czech-insensitive (no diacritics in slugs). */
-function inferClientSlug(text) {
+/** Tries to match an active client by first-name mention in the text. Returns
+ *  the matching slug or `null`. Czech-insensitive (no diacritics in slugs).
+ *
+ *  Longest first name wins, so a roster containing both `jakub-bolek` and
+ *  `jakub-privara` does not let whichever sorts first swallow every "Jakub".
+ *  Ambiguous mentions (same first name, no surname in the text) stay unmatched
+ *  and fall through to the Telegram-scoped thread rather than guessing wrong. */
+async function inferClientSlug(text) {
   if (typeof text !== 'string' || !text.trim()) return null;
   const lowered = text.toLowerCase();
-  for (const slug of KNOWN_CLIENT_SLUGS) {
-    const fn = firstNameOf(slug);
-    if (lowered.includes(fn)) return slug;
+  const slugs = await knownClientSlugs();
+
+  // Full slug spelled out ("jakub privara", "jakub-privara") is unambiguous.
+  for (const slug of slugs) {
+    if (lowered.includes(slug) || lowered.includes(slug.replace(/-/g, ' '))) {
+      return slug;
+    }
+  }
+
+  // Otherwise fall back to the first name, but only when it identifies exactly
+  // one client on the roster.
+  const byFirstName = new Map();
+  for (const slug of slugs) {
+    const fn = slug.split('-')[0];
+    byFirstName.set(fn, (byFirstName.get(fn) || []).concat(slug));
+  }
+  for (const [fn, matches] of byFirstName) {
+    if (matches.length === 1 && lowered.includes(fn)) return matches[0];
   }
   return null;
 }
@@ -108,14 +122,14 @@ function telegramSlug(chatId) {
   return `__telegram__:${safe}`;
 }
 
-function resolveSlug({ slug, text, meta }) {
+async function resolveSlug({ slug, text, meta }) {
   // Explicit slug wins, after validation. Note we use the wider AGENT_SLUG_RE
   // so callers can pass agent-flavoured slugs like `__telegram__:123`.
   if (typeof slug === 'string' && slug.trim()) {
     const s = slug.trim();
     if (AGENT_SLUG_RE.test(s)) return s;
   }
-  const inferred = inferClientSlug(text);
+  const inferred = await inferClientSlug(text);
   if (inferred) return inferred;
   if (meta && meta.telegramChatId != null) {
     return telegramSlug(meta.telegramChatId);
@@ -123,11 +137,12 @@ function resolveSlug({ slug, text, meta }) {
   return null;
 }
 
-router.get('/health', (_req, res) => {
+router.get('/health', async (_req, res) => {
   res.json({
     ok: true,
-    brainPath: BRAIN_PATH || '(default fallback)',
-    knownClients: KNOWN_CLIENT_SLUGS,
+    brainPath: BRAIN_PATH,
+    brainPathExists: brainPathExists(),
+    knownClients: await knownClientSlugs(),
   });
 });
 
@@ -140,7 +155,7 @@ router.post('/query', async (req, res) => {
 
   const source = typeof body.source === 'string' ? body.source : 'unknown';
   const meta = body.meta && typeof body.meta === 'object' ? body.meta : {};
-  const slug = resolveSlug({ slug: body.slug, text, meta });
+  const slug = await resolveSlug({ slug: body.slug, text, meta });
   const dedupKey = IDEMPOTENCY_WINDOW_MS > 0 ? requestDedupKey(meta) : null;
   const tgUser = req.agent?.telegramUserId || '-';
 

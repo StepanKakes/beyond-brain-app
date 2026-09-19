@@ -14,7 +14,7 @@
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import crypto from 'crypto';
-import { promises as fs, existsSync } from 'fs';
+import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
 import { CLAUDE_MODELS } from '../shared/modelConstants.js';
@@ -33,6 +33,7 @@ import {
   updateConnector as updateBeyondConnector,
 } from './services/beyond-mcp-connectors-store.js';
 import { refreshIfNeeded as refreshBeyondConnectorToken } from './services/beyond-mcp-oauth.js';
+import { resolveBrainPath, resolveSpawnCwd } from './utils/brain-path.js';
 
 const activeSessions = new Map();
 const pendingToolApprovals = new Map();
@@ -237,28 +238,6 @@ function matchesToolPermission(entry, toolName, input) {
   }
 
   return false;
-}
-
-function resolveBrainPath() {
-  return process.env.BEYOND_BRAIN_PATH ||
-    path.join(os.homedir(), 'Documents', 'GitHub', 'beyond-brain');
-}
-
-function resolveSpawnCwd(requestedCwd) {
-  if (requestedCwd && existsSync(requestedCwd)) {
-    return requestedCwd;
-  }
-  const brainPath = resolveBrainPath();
-  if (existsSync(brainPath)) {
-    if (requestedCwd && requestedCwd !== brainPath) {
-      console.warn(`[claude-sdk] requested cwd "${requestedCwd}" not found on disk, falling back to brain path "${brainPath}"`);
-    }
-    return brainPath;
-  }
-  if (requestedCwd) {
-    console.warn(`[claude-sdk] requested cwd "${requestedCwd}" not found and brain path "${brainPath}" also missing — letting SDK default to process.cwd()`);
-  }
-  return undefined;
 }
 
 /**
@@ -1637,7 +1616,10 @@ async function setClaudeSDKSessionMcpServers(sessionId, cwd) {
   // Send the FULL map a fresh spawn would get: setMcpServers *replaces* the
   // whole dynamic set, so passing only the new connector would disconnect the
   // ones already attached to this session.
-  const servers = (await loadMcpConfig(cwd)) || {};
+  // Resolve the cwd the same way a fresh spawn would, so a caller passing a
+  // stale or foreign path still reads the brain repo's .mcp.json instead of
+  // silently finding nothing and detaching every connector.
+  const servers = (await loadMcpConfig(resolveSpawnCwd(cwd))) || {};
   const result = await session.instance.setMcpServers(servers);
   return {
     added: result?.added || [],

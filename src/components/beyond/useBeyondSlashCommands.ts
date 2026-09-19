@@ -23,7 +23,8 @@ export function useBeyondSlashCommands({
   onChoose,
 }: {
   value: string;
-  projectPath: string;
+  /** Host-resolved brain repo path, or `null` while it is still loading. */
+  projectPath: string | null;
   onChoose: (cmd: BeyondSlashCommand) => void;
 }) {
   const [remote, setRemote] = useState<BeyondSlashCommand[]>([]);
@@ -31,8 +32,10 @@ export function useBeyondSlashCommands({
   const [activeIndex, setActiveIndex] = useState(0);
 
   // Load custom commands + skills once per project. Best-effort: either source
-  // failing just means fewer entries in the menu.
+  // failing just means fewer entries in the menu. Skipped until the path is
+  // known — querying with a wrong path is what used to return an empty menu.
   useEffect(() => {
+    if (!projectPath) return;
     let cancelled = false;
     void (async () => {
       const out: BeyondSlashCommand[] = [];

@@ -21,14 +21,23 @@ import {
   mergeSessionIndex,
 } from '../services/beyond-sessions-store.js';
 import { getSupportedModels, runSdkOneShot } from '../claude-sdk.js';
+import { invalidateClientCache } from '../services/beyond-clients.js';
+import { brainPathExists, resolveBrainPath } from '../utils/brain-path.js';
 
 const execFileAsync = promisify(execFile);
 
 const router = express.Router();
 
-const BRAIN_PATH = process.env.BEYOND_BRAIN_PATH ||
-  path.join(os.homedir(), 'Documents', 'GitHub', 'beyond-brain');
+const BRAIN_PATH = resolveBrainPath();
 const ACTIVE_CLIENTS = path.join(BRAIN_PATH, 'clients', 'aktivni');
+
+// The browser needs the real, host-resolved brain path so it can scope
+// `/api/commands/list` and the skills lookup to the right checkout. It used to
+// hardcode a macOS path, which meant the slash menu silently found nothing on
+// the Windows box. Cheap and cacheable — the value cannot change at runtime.
+router.get('/config', (_req, res) => {
+  res.json({ brainPath: BRAIN_PATH, exists: brainPathExists() });
+});
 
 /** Cache responses for 30s to avoid hammering disk on every keystroke. */
 let cache = { at: 0, data: null };
@@ -430,7 +439,7 @@ router.get('/file', async (req, res) => {
     const buf = await fs.readFile(abs);
     // Best-effort utf-8 check — return base64 only for clearly binary content.
     const content = buf.toString('utf8');
-    const looksBinary = content.includes(' ');
+    const looksBinary = content.includes('\0');
     if (looksBinary) {
       return res.json({
         path: req.query.path,
@@ -600,6 +609,13 @@ router.post('/sync', async (_req, res) => {
     if (pushed) action = 'push';
     else if (pulled) action = 'pull';
     else if (committed) action = 'commit';
+
+    // A pull can add or remove client directories, so both the rich /clients
+    // payload and the slug roster the agent route matches against are stale now.
+    if (pulled) {
+      cache = { at: 0, data: null };
+      invalidateClientCache();
+    }
 
     return res.json({ ok: true, action, committed, pulled, pushed, status });
   } catch (err) {

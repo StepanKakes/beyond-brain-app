@@ -61,23 +61,21 @@ import {
   writeLocalActive,
   type BeyondSession,
 } from './beyondSessionsApi';
+import { useBrainPath } from './useBrainPath';
 
 /**
- * Beyond Brain — real chat (v2, hyperminimal).
+ * Beyond Brain — real chat.
  *
  * Talks to claudecodeui's existing WebSocket using `claude-command` messages.
- * cwd for the Claude SDK is the brain repo (~/Documents/GitHub/beyond-brain).
+ * cwd for the Claude SDK is the brain repo, whose real location comes from the
+ * server via `useBrainPath()` — never hardcoded, because the dev machine is a
+ * Mac and the host that actually runs this is a Windows box.
  *
  * Session continuity per client: the Claude Agent SDK assigns a real UUID on
  * the first turn (arrives as `kind: 'session_created'`). We persist that UUID
  * in localStorage keyed by client slug, then pass it as `sessionId` + `resume:
  * true` on subsequent turns so the same conversation survives reloads.
  */
-
-// cwd for the Claude SDK; the server overrides this with BEYOND_BRAIN_PATH
-// when it doesn't exist on disk (this hardcoded macOS value is the upstream
-// author's path — kept here for upstream-merge compatibility).
-const BRAIN_PROJECT_PATH = '/Users/stepankakes/Documents/GitHub/beyond-brain';
 
 /** Notify same-tab observers (sidebar dropdown etc.) that the per-client
  *  session index changed. Cross-PC continuity is handled by the server side. */
@@ -207,6 +205,12 @@ function uid() {
 
 export default function BeyondChat({ client, initialPrompt, sessionOverride }: Props) {
   const { sendMessage, latestMessage, isConnected, subscribeMessages } = useWebSocket();
+
+  // Host-resolved brain repo path. `null` until it loads; every send site omits
+  // the path in that window rather than guessing, and the server resolves it.
+  const { brainPath } = useBrainPath();
+  const brainPathRef = useRef<string | null>(brainPath);
+  brainPathRef.current = brainPath;
 
   // Claude Agent SDK session UUID for this client. Loaded from localStorage on
   // mount; updated whenever the server emits `session_created`. We only pass
@@ -1120,8 +1124,11 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
         type: 'claude-command',
         command: composedCommand,
         options: {
-          projectPath: BRAIN_PROJECT_PATH,
-          cwd: BRAIN_PROJECT_PATH,
+          // Omitted while the config request is still in flight — the server
+          // falls back to its own resolved brain path, which is the same value.
+          ...(brainPathRef.current
+            ? { projectPath: brainPathRef.current, cwd: brainPathRef.current }
+            : {}),
           model: modelRef.current,
           ...(resumeId ? { sessionId: resumeId, resume: true } : {}),
           sessionSummary: `Beyond · ${client.name}`,
@@ -1218,7 +1225,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
       sendMessage({
         type: 'apply-mcp',
         sessionId: sessionIdRef.current,
-        cwd: BRAIN_PROJECT_PATH,
+        ...(brainPathRef.current ? { cwd: brainPathRef.current } : {}),
         provider: 'claude',
       });
     };
@@ -1338,7 +1345,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
 
   const slash = useBeyondSlashCommands({
     value,
-    projectPath: BRAIN_PROJECT_PATH,
+    projectPath: brainPath,
     onChoose: onChooseCommand,
   });
 
