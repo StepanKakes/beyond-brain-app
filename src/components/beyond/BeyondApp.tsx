@@ -1,33 +1,74 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import BeyondShell from './BeyondShell';
 import BeyondWelcome from './BeyondWelcome';
 import BeyondChat from './BeyondChat';
 import BeyondFilePreview from './BeyondFilePreview';
+import BeyondHtmlCanvas from './BeyondHtmlCanvas';
+import BeyondConnectors from './BeyondConnectors';
+import BeyondSettings from './BeyondSettings';
 import { useBeyondClients, type BeyondClient } from './useBeyondClients';
+import { UNIVERSAL_SLUG } from './beyondSessionsApi';
 
 /**
  * Beyond Brain — top-level app surface (v2).
  *
- * Replaces the legacy claudecodeui AppContent. State-machine is intentionally
- * tiny: either we show the Welcome screen, or we show a Chat focused on one
- * client. The shell hosts a hidden-by-default sidebar; picking a client jumps
- * to chat with that client and auto-collapses the sidebar.
+ * The URL is the single source of truth for which chat is open, so every chat
+ * has its own shareable / refreshable address:
+ *   /                    → Welcome
+ *   /c/<client-slug>     → that client's chat (resumes its active session)
+ *   /c/new               → a fresh universal ("+ Nový chat") sandbox
+ *   /c/new/<uuid>        → a specific universal session
  *
- * No tabs (Files / Source Control / Plugins / Settings) — those legacy
- * surfaces are skipped per VISION.md.
+ * BeyondApp is mounted by the catch-all route and never unmounts, so it parses
+ * `location.pathname` itself (rather than using nested <Route> elements, which
+ * would remount it on every param change and drop in-flight chat state).
+ *
+ * No tabs (Files / Source Control / Plugins / Settings) — those legacy surfaces
+ * are skipped per VISION.md.
  */
 
-type ActiveSlug = string | null;
+// URL segment used for the universal sandbox (prettier than `__universal__`).
+const UNIVERSAL_SEG = 'new';
+
+type ParsedRoute = { slug: string | null; uuid: string | null };
+
+/** Parse `/c/<slug>[/<uuid>]` out of a pathname (basename already stripped). */
+function parseBeyondPath(pathname: string): ParsedRoute {
+  const parts = pathname.split('/').filter(Boolean);
+  if (parts[0] !== 'c' || parts.length < 2) return { slug: null, uuid: null };
+  const rawSlug = decodeURIComponent(parts[1]);
+  const slug = rawSlug === UNIVERSAL_SEG ? UNIVERSAL_SLUG : rawSlug;
+  const uuid = parts[2] ? decodeURIComponent(parts[2]) : null;
+  return { slug, uuid };
+}
+
+/** Build the path for a given chat. */
+function pathForChat(slug: string, uuid?: string | null): string {
+  const seg = slug === UNIVERSAL_SLUG ? UNIVERSAL_SEG : encodeURIComponent(slug);
+  return uuid ? `/c/${seg}/${encodeURIComponent(uuid)}` : `/c/${seg}`;
+}
 
 export default function BeyondApp() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const { clients } = useBeyondClients();
-  const [activeSlug, setActiveSlug] = useState<ActiveSlug>(null);
+
+  const { slug: activeSlug, uuid: routeUuid } = useMemo(
+    () => parseBeyondPath(location.pathname),
+    [location.pathname],
+  );
+
+  // The prompt typed on the Welcome screen, carried into the chat we route to.
   const [initialPrompt, setInitialPrompt] = useState<string | undefined>(undefined);
   const [previewPath, setPreviewPath] = useState<string | null>(null);
+  const [htmlDoc, setHtmlDoc] = useState<{ html: string; title?: string } | null>(null);
+  const [connectorsOpen, setConnectorsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
-  // Sidebar file tree dispatches `beyond:open-file` with the repo-relative
-  // path; we surface a slide-in preview sheet over the current view.
+  // Sidebar file tree (and clickable chat paths) dispatch `beyond:open-file`
+  // with a repo-relative or absolute path; we surface a slide-in preview sheet.
   useEffect(() => {
     const onOpen = (e: Event) => {
       const detail = (e as CustomEvent<{ path?: string }>).detail;
@@ -35,49 +76,139 @@ export default function BeyondApp() {
         setPreviewPath(detail.path);
       }
     };
+    const onClose = () => setPreviewPath(null);
     window.addEventListener('beyond:open-file', onOpen);
-    return () => window.removeEventListener('beyond:open-file', onOpen);
+    window.addEventListener('beyond:close-file', onClose);
+    return () => {
+      window.removeEventListener('beyond:open-file', onOpen);
+      window.removeEventListener('beyond:close-file', onClose);
+    };
+  }, []);
+
+  // Broadcast the document panel's open state so the chat header "Canvas" pill
+  // can reflect it and remember the last opened artifact.
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent('beyond:file-preview-state', {
+        detail: { open: Boolean(previewPath), path: previewPath },
+      }),
+    );
+  }, [previewPath]);
+
+  // An HTML/SVG code block in a chat answer dispatches `beyond:open-html` with
+  // the raw markup; surface it as a live visual page in the canvas panel.
+  useEffect(() => {
+    const onOpenHtml = (e: Event) => {
+      const detail = (e as CustomEvent<{ html?: string; title?: string }>).detail;
+      if (detail && typeof detail.html === 'string' && detail.html.trim()) {
+        setHtmlDoc({ html: detail.html, title: detail.title });
+      }
+    };
+    window.addEventListener('beyond:open-html', onOpenHtml);
+    return () => window.removeEventListener('beyond:open-html', onOpenHtml);
+  }, []);
+
+  // Sidebar "Konektory" item dispatches `beyond:open-connectors`; surface the
+  // MCP connectors management sheet.
+  useEffect(() => {
+    const onOpenConnectors = () => setConnectorsOpen(true);
+    window.addEventListener('beyond:open-connectors', onOpenConnectors);
+    return () => window.removeEventListener('beyond:open-connectors', onOpenConnectors);
+  }, []);
+
+  // Sidebar gear dispatches `beyond:open-settings`; surface the Settings dialog.
+  useEffect(() => {
+    const onOpenSettings = () => setSettingsOpen(true);
+    window.addEventListener('beyond:open-settings', onOpenSettings);
+    return () => window.removeEventListener('beyond:open-settings', onOpenSettings);
   }, []);
 
   const handleSelectClient = useCallback(
     (slug: string) => {
-      setActiveSlug(slug);
       setInitialPrompt(undefined);
+      navigate(pathForChat(slug));
     },
-    [],
+    [navigate],
   );
 
   const handleWelcomePrompt = useCallback(
     (prompt: string) => {
-      // Welcome chips can implicitly target a client by mentioning their first name.
-      // Tiny heuristic: if any client's first name appears, focus that client.
+      // Tiny heuristic: if any active client's first name appears in the
+      // prompt, focus that client's chat. Otherwise fall through to a fresh
+      // universal sandbox chat so the prompt never gets stranded on welcome.
       const lowered = prompt.toLowerCase();
       const match = (clients || []).find((c: BeyondClient) =>
         lowered.includes(c.name.split(' ')[0].toLowerCase()),
       );
-      if (match) {
-        setActiveSlug(match.slug);
-      }
       setInitialPrompt(prompt);
+      navigate(pathForChat(match ? match.slug : UNIVERSAL_SLUG));
     },
-    [clients],
+    [clients, navigate],
   );
+
+  const handleOpenUniversalChat = useCallback(() => {
+    setInitialPrompt(undefined);
+    // Always push a fresh /c/new entry — even if we're already there — so the
+    // view key (which includes location.key) changes and BeyondChat remounts
+    // into a brand-new session.
+    navigate(pathForChat(UNIVERSAL_SLUG));
+  }, [navigate]);
+
+  const handleSwitchUniversalSession = useCallback(
+    (uuid: string) => {
+      setInitialPrompt(undefined);
+      navigate(pathForChat(UNIVERSAL_SLUG, uuid));
+    },
+    [navigate],
+  );
+
+  const handleGoHome = useCallback(() => {
+    setInitialPrompt(undefined);
+    navigate('/');
+  }, [navigate]);
 
   const activeClient = useMemo(() => {
     if (!activeSlug) return null;
+    if (activeSlug === UNIVERSAL_SLUG) {
+      return { slug: UNIVERSAL_SLUG, name: 'Nový chat', week: null };
+    }
     const fromApi = (clients || []).find((c: BeyondClient) => c.slug === activeSlug);
     if (fromApi) {
       return { slug: fromApi.slug, name: fromApi.name, week: fromApi.week };
     }
-    // Fallback for when API hasn't loaded yet but a slug was selected via sidebar.
+    // Fallback for when the API hasn't loaded yet but a slug is in the URL.
     return { slug: activeSlug, name: prettifySlug(activeSlug), week: null };
   }, [activeSlug, clients]);
 
-  // Page transition: subtle blur + cross-fade between welcome ↔ chat.
-  const viewKey = activeClient ? `chat:${activeClient.slug}` : 'welcome';
+  // Which session this mount should resume:
+  //  - universal: pinned to the routed uuid, or { uuid: null } for a fresh start
+  //  - client:    undefined → follow the server-side active session
+  const sessionOverride = useMemo<{ uuid: string | null } | undefined>(() => {
+    if (activeSlug === UNIVERSAL_SLUG) return { uuid: routeUuid };
+    return undefined;
+  }, [activeSlug, routeUuid]);
+
+  // Page transition key. A client is keyed by slug (one chat per client, resumes
+  // its active session). A universal session is keyed by its uuid. A *fresh*
+  // universal chat (no uuid) is keyed by the history entry's key, so each
+  // "+ Nový chat" — even back-to-back to the same /c/new path — remounts into a
+  // clean session, while sending a message mid-chat does not remount it.
+  const viewKey = !activeClient
+    ? 'welcome'
+    : activeClient.slug !== UNIVERSAL_SLUG
+      ? `chat:${activeClient.slug}`
+      : routeUuid
+        ? `universal:${routeUuid}`
+        : `universal:fresh:${location.key}`;
 
   return (
-    <BeyondShell selectedSlug={activeSlug} onSelectClient={handleSelectClient}>
+    <BeyondShell
+      selectedSlug={activeSlug}
+      onSelectClient={handleSelectClient}
+      onGoHome={handleGoHome}
+      onOpenUniversalChat={handleOpenUniversalChat}
+      onSwitchUniversalSession={handleSwitchUniversalSession}
+    >
       <AnimatePresence mode="wait">
         <motion.div
           key={viewKey}
@@ -88,10 +219,15 @@ export default function BeyondApp() {
           className="h-full w-full"
         >
           {activeClient ? (
-            <BeyondChat client={activeClient} initialPrompt={initialPrompt} />
+            <BeyondChat
+              client={activeClient}
+              initialPrompt={initialPrompt}
+              sessionOverride={sessionOverride}
+            />
           ) : (
             <BeyondWelcome
               onSubmit={(message) => handleWelcomePrompt(message)}
+              onNewChat={handleOpenUniversalChat}
             />
           )}
         </motion.div>
@@ -103,6 +239,28 @@ export default function BeyondApp() {
             path={previewPath}
             onClose={() => setPreviewPath(null)}
           />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {htmlDoc && (
+          <BeyondHtmlCanvas
+            html={htmlDoc.html}
+            title={htmlDoc.title}
+            onClose={() => setHtmlDoc(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {connectorsOpen && (
+          <BeyondConnectors onClose={() => setConnectorsOpen(false)} />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {settingsOpen && (
+          <BeyondSettings onClose={() => setSettingsOpen(false)} />
         )}
       </AnimatePresence>
     </BeyondShell>

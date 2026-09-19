@@ -1,0 +1,90 @@
+name: Deploy
+
+# Vercel-style continuous deploy for the self-hosted Beyond Brain box.
+#
+# Trigger: any push to `main` (or a manual "Run workflow"). A self-hosted
+# GitHub Actions runner installed on Vlast's Windows box picks the job up,
+# checks out EXACTLY the pushed commit into the live app directory, rebuilds
+# client + server, and restarts the Windows service.
+#
+# Guarantees:
+#   * Build fails  -> the service is NOT restarted, the old version keeps
+#     serving (the run just shows red in the Actions tab).
+#   * `.env`, `dist/`, `dist-server/`, `node_modules/` are gitignored, so
+#     `git reset --hard` never touches secrets or local build output.
+#   * concurrency: two pushes in a row queue instead of racing each other.
+#
+# One-time setup of the runner: scripts/setup-actions-runner.ps1 (run elevated).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: beyond-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # The runner is registered with these labels by setup-actions-runner.ps1.
+    runs-on: [self-hosted, windows, beyond-brain]
+    timeout-minutes: 25
+    steps:
+      - name: Pull, build and restart
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          # Live app dir + service name are overridable via machine env vars set
+          # by the runner setup script; sensible defaults for this box otherwise.
+          $app = if ($env:BEYOND_APP_DIR)      { $env:BEYOND_APP_DIR }      else { 'C:\Users\Vlast\beyond\beyond-brain-app' }
+          $svc = if ($env:BEYOND_SERVICE_NAME) { $env:BEYOND_SERVICE_NAME } else { 'BeyondBrainApp' }
+          Write-Host "==> Deploying $env:GITHUB_SHA  ->  $app  (service: $svc)"
+
+          if (-not (Test-Path $app)) { throw "App directory not found: $app" }
+          Set-Location $app
+
+          # Snapshot the current commit so we can tell whether deps changed.
+          $before = (git rev-parse HEAD).Trim()
+
+          # Vercel semantics: the box becomes exactly the pushed commit.
+          # (Discards any uncommitted local edits on the box by design.)
+          git fetch origin --prune
+          if ($LASTEXITCODE -ne 0) { throw "git fetch failed" }
+          git reset --hard "origin/$env:GITHUB_REF_NAME"
+          if ($LASTEXITCODE -ne 0) { throw "git reset failed" }
+          $after = (git rev-parse HEAD).Trim()
+          Write-Host "==> $before -> $after"
+
+          # Only reinstall deps when the lockfile changed (or node_modules is
+          # missing) — a clean `npm ci` every push would rebuild native modules
+          # (node-pty) each time and is slow.
+          $depsChanged = git diff --name-only $before $after -- package.json package-lock.json
+          if ($depsChanged -or -not (Test-Path 'node_modules')) {
+            Write-Host "==> deps changed / missing -> npm ci"
+            npm ci
+            if ($LASTEXITCODE -ne 0) { throw "npm ci failed" }
+          } else {
+            Write-Host "==> deps unchanged -> skipping npm ci"
+          }
+
+          Write-Host "==> build:client"
+          npm run build:client
+          if ($LASTEXITCODE -ne 0) { throw "build:client failed" }
+
+          Write-Host "==> build:server"
+          npm run build:server
+          if ($LASTEXITCODE -ne 0) { throw "build:server failed" }
+
+          # Only reached when the build fully succeeded.
+          Write-Host "==> Restart-Service $svc"
+          Restart-Service $svc -Force
+
+          # Confirm it came back up.
+          Start-Sleep -Seconds 2
+          $status = (Get-Service $svc).Status
+          Write-Host "==> $svc is now: $status"
+          if ($status -ne 'Running') { throw "$svc did not return to Running (state: $status)" }
+
+          Write-Host "==> Deployed $after OK"

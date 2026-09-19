@@ -7,11 +7,11 @@
     2) Globálně přes npm nainstaluje @anthropic-ai/claude-code
     3) Naklonuje StepanKakes/beyond-brain a StepanKakes/beyond-brain-app
        do C:\Users\<user>\beyond
-    4) Přepne app na branch redesign-v2, npm install + npm run build
+    4) Přepne app na branch main, npm install + npm run build
     5) Vypíše další manuální kroky (claude login, WAHA MCP, cloudflared tunnel)
 
   Spuštění z PowerShellu (nemusí být Admin):
-    irm https://raw.githubusercontent.com/StepanKakes/beyond-brain-app/redesign-v2/scripts/windows-bootstrap.ps1 | iex
+    irm https://raw.githubusercontent.com/StepanKakes/beyond-brain-app/main/scripts/windows-bootstrap.ps1 | iex
 #>
 
 $ErrorActionPreference = 'Stop'
@@ -94,7 +94,7 @@ function Clone-OrPull {
 }
 
 Clone-OrPull -Url 'https://github.com/StepanKakes/beyond-brain.git'     -Dir 'beyond-brain'     -Branch 'main'
-Clone-OrPull -Url 'https://github.com/StepanKakes/beyond-brain-app.git' -Dir 'beyond-brain-app' -Branch 'redesign-v2'
+Clone-OrPull -Url 'https://github.com/StepanKakes/beyond-brain-app.git' -Dir 'beyond-brain-app' -Branch 'main'
 
 # --- 5. npm install + build ---
 Push-Location (Join-Path $work 'beyond-brain-app')

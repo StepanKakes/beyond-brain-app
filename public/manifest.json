@@ -1,12 +1,12 @@
 {
-  "name": "Beyond",
-  "short_name": "Beyond",
+  "name": "Beyond Brain",
+  "short_name": "Beyond Brain",
   "description": "Beyond — tvůj druhý mozek (Tim Trnka).",
   "lang": "cs",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#fafafa",
+  "background_color": "#EEF1F6",
+  "theme_color": "#EEF1F6",
   "orientation": "portrait-primary",
   "scope": "/",
   "icons": [

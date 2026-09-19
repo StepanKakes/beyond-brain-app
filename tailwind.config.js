@@ -62,33 +62,33 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
-        // Beyond v2 — hyperminimal neutrals + powder-blue / cream hero gradient stops.
+        // Beyond v3 — Liquid Glass. Palette is CSS-var-driven so every
+        // `beyond-*` utility flips with `.dark` (see :root / .dark in index.css).
         beyond: {
           // Surface neutrals
           white: '#ffffff',
-          paper: '#fafafa',
+          paper: 'rgb(var(--bx-paper) / <alpha-value>)',
           // Text
-          ink: '#0a0a0a',
-          dim: '#737373',
-          faint: '#a3a3a3',
-          // Borders / dividers
-          line: '#f0f0f0',
+          ink: 'rgb(var(--bx-ink) / <alpha-value>)',
+          dim: 'rgb(var(--bx-dim) / <alpha-value>)',
+          faint: 'rgb(var(--bx-faint) / <alpha-value>)',
+          // Borders / dividers (already the final translucent colour)
+          line: 'var(--bx-line)',
           // Hero gradient stops
           powder: '#cdd9e8',
           mist: '#e4dfd6',
           cream: '#f0e6dc',
           // --- v1 compat (legacy components still reference these names) ---
-          // Will be removed once all legacy components are rewritten.
-          charcoal: '#0a0a0a',
-          dusk:     '#737373',
-          plum:     '#737373',
-          coral:    '#0a0a0a',
-          parchment:'#fafafa',
+          charcoal: 'rgb(var(--bx-ink) / <alpha-value>)',
+          dusk:     'rgb(var(--bx-dim) / <alpha-value>)',
+          plum:     'rgb(var(--bx-dim) / <alpha-value>)',
+          coral:    'rgb(var(--bx-ink) / <alpha-value>)',
+          parchment:'rgb(var(--bx-paper) / <alpha-value>)',
           peach:    '#f0e6dc',
           cream2:   '#f0e6dc',
           sky:      '#cdd9e8',
           haze:     '#e4dfd6',
-          midnight: '#0a0a0a',
+          midnight: 'rgb(var(--bx-ink) / <alpha-value>)',
         },
       },
       borderRadius: {

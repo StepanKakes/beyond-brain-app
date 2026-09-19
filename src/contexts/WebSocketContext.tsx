@@ -7,6 +7,11 @@ type WebSocketContextType = {
   sendMessage: (message: any) => void;
   latestMessage: any | null;
   isConnected: boolean;
+  // Subscribe to every incoming WS message synchronously, bypassing the React
+  // state batching that drops intermediate messages (e.g. a `token_budget`
+  // event arriving microseconds before a `complete` event would be coalesced
+  // into one render where only `complete` survives). Returns unsubscribe.
+  subscribeMessages: (handler: (data: any) => void) => () => void;
 };
 
 const WebSocketContext = createContext<WebSocketContextType | null>(null);
@@ -33,6 +38,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   const [latestMessage, setLatestMessage] = useState<any>(null);
   const [isConnected, setIsConnected] = useState(false);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const subscribersRef = useRef<Set<(data: any) => void>>(new Set());
   const { token } = useAuth();
 
   useEffect(() => {
@@ -72,6 +78,12 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       websocket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          // Notify direct subscribers synchronously FIRST so they see every
+          // message even when React would batch the latestMessage state
+          // updates and drop intermediate ones.
+          for (const handler of subscribersRef.current) {
+            try { handler(data); } catch (e) { console.error('WS subscriber error:', e); }
+          }
           setLatestMessage(data);
         } catch (error) {
           console.error('Error parsing WebSocket message:', error);
@@ -107,13 +119,21 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     }
   }, []);
 
+  const subscribeMessages = useCallback((handler: (data: any) => void) => {
+    subscribersRef.current.add(handler);
+    return () => {
+      subscribersRef.current.delete(handler);
+    };
+  }, []);
+
   const value: WebSocketContextType = useMemo(() =>
   ({
     ws: wsRef.current,
     sendMessage,
     latestMessage,
-    isConnected
-  }), [sendMessage, latestMessage, isConnected]);
+    isConnected,
+    subscribeMessages,
+  }), [sendMessage, latestMessage, isConnected, subscribeMessages]);
 
   return value;
 };

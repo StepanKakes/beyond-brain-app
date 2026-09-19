@@ -1,7 +1,7 @@
 // Service Worker for Beyond PWA
 // Cache only manifest (needed for PWA install). HTML and JS are never pre-cached
 // so a rebuild + refresh always picks up the latest assets.
-const CACHE_NAME = 'beyond-v2';
+const CACHE_NAME = 'beyond-v3-glass';
 const urlsToCache = [
   '/manifest.json'
 ];

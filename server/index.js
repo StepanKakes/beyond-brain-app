@@ -21,11 +21,14 @@ import { findAppRoot, getModuleDir } from './utils/runtime-paths.js';
 import {
     queryClaudeSDK,
     abortClaudeSDKSession,
+    setClaudeSDKSessionModel,
+    setClaudeSDKSessionMcpServers,
     isClaudeSDKSessionActive,
     getActiveClaudeSDKSessions,
     resolveToolApproval,
     getPendingApprovalsForSession,
     reconnectSessionWriter,
+    isBeyondTurnActive,
 } from './claude-sdk.js';
 import {
     spawnCursor,
@@ -67,6 +70,12 @@ import pluginsRoutes from './routes/plugins.js';
 import providerRoutes from './modules/providers/provider.routes.js';
 // Beyond Brain — client-focused endpoints (reads ~/Documents/GitHub/beyond-brain)
 import beyondRoutes from './routes/beyond.js';
+// Beyond Brain — MCP connectors (add/manage/OAuth). Two routers: protected CRUD
+// + the unauthenticated OAuth callback target.
+import beyondMcpRoutes, { oauthCallbackRouter as beyondMcpOauthCallbackRouter } from './routes/beyond-mcp.js';
+// Beyond Brain — agent endpoints for Telegram bot / scheduled callers
+import beyondAgentRoutes from './routes/beyond-agent.js';
+import { authenticateAgent } from './middleware/agent-auth.js';
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
 import { initializeDatabase, projectsDb } from './modules/database/index.js';
 import { configureWebPush } from './services/vapid-keys.js';
@@ -97,6 +106,8 @@ const wss = createWebSocketServer(server, {
         queryCodex,
         spawnGemini,
         abortClaudeSDKSession,
+        setClaudeSDKSessionModel,
+        setClaudeSDKSessionMcpServers,
         abortCursorSession,
         abortCodexSession,
         abortGeminiSession,
@@ -106,6 +117,7 @@ const wss = createWebSocketServer(server, {
         isCodexSessionActive,
         isGeminiSessionActive,
         reconnectSessionWriter,
+        isBeyondTurnActive,
         getPendingApprovalsForSession,
         getActiveClaudeSDKSessions,
         getActiveCursorSessions,
@@ -190,8 +202,23 @@ app.use('/api/providers', authenticateToken, providerRoutes);
 // Agent API Routes (uses API key authentication)
 app.use('/api/agent', agentRoutes);
 
+// Beyond Brain MCP connectors — add/manage MCP servers + OAuth. Mounted BEFORE
+// the /api/beyond catch-all so /api/beyond/mcp/* resolves here, not there.
+app.use('/api/beyond/mcp', authenticateToken, beyondMcpRoutes);
+// OAuth redirect target for MCP connectors — NO JWT (the provider redirects the
+// user's browser here). Secured by the single-use opaque `state`.
+app.use('/api/beyond-mcp-oauth', beyondMcpOauthCallbackRouter);
+
 // Beyond Brain client-focused endpoints (read-only). Auth required.
 app.use('/api/beyond', authenticateToken, beyondRoutes);
+
+// Beyond Brain agent endpoints (Telegram bot, scheduled callers). Uses a
+// shared-secret token instead of JWT — see middleware/agent-auth.js. Mounted
+// BEFORE the JWT-protected /api/beyond catch-all? Express matches routes
+// in order — the `/agent/*` sub-path won't match `/api/beyond` exact-prefix
+// rules, but we mount it explicitly under its own path to keep the JWT
+// middleware off this surface.
+app.use('/api/beyond-agent', authenticateAgent, beyondAgentRoutes);
 
 // Serve public files (like api-docs.html)
 app.use(express.static(path.join(APP_ROOT, 'public')));

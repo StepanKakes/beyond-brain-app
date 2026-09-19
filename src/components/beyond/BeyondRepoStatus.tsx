@@ -89,12 +89,12 @@ export default function BeyondRepoStatus({
         setFlash({ kind: 'err', text: data.message || data.error || 'Sync selhal' });
         if (data.status) setStatus(data.status);
       } else {
-        const labels: Record<string, string> = {
-          pull: `Stáhnuto ${data.pulled || 0} commitů`,
-          push: `Posláno ${data.pushed || 0} commitů`,
-          noop: 'Aktuální',
-        };
-        setFlash({ kind: 'ok', text: labels[data.action] || 'Hotovo' });
+        const parts: string[] = [];
+        if (data.committed) parts.push(`commitnuto ${data.committed}`);
+        if (data.pulled) parts.push(`staženo ${data.pulled}`);
+        if (data.pushed) parts.push(`posláno ${data.pushed}`);
+        const text = parts.length ? parts.join(' · ') : 'Aktuální';
+        setFlash({ kind: 'ok', text: text.charAt(0).toUpperCase() + text.slice(1) });
         if (data.status) setStatus(data.status);
         onSynced?.();
       }

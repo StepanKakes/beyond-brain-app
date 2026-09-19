@@ -15,6 +15,8 @@ type ChatIncomingMessage = AnyRecord & {
   options?: AnyRecord;
   provider?: string;
   sessionId?: string;
+  model?: string;
+  cwd?: string;
   requestId?: string;
   allow?: unknown;
   updatedInput?: unknown;
@@ -30,6 +32,11 @@ type ChatWebSocketDependencies = {
   queryCodex: (command: string, options: unknown, writer: WebSocketWriter) => Promise<unknown>;
   spawnGemini: (command: string, options: unknown, writer: WebSocketWriter) => Promise<unknown>;
   abortClaudeSDKSession: (sessionId: string) => Promise<boolean>;
+  setClaudeSDKSessionModel?: (sessionId: string, model: string) => Promise<boolean>;
+  setClaudeSDKSessionMcpServers?: (
+    sessionId: string,
+    cwd: string,
+  ) => Promise<{ added: string[]; removed: string[]; errors: Record<string, string> } | null>;
   abortCursorSession: (sessionId: string) => boolean;
   abortCodexSession: (sessionId: string) => boolean;
   abortGeminiSession: (sessionId: string) => boolean;
@@ -47,6 +54,7 @@ type ChatWebSocketDependencies = {
   isCodexSessionActive: (sessionId: string) => boolean;
   isGeminiSessionActive: (sessionId: string) => boolean;
   reconnectSessionWriter: (sessionId: string, ws: WebSocket) => boolean;
+  isBeyondTurnActive: (sessionId: string, userId?: string | null) => boolean;
   getPendingApprovalsForSession: (sessionId: string) => unknown[];
   getActiveClaudeSDKSessions: () => unknown;
   getActiveCursorSessions: () => unknown;
@@ -116,6 +124,49 @@ export function handleChatConnection(
 
       if (messageType === 'claude-command') {
         await dependencies.queryClaudeSDK(data.command ?? '', data.options, writer);
+        return;
+      }
+
+      // Switch the model of a live Claude session in place (Beyond chat reuses
+      // one process per session, so the picker can change models mid-thread).
+      if (messageType === 'set-model') {
+        const sessionId = typeof data.sessionId === 'string' ? data.sessionId : '';
+        const model = typeof data.model === 'string' ? data.model : '';
+        if (sessionId && model && dependencies.setClaudeSDKSessionModel) {
+          await dependencies.setClaudeSDKSessionModel(sessionId, model);
+        }
+        return;
+      }
+
+      // Attach newly-added MCP connectors to a LIVE Claude session, so a
+      // connector connected mid-thread works right away instead of forcing the
+      // user into a new chat (which would drop their accumulated context).
+      if (messageType === 'apply-mcp') {
+        const sessionId = typeof data.sessionId === 'string' ? data.sessionId : '';
+        const cwd = typeof data.cwd === 'string' ? data.cwd : '';
+        if (!sessionId || !dependencies.setClaudeSDKSessionMcpServers) {
+          writer.send({ type: 'mcp-applied', ok: false, live: false });
+          return;
+        }
+        try {
+          const result = await dependencies.setClaudeSDKSessionMcpServers(sessionId, cwd);
+          writer.send({
+            type: 'mcp-applied',
+            ok: true,
+            // null => no live process for this session; caller shows the
+            // "applies in a new chat" hint instead.
+            live: result !== null,
+            added: result?.added || [],
+            errors: result?.errors || {},
+          });
+        } catch (error) {
+          writer.send({
+            type: 'mcp-applied',
+            ok: false,
+            live: true,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
         return;
       }
 
@@ -221,11 +272,20 @@ export function handleChatConnection(
           }
         }
 
+        // For Beyond streaming, report whether a TURN is still generating (vs a
+        // live-but-idle session) so a reconnecting browser can tell "answer
+        // still coming" from "finished while I was away" and clear its spinner.
+        const turnActive =
+          provider === 'claude'
+            ? dependencies.isBeyondTurnActive(sessionId, (ws as { userId?: string | null }).userId ?? null)
+            : false;
+
         writer.send({
           type: 'session-status',
           sessionId,
           provider,
           isProcessing: isActive,
+          turnActive,
         });
         return;
       }

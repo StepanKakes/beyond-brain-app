@@ -22,12 +22,45 @@ import {
   Plus,
   MessagesSquare,
   Check,
+  Sparkles,
+  ChevronDown,
+  PanelRight,
+  Mic,
 } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import BeyondGlyph from './BeyondGlyph';
+import { remarkBeyondFilePaths, parseBeyondFileHref, BEYOND_FILE_SCHEME } from './beyondFilePaths';
+import { CLAUDE_MODELS } from '../../../shared/modelConstants';
+import {
+  fetchBeyondModels,
+  fallbackModelOptions,
+  type BeyondModelOption,
+} from './beyondModels';
+import BeyondCodeBlock from './BeyondCodeBlock';
+import BeyondLoader, { readLoaderKind, type LoaderKind } from './BeyondLoader';
+import BeyondBrainMark from './BeyondBrainMark';
+import BeyondThinkingStates from './BeyondThinkingStates';
+import StreamingText from './StreamingText';
+import BeyondSlashMenu from './BeyondSlashMenu';
+import { useBeyondSpeech } from './useBeyondSpeech';
+import { useBeyondSlashCommands } from './useBeyondSlashCommands';
+import {
+  BEYOND_APP_COMMANDS,
+  findAppCommand,
+  parseSlash,
+  type BeyondAppAction,
+  type BeyondSlashCommand,
+} from './beyondCommands';
 import { useWebSocket } from '../../contexts/WebSocketContext';
 import { authenticatedFetch } from '../../utils/api';
+import {
+  fetchSessionIndex,
+  persistSessionIndex,
+  resolveActiveUuid,
+  suggestSessionTitle,
+  writeLocalActive,
+  type BeyondSession,
+} from './beyondSessionsApi';
 
 /**
  * Beyond Brain — real chat (v2, hyperminimal).
@@ -41,50 +74,14 @@ import { authenticatedFetch } from '../../utils/api';
  * true` on subsequent turns so the same conversation survives reloads.
  */
 
+// cwd for the Claude SDK; the server overrides this with BEYOND_BRAIN_PATH
+// when it doesn't exist on disk (this hardcoded macOS value is the upstream
+// author's path — kept here for upstream-merge compatibility).
 const BRAIN_PROJECT_PATH = '/Users/stepankakes/Documents/GitHub/beyond-brain';
 
-function sessionStorageKey(slug: string): string {
-  return `beyond.session.${slug}`;
-}
-
-function sessionsStorageKey(slug: string): string {
-  return `beyond.sessions.${slug}`;
-}
-
-type BeyondSession = {
-  uuid: string;
-  title: string;
-  lastUsedAt: number;
-};
-
-function readSessions(slug: string): BeyondSession[] {
-  try {
-    const raw = localStorage.getItem(sessionsStorageKey(slug));
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter(
-        (s): s is BeyondSession =>
-          !!s && typeof s === 'object' &&
-          typeof (s as BeyondSession).uuid === 'string' &&
-          typeof (s as BeyondSession).title === 'string' &&
-          typeof (s as BeyondSession).lastUsedAt === 'number',
-      )
-      .sort((a, b) => b.lastUsedAt - a.lastUsedAt);
-  } catch {
-    return [];
-  }
-}
-
-function writeSessions(slug: string, sessions: BeyondSession[]): void {
-  try {
-    localStorage.setItem(sessionsStorageKey(slug), JSON.stringify(sessions));
-  } catch {
-    /* ignore */
-  }
-  // Notify observers (sidebar) within the same tab — `storage` events only
-  // fire across tabs.
+/** Notify same-tab observers (sidebar dropdown etc.) that the per-client
+ *  session index changed. Cross-PC continuity is handled by the server side. */
+function notifySessionsChanged(slug: string): void {
   window.dispatchEvent(new CustomEvent('beyond:sessions-changed', { detail: { slug } }));
 }
 
@@ -159,6 +156,7 @@ const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
 
 const ALLOWED_TOOLS_STORAGE_KEY = 'beyond.allowed-tools';
 const BYPASS_PERMISSIONS_STORAGE_KEY = 'beyond.bypass-permissions';
+const MODEL_STORAGE_KEY = 'beyond.model';
 
 /** Reads persisted allow rules: exact tool names + `mcp__server__*` prefixes. */
 function readAllowedTools(): string[] {
@@ -193,6 +191,12 @@ type Props = {
   client: { slug: string; name: string; week?: string | null };
   /** Optional initial prompt to auto-send (e.g. coming from a welcome chip). */
   initialPrompt?: string;
+  /** Override which session this mount loads:
+   *  - undefined (default) → resume the server's activeUuid
+   *  - `{ uuid: null }`    → start fresh, ignore server activeUuid (e.g. "+ Nový chat")
+   *  - `{ uuid: 'xxx' }`   → resume this specific session, override server activeUuid
+   *  Only consulted on mount; bump the parent's epoch key to apply a new value. */
+  sessionOverride?: { uuid: string | null };
 };
 
 const QUICK_ACTIONS = ['Action items', 'Brief', 'Sync'];
@@ -201,17 +205,28 @@ function uid() {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export default function BeyondChat({ client, initialPrompt }: Props) {
-  const { sendMessage, latestMessage, isConnected } = useWebSocket();
+export default function BeyondChat({ client, initialPrompt, sessionOverride }: Props) {
+  const { sendMessage, latestMessage, isConnected, subscribeMessages } = useWebSocket();
 
   // Claude Agent SDK session UUID for this client. Loaded from localStorage on
   // mount; updated whenever the server emits `session_created`. We only pass
   // `resume: true` once we actually have a UUID — otherwise the SDK tries to
   // resume a non-existent transcript and silently hangs.
   const sessionIdRef = useRef<string | null>(null);
+  // True between "user sent the first turn of a brand-new chat" and "server
+  // told us the freshly-minted session id". Only the mount that started that
+  // turn may claim the incoming `session_created` — and only such a mount
+  // accepts stream events that don't yet carry a matching session id. This is
+  // what keeps one chat's stream from bleeding into another on the single,
+  // shared WebSocket connection (also across a shared login / multiple tabs).
+  const expectingNewSessionRef = useRef<boolean>(false);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [thinking, setThinking] = useState(false);
+  const thinkingRef = useRef(thinking);
+  thinkingRef.current = thinking;
+  const isConnectedRef = useRef(isConnected);
+  isConnectedRef.current = isConnected;
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [value, setValue] = useState('');
   const [askRequest, setAskRequest] = useState<AskRequest | null>(null);
@@ -227,16 +242,77 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
   const [allowedTools, setAllowedTools] = useState<string[]>(() => readAllowedTools());
   const allowedToolsRef = useRef<string[]>(allowedTools);
   allowedToolsRef.current = allowedTools;
+  // Selected Claude model. Persisted globally (one shared login). Read via ref
+  // in send() so the value rides each turn without re-creating the callback.
+  const [model, setModel] = useState<string>(() => {
+    try {
+      return localStorage.getItem(MODEL_STORAGE_KEY) || CLAUDE_MODELS.DEFAULT;
+    } catch {
+      return CLAUDE_MODELS.DEFAULT;
+    }
+  });
+  const modelRef = useRef<string>(model);
+  modelRef.current = model;
+  // Model options shown in the picker. Start from the static fallback, then
+  // replace with the live list (real version names) once it loads.
+  const [modelOptions, setModelOptions] = useState<BeyondModelOption[]>(() => fallbackModelOptions());
   const [permsOpen, setPermsOpen] = useState(false);
+  // Thinking-loader animation (Settings → Animace přemýšlení), shared via events.
+  const [loader, setLoader] = useState<LoaderKind>(() => readLoaderKind());
+  // Id of the assistant message currently streaming in (word-by-word cross-blur).
+  // Set on each stream_delta, cleared on complete/error so the bubble swaps to
+  // the fully-formatted Markdown render.
+  const [streamingId, setStreamingId] = useState<string | null>(null);
+  // Stable id for the in-flight streaming bubble — a tool step or turn end
+  // resets it so the next deltas start a fresh bubble.
+  const streamBubbleIdRef = useRef<string | null>(null);
+  // Recovery: true while we're re-syncing after a socket drop / tab refocus, so
+  // the next `complete` reloads the authoritative transcript.
+  const recoveredRef = useRef(false);
+  // Canvas / document panel state, mirrored from the app-level file preview.
+  const [canvasPath, setCanvasPath] = useState<string | null>(null);
+  const [canvasOpen, setCanvasOpen] = useState(false);
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Per-client sessions index (localStorage). The transcripts themselves live
-  // on disk under ~/.claude/projects/<cwd-hash>/<uuid>.jsonl — we just keep
-  // track of which UUIDs belong to this client + a human-readable title.
-  const [sessions, setSessions] = useState<BeyondSession[]>(() => readSessions(client.slug));
+  // Dictation (speech-to-text, Czech). Streams into the composer value.
+  const valueRef = useRef(value);
+  valueRef.current = value;
+  const speech = useBeyondSpeech({
+    lang: 'cs-CZ',
+    onValue: setValue,
+    getBase: () => valueRef.current,
+  });
+
+  // Auto-grow the composer textarea as the user types a longer prompt; cap at
+  // ~10 lines and let it scroll inside above that.
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
+  }, [value]);
+
+  // Live context usage for the current SDK session, fed by the server's
+  // `token_budget` status events (from queryInstance.getContextUsage) after
+  // each turn. `used` is what's in Claude's context window right now —
+  // re-sent every turn — not cumulative spend. `autoCompactThreshold` (if
+  // provided) is where the SDK will auto-compact. Reset on session switch.
+  const [tokenBudget, setTokenBudget] = useState<{
+    used: number;
+    total: number;
+    autoCompactThreshold?: number | null;
+    isAutoCompactEnabled?: boolean;
+  } | null>(null);
+
+  // Per-client sessions index — now server-backed (`/api/beyond/sessions/:slug`)
+  // so PC1/PC2 share the same thread list with each client. Transcripts still
+  // live on disk under ~/.claude/projects/<cwd-hash>/<uuid>.jsonl on the
+  // server box, exposed via `/api/providers/sessions/:uuid/messages`.
+  // First mount hydrates from server; mutations PUT it back.
+  const [sessions, setSessions] = useState<BeyondSession[]>([]);
   const [sessionsOpen, setSessionsOpen] = useState(false);
   // When a fresh chat is started we remember the next user prompt so we can
   // title the new session as soon as the server emits session_created.
@@ -246,18 +322,23 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
 
   const startNewSession = useCallback(() => {
     // Drop the current uuid + transcript; the next send() will spawn a fresh
-    // SDK session and capture its new UUID via session_created.
-    try {
-      localStorage.removeItem(sessionStorageKey(client.slug));
-    } catch {
-      /* ignore */
-    }
+    // SDK session and capture its new UUID via session_created. Server still
+    // keeps the old session in the list so it can be switched back to.
     sessionIdRef.current = null;
+    writeLocalActive(client.slug, null);
+    streamBubbleIdRef.current = null;
+    setStreamingId(null);
     setMessages([]);
     setThinking(false);
     setAskRequest(null);
     setPermRequest(null);
+    setTokenBudget(null);
     setSessionsOpen(false);
+    setSessions((prev) => {
+      persistSessionIndex(client.slug, { activeUuid: null, sessions: prev });
+      notifySessionsChanged(client.slug);
+      return prev;
+    });
     requestAnimationFrame(() => textareaRef.current?.focus());
   }, [client.slug]);
 
@@ -268,15 +349,14 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
         return;
       }
       sessionIdRef.current = uuid;
-      try {
-        localStorage.setItem(sessionStorageKey(client.slug), uuid);
-      } catch {
-        /* ignore */
-      }
+      writeLocalActive(client.slug, uuid);
+      streamBubbleIdRef.current = null;
+      setStreamingId(null);
       setMessages([]);
       setThinking(false);
       setAskRequest(null);
       setPermRequest(null);
+      setTokenBudget(null);
       setSessionsOpen(false);
       setLoadingHistory(true);
 
@@ -291,26 +371,69 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
         })
         .finally(() => setLoadingHistory(false));
 
-      // Bump lastUsedAt to top of list.
+      // Backfill context budget from JSONL so the chip shows the resumed size
+      // immediately, before the next turn's token_budget WS event arrives. Use
+      // a functional setter so a racing WS event (newer data) always wins.
+      authenticatedFetch(`/api/beyond/sessions/${encodeURIComponent(uuid)}/budget`)
+        .then(async (r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (!data || typeof data.used !== 'number' || typeof data.total !== 'number' || data.total <= 0) return;
+          setTokenBudget((prev) => prev || {
+            used: data.used,
+            total: data.total,
+            autoCompactThreshold: null,
+            isAutoCompactEnabled: true,
+          });
+        })
+        .catch(() => { /* silent */ });
+
+      // Bump lastUsedAt + activate this uuid on the server-side index.
       setSessions((prev) => {
         const next = prev.map((s) =>
           s.uuid === uuid ? { ...s, lastUsedAt: Date.now() } : s,
         );
-        writeSessions(client.slug, next);
+        persistSessionIndex(client.slug, { activeUuid: uuid, sessions: next });
+        notifySessionsChanged(client.slug);
         return next;
       });
     },
     [client.slug],
   );
 
+  // Re-pull the persisted transcript for the current session. Used by the
+  // reconnect / refocus recovery so an answer produced while the socket was
+  // down (or the tab was backgrounded) shows up, and any broken live stream is
+  // replaced by the authoritative on-disk history.
+  const reloadHistory = useCallback((uuid: string) => {
+    if (!uuid) return;
+    authenticatedFetch(`/api/providers/sessions/${encodeURIComponent(uuid)}/messages`)
+      .then(async (r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data) return;
+        streamBubbleIdRef.current = null;
+        setStreamingId(null);
+        setMessages(rebuildHistory(data.messages || []));
+      })
+      .catch(() => { /* silent — a later turn or manual refresh recovers */ });
+  }, []);
+
   const deleteSession = useCallback(
     (uuid: string) => {
       setSessions((prev) => {
         const next = prev.filter((s) => s.uuid !== uuid);
-        writeSessions(client.slug, next);
+        const stillActive =
+          sessionIdRef.current && sessionIdRef.current !== uuid
+            ? sessionIdRef.current
+            : null;
+        // Explicit removal — the server merges sessions and only drops uuids
+        // listed in deletedUuids, so a shorter `next` array alone wouldn't
+        // delete anything.
+        persistSessionIndex(client.slug, { activeUuid: stillActive, sessions: next }, [uuid]);
+        notifySessionsChanged(client.slug);
         return next;
       });
       if (sessionIdRef.current === uuid) {
+        // startNewSession() clears this device's local active pointer too.
         startNewSession();
       }
     },
@@ -489,62 +612,201 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
     [permRequest, respondPermission],
   );
 
-  // Load persisted session id + history when switching clients. Claude Code
-  // stores the transcript as JSONL under ~/.claude/projects; claudecodeui's
-  // session watcher indexes it into a sessions DB which the providers route
-  // exposes at /api/providers/sessions/<uuid>/messages.
+  // Load session index + history when switching clients. Reads from server
+  // (`/api/beyond/sessions/:slug`) so threads are shared across devices.
+  // `sessionOverride` lets the parent pin which session to resume on this
+  // mount — used by global ("+ Nový chat") and session-switch flows.
   useEffect(() => {
     let cancelled = false;
-    let persisted: string | null = null;
-    try {
-      persisted = localStorage.getItem(sessionStorageKey(client.slug));
-    } catch {
-      persisted = null;
-    }
-    sessionIdRef.current = persisted;
+    sessionIdRef.current = null;
+    expectingNewSessionRef.current = false;
+    streamBubbleIdRef.current = null;
+    setStreamingId(null);
+    setSessions([]);
     setMessages([]);
     setThinking(false);
+    setLoadingHistory(false);
+    setTokenBudget(null);
 
-    const existing = readSessions(client.slug);
-    // Migration: when the active sessionId predates the per-client index,
-    // seed it so it shows up in the dropdown after this upgrade.
-    if (persisted && !existing.some((s) => s.uuid === persisted)) {
-      const seeded: BeyondSession = {
-        uuid: persisted,
-        title: `${client.name} · původní chat`,
-        lastUsedAt: Date.now(),
-      };
-      const merged = [seeded, ...existing];
-      writeSessions(client.slug, merged);
-      setSessions(merged);
-    } else {
-      setSessions(existing);
-    }
+    void (async () => {
+      try {
+        const index = await fetchSessionIndex(client.slug);
+        if (cancelled) return;
+        setSessions(index.sessions);
 
-    if (!persisted) {
-      setLoadingHistory(false);
-      return;
-    }
+        // If an auto-sent initial prompt already started a fresh turn on this
+        // mount (welcome → chat), don't resume/overwrite the session under it —
+        // that would strand the freshly-minted session id and drop its stream.
+        if (expectingNewSessionRef.current || sessionIdRef.current) return;
 
-    setLoadingHistory(true);
-    authenticatedFetch(`/api/providers/sessions/${encodeURIComponent(persisted)}/messages`)
-      .then(async (res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (cancelled || !data) return;
-        const rebuilt = rebuildHistory(data.messages || []);
-        setMessages(rebuilt);
-      })
-      .catch(() => {
-        /* watcher may not have indexed the session yet — silent */
-      })
-      .finally(() => {
+        // Client chats resume THIS device's open thread (per-device active,
+        // shared list); universal chats are pinned by the URL via override.
+        const resumeUuid: string | null =
+          sessionOverride !== undefined ? sessionOverride.uuid : resolveActiveUuid(index, client.slug);
+
+        if (!resumeUuid) {
+          sessionIdRef.current = null;
+          if (sessionOverride === undefined) writeLocalActive(client.slug, null);
+          return;
+        }
+        sessionIdRef.current = resumeUuid;
+        if (sessionOverride === undefined) writeLocalActive(client.slug, resumeUuid);
+
+        // If override picks a different session than the server's active one,
+        // persist that choice so other surfaces (other tabs / sidebar count)
+        // line up with what's actually open here.
+        if (sessionOverride?.uuid && sessionOverride.uuid !== index.activeUuid) {
+          persistSessionIndex(client.slug, {
+            activeUuid: sessionOverride.uuid,
+            sessions: index.sessions,
+          });
+          notifySessionsChanged(client.slug);
+        }
+
+        setLoadingHistory(true);
+        const res = await authenticatedFetch(
+          `/api/providers/sessions/${encodeURIComponent(resumeUuid)}/messages`,
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        setMessages(rebuildHistory(data.messages || []));
+
+        // Same backfill as in loadSession: fetch the last JSONL usage so the
+        // chip shows real numbers immediately on resume.
+        authenticatedFetch(`/api/beyond/sessions/${encodeURIComponent(resumeUuid)}/budget`)
+          .then(async (r) => (r.ok ? r.json() : null))
+          .then((budget) => {
+            if (cancelled) return;
+            if (!budget || typeof budget.used !== 'number' || typeof budget.total !== 'number' || budget.total <= 0) return;
+            setTokenBudget((prev) => prev || {
+              used: budget.used,
+              total: budget.total,
+              autoCompactThreshold: null,
+              isAutoCompactEnabled: true,
+            });
+          })
+          .catch(() => { /* silent */ });
+      } catch (err) {
+        // watcher may not have indexed the session yet, or server is briefly
+        // unreachable — silent so the chat stays usable.
+        console.warn('[beyond] failed to load session index', err);
+      } finally {
         if (!cancelled) setLoadingHistory(false);
-      });
+      }
+    })();
 
     return () => {
       cancelled = true;
     };
+    // sessionOverride is read once on mount; the parent bumps the BeyondChat
+    // key when it changes, so we deliberately only depend on slug here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client.slug]);
+
+  // Route guard for the SINGLE, shared WebSocket connection. Every server event
+  // carries the `sessionId` it belongs to; a message is for THIS chat only when
+  // its id matches ours. The one exception: right after sending the first turn
+  // of a brand-new chat we don't know the id yet, so we accept the unmatched
+  // stream (there can only be one such in-flight fresh turn per mounted chat)
+  // until `session_created` pins the id. Without this, a late event from a
+  // previous chat — or another person on the same login — lands in whatever
+  // chat happens to be open.
+  const belongsToThisChat = useCallback((m: Record<string, unknown>): boolean => {
+    const sid =
+      (m.sessionId as string | undefined) ||
+      (m.newSessionId as string | undefined) ||
+      null;
+    if (sid && sid === sessionIdRef.current) return true;
+    if (sessionIdRef.current == null && expectingNewSessionRef.current) return true;
+    return false;
+  }, []);
+
+  // Claim a freshly-minted session id SYNCHRONOUSLY (via the raw subscription,
+  // not the batched latestMessage effect) so subsequent stream events route to
+  // this chat even when React coalesces the `session_created` render away. Only
+  // the mount that started the fresh turn claims it; any other `session_created`
+  // on the shared socket belongs to a different chat and is ignored here.
+  useEffect(() => {
+    return subscribeMessages((m) => {
+      if (!m || m.kind !== 'session_created') return;
+      if (!expectingNewSessionRef.current || sessionIdRef.current) return;
+      const newId =
+        (m.newSessionId as string | undefined) ||
+        (m.sessionId as string | undefined) ||
+        null;
+      if (!newId) return;
+      expectingNewSessionRef.current = false;
+      sessionIdRef.current = newId;
+      writeLocalActive(client.slug, newId);
+      // The raw first message — used both for the instant snippet title and to
+      // ask the server for a nicer AI-generated label right after.
+      const firstMessage = pendingTitleRef.current;
+      const title = firstMessage
+        ? shortTitle(firstMessage)
+        : `Chat ${new Date().toLocaleString('cs-CZ', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`;
+      pendingTitleRef.current = null;
+      setSessions((prev) => {
+        if (prev.some((s) => s.uuid === newId)) {
+          persistSessionIndex(client.slug, { activeUuid: newId, sessions: prev });
+          return prev;
+        }
+        const entry: BeyondSession = { uuid: newId, title, lastUsedAt: Date.now() };
+        const next = [entry, ...prev];
+        persistSessionIndex(client.slug, { activeUuid: newId, sessions: next });
+        notifySessionsChanged(client.slug);
+        return next;
+      });
+
+      // Upgrade the snippet to an AI label in the background; drop it in when
+      // (and only if) this session still carries the auto-generated title, so a
+      // manual rename or a switch away is never clobbered.
+      if (firstMessage) {
+        void suggestSessionTitle(firstMessage).then((aiTitle) => {
+          if (!aiTitle || aiTitle === title) return;
+          setSessions((prev) => {
+            let changed = false;
+            const next = prev.map((s) => {
+              if (s.uuid !== newId || s.title !== title) return s;
+              changed = true;
+              return { ...s, title: aiTitle };
+            });
+            if (!changed) return prev;
+            persistSessionIndex(client.slug, { activeUuid: sessionIdRef.current, sessions: next });
+            notifySessionsChanged(client.slug);
+            return next;
+          });
+        });
+      }
+    });
+  }, [subscribeMessages, client.slug]);
+
+  // Direct subscription for token_budget — bypasses React state batching.
+  // The latestMessage effect below would otherwise miss this event whenever
+  // it arrives microseconds before a `complete` event (server emits them
+  // back-to-back at turn end), because React 18 coalesces those setStates
+  // into one render where only the last value survives.
+  useEffect(() => {
+    return subscribeMessages((m) => {
+      if (!m || m.kind !== 'status' || m.text !== 'token_budget') return;
+      if (!belongsToThisChat(m)) return;
+      const tb = m.tokenBudget as
+        | {
+            used?: number;
+            total?: number;
+            autoCompactThreshold?: number | null;
+            isAutoCompactEnabled?: boolean;
+          }
+        | undefined;
+      if (!tb || typeof tb.used !== 'number' || typeof tb.total !== 'number' || tb.total <= 0) return;
+      setTokenBudget({
+        used: tb.used,
+        total: tb.total,
+        autoCompactThreshold: tb.autoCompactThreshold ?? null,
+        isAutoCompactEnabled: Boolean(tb.isAutoCompactEnabled),
+      });
+    });
+  }, [subscribeMessages]);
 
   // Stream handler — server emits NormalizedMessage shapes with `kind`.
   useEffect(() => {
@@ -553,37 +815,19 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
     const kind = String(m.kind ?? '');
     if (!kind) return;
 
-    if (kind === 'session_created') {
-      const newId =
-        (m.newSessionId as string | undefined) ||
-        (m.sessionId as string | undefined) ||
-        null;
-      if (newId) {
-        sessionIdRef.current = newId;
-        try {
-          localStorage.setItem(sessionStorageKey(client.slug), newId);
-        } catch {
-          /* ignore */
-        }
-        const title = pendingTitleRef.current
-          ? shortTitle(pendingTitleRef.current)
-          : `Chat ${new Date().toLocaleString('cs-CZ', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`;
-        pendingTitleRef.current = null;
-        const entry: BeyondSession = { uuid: newId, title, lastUsedAt: Date.now() };
-        setSessions((prev) => {
-          if (prev.some((s) => s.uuid === newId)) return prev;
-          const next = [entry, ...prev];
-          writeSessions(client.slug, next);
-          return next;
-        });
-      }
-      return;
-    }
+    // Handled synchronously in the subscription above (immune to batching).
+    if (kind === 'session_created') return;
+
+    // Drop anything that isn't for the session this chat is showing.
+    if (!belongsToThisChat(m)) return;
 
     if (kind === 'stream_delta') {
       const text = (m.content as string | undefined) || '';
       if (!text) return;
-      appendAssistantText(setMessages, text);
+      if (!streamBubbleIdRef.current) streamBubbleIdRef.current = uid();
+      const id = streamBubbleIdRef.current;
+      appendAssistantTextById(setMessages, id, text);
+      setStreamingId(id);
       return;
     }
 
@@ -594,6 +838,9 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
       if (m.role && m.role !== 'assistant') return;
       const text = (m.content as string | undefined) || '';
       if (!text) return;
+      // A whole-message text block ends any streaming bubble.
+      streamBubbleIdRef.current = null;
+      setStreamingId(null);
       setMessages((prev) => [...prev, { id: uid(), role: 'assistant', kind: 'text', text }]);
       return;
     }
@@ -608,6 +855,10 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
       const name = String(m.toolName ?? '');
       const toolId = String(m.toolId ?? uid());
       if (!name) return;
+      // A tool step breaks the streaming text bubble; finalize it to Markdown
+      // and let post-tool deltas open a fresh bubble.
+      streamBubbleIdRef.current = null;
+      setStreamingId(null);
       const step: ToolStep = {
         id: uid(),
         toolId,
@@ -667,18 +918,123 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
       return;
     }
 
+    if (kind === 'status' && m.text === 'token_budget') {
+      const tb = m.tokenBudget as {
+        used?: number;
+        total?: number;
+        autoCompactThreshold?: number | null;
+        isAutoCompactEnabled?: boolean;
+      } | undefined;
+      if (tb && typeof tb.used === 'number' && typeof tb.total === 'number' && tb.total > 0) {
+        setTokenBudget({
+          used: tb.used,
+          total: tb.total,
+          autoCompactThreshold: tb.autoCompactThreshold ?? null,
+          isAutoCompactEnabled: Boolean(tb.isAutoCompactEnabled),
+        });
+      }
+      return;
+    }
+
+    if (kind === 'status' && m.text === 'session_lookup_failed_fallback') {
+      // Server couldn't resume the original SDK session for this transcript
+      // (rare format issue) and is auto-retrying as a fresh session. Clear our
+      // resume ref and re-arm "expecting" so the fallback's `session_created`
+      // is adopted as this client's new active uuid.
+      sessionIdRef.current = null;
+      expectingNewSessionRef.current = true;
+      streamBubbleIdRef.current = null;
+      setStreamingId(null);
+      setTokenBudget(null);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: uid(),
+          role: 'assistant',
+          kind: 'text',
+          text: '_Předchozí session se nepodařilo obnovit, pokračuji v novém vlákně. Claude o předchozí konverzaci neví, ale historii vidíš výše._',
+        },
+      ]);
+      return;
+    }
+
     if (kind === 'complete') {
       setThinking(false);
+      // Turn done — finalize the streaming bubble to formatted Markdown.
+      streamBubbleIdRef.current = null;
+      setStreamingId(null);
+      // If this turn finished after a reconnect, the live stream may have missed
+      // deltas while we were detached — pull the authoritative transcript.
+      if (recoveredRef.current) {
+        recoveredRef.current = false;
+        if (sessionIdRef.current) reloadHistory(sessionIdRef.current);
+      }
       return;
     }
 
     if (kind === 'error') {
       setThinking(false);
+      streamBubbleIdRef.current = null;
+      setStreamingId(null);
       const err = (m.content as string | undefined) || 'Hm, něco se rozbilo. Zkusíme znovu?';
       setMessages((prev) => [...prev, { id: uid(), role: 'assistant', kind: 'text', text: err }]);
       return;
     }
-  }, [client.slug, latestMessage]);
+  }, [client.slug, latestMessage, belongsToThisChat, reloadHistory]);
+
+  // ── Recovery after a dropped socket / backgrounded tab ────────────────────
+  // The server now keeps a streaming turn alive across WS drops (grace window)
+  // and re-attaches on reconnect. These control messages ride `latestMessage`
+  // with a `type` (no `kind`), so the main stream effect ignores them.
+  useEffect(() => {
+    const m = latestMessage as Record<string, unknown> | null;
+    if (!m) return;
+
+    if (m.type === 'websocket-reconnected') {
+      // Ask the server to re-attach us to any live turn and tell us its state.
+      if (sessionIdRef.current) {
+        recoveredRef.current = true;
+        sendMessage({ type: 'check-session-status', sessionId: sessionIdRef.current, provider: 'claude' });
+      }
+      return;
+    }
+
+    if (m.type === 'session-status' && m.sessionId && m.sessionId === sessionIdRef.current) {
+      if (m.turnActive) {
+        // Still generating server-side — we've been re-attached. Show the
+        // transcript up to now; the reattached stream delivers the rest and the
+        // final `complete` triggers an authoritative reload.
+        recoveredRef.current = true;
+        setThinking(true);
+        reloadHistory(sessionIdRef.current);
+      } else {
+        // Finished (or session gone) while we were away — pull the answer and
+        // stop the spinner.
+        recoveredRef.current = false;
+        reloadHistory(sessionIdRef.current);
+        setThinking(false);
+      }
+      return;
+    }
+  }, [latestMessage, sendMessage, reloadHistory]);
+
+  // Re-check on tab refocus / becoming visible (covers a silently-dead socket
+  // that never fired an explicit reconnect, the classic "left the window and it
+  // froze"). Only acts when a turn is in-flight for this chat.
+  useEffect(() => {
+    const recover = () => {
+      if (!sessionIdRef.current || !isConnectedRef.current || !thinkingRef.current) return;
+      recoveredRef.current = true;
+      sendMessage({ type: 'check-session-status', sessionId: sessionIdRef.current, provider: 'claude' });
+    };
+    const onVis = () => { if (document.visibilityState === 'visible') recover(); };
+    window.addEventListener('focus', recover);
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      window.removeEventListener('focus', recover);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, [sendMessage]);
 
   // Autoscroll to bottom on new messages.
   useEffect(() => {
@@ -721,6 +1077,18 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
       }
       if (!composedCommand) composedCommand = '(uživatel poslal přílohy bez textu)';
 
+      // Guard: if the socket is down (server restart, or an expired login the
+      // self-heal is about to reload on), don't clear the input and spin on
+      // "thinking" forever — sendMessage would silently drop the message. Keep
+      // the text and tell the user.
+      if (!isConnected) {
+        window.alert(
+          'Není spojení se serverem — nejspíš vypršelo přihlášení nebo se server restartuje. ' +
+          'Obnov stránku (Cmd/Ctrl+R); tvůj text tu zůstal.',
+        );
+        return;
+      }
+
       setValue('');
       setAttachments([]);
       setThinking(true);
@@ -729,16 +1097,22 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
       // first turn we let the SDK assign one and pick it up via session_created.
       const resumeId = sessionIdRef.current;
       if (!resumeId) {
+        // Fresh chat: no id yet. Arm the guard so this mount claims the
+        // upcoming `session_created` and accepts the stream it belongs to.
+        expectingNewSessionRef.current = true;
         // Remember the first user message so session_created can title the
         // newly minted session.
         pendingTitleRef.current = trimmed || (attachments.length > 0 ? `${attachments.length} přílohy` : 'Nový chat');
       } else {
-        // Bump lastUsedAt for the active session.
+        expectingNewSessionRef.current = false;
+        writeLocalActive(client.slug, resumeId);
+        // Bump lastUsedAt for the active session so it stays at the top of
+        // the dropdown.
         setSessions((prev) => {
           const next = prev.map((s) =>
             s.uuid === resumeId ? { ...s, lastUsedAt: Date.now() } : s,
           );
-          writeSessions(client.slug, next);
+          persistSessionIndex(client.slug, { activeUuid: resumeId, sessions: next });
           return next;
         });
       }
@@ -748,6 +1122,7 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
         options: {
           projectPath: BRAIN_PROJECT_PATH,
           cwd: BRAIN_PROJECT_PATH,
+          model: modelRef.current,
           ...(resumeId ? { sessionId: resumeId, resume: true } : {}),
           sessionSummary: `Beyond · ${client.name}`,
           ...(images.length > 0 ? { images } : {}),
@@ -772,6 +1147,229 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
     setThinking(false);
   }, [sendMessage]);
 
+  const changeModel = useCallback(
+    (next: string) => {
+      setModel(next);
+      try {
+        localStorage.setItem(MODEL_STORAGE_KEY, next);
+      } catch {
+        /* storage unavailable — model still applies for this tab */
+      }
+      // If a session is already running, switch its model in place so the
+      // change takes effect on the next turn without losing context. Fresh
+      // chats pick it up via the `model` option on the first turn.
+      if (sessionIdRef.current && isConnected) {
+        sendMessage({
+          type: 'set-model',
+          sessionId: sessionIdRef.current,
+          model: next,
+          provider: 'claude',
+        });
+      }
+    },
+    [isConnected, sendMessage],
+  );
+
+  // Settings dialog (Model / Animace přemýšlení) talks to the chat via events so
+  // the composer picker and thinking indicator stay in sync with the dialog.
+  useEffect(() => {
+    const onSetModel = (e: Event) => {
+      const v = (e as CustomEvent<{ value?: string }>).detail?.value;
+      if (v) changeModel(v);
+    };
+    const onSetLoader = (e: Event) => {
+      const k = (e as CustomEvent<{ kind?: LoaderKind }>).detail?.kind;
+      if (k) setLoader(k);
+    };
+    window.addEventListener('beyond:set-model', onSetModel);
+    window.addEventListener('beyond:set-loader', onSetLoader);
+    return () => {
+      window.removeEventListener('beyond:set-model', onSetModel);
+      window.removeEventListener('beyond:set-loader', onSetLoader);
+    };
+  }, [changeModel]);
+
+  // Mirror the app-level file preview so the header "Canvas" pill can toggle the
+  // document panel and remember the last opened artifact.
+  useEffect(() => {
+    const onState = (e: Event) => {
+      const detail = (e as CustomEvent<{ open?: boolean; path?: string | null }>).detail || {};
+      setCanvasOpen(Boolean(detail.open));
+      if (detail.open && typeof detail.path === 'string') setCanvasPath(detail.path);
+    };
+    window.addEventListener('beyond:file-preview-state', onState);
+    return () => window.removeEventListener('beyond:file-preview-state', onState);
+  }, []);
+
+  // The Konektory panel asks the *running* chat to attach newly-connected MCP
+  // servers in place (`beyond:apply-mcp`). Beyond keeps one claude.exe alive per
+  // session, so without this a connector added mid-thread would only load in a
+  // brand-new chat — costing the user their accumulated context.
+  useEffect(() => {
+    const onApplyMcp = () => {
+      if (!sessionIdRef.current || !isConnected) {
+        // No live process for this chat — nothing to hot-attach; the connector
+        // will load on the next turn anyway.
+        window.dispatchEvent(
+          new CustomEvent('beyond:mcp-applied', { detail: { ok: true, live: false } }),
+        );
+        return;
+      }
+      sendMessage({
+        type: 'apply-mcp',
+        sessionId: sessionIdRef.current,
+        cwd: BRAIN_PROJECT_PATH,
+        provider: 'claude',
+      });
+    };
+    window.addEventListener('beyond:apply-mcp', onApplyMcp);
+    return () => window.removeEventListener('beyond:apply-mcp', onApplyMcp);
+  }, [isConnected, sendMessage]);
+
+  // Server's reply to `apply-mcp` (carries `type`, not `kind`, so the stream
+  // handler below skips it) — relay it to the Konektory panel.
+  useEffect(() => {
+    if (!latestMessage) return;
+    const m = latestMessage as Record<string, unknown>;
+    if (m.type !== 'mcp-applied') return;
+    window.dispatchEvent(
+      new CustomEvent('beyond:mcp-applied', {
+        detail: {
+          ok: Boolean(m.ok),
+          live: Boolean(m.live),
+          added: Array.isArray(m.added) ? (m.added as string[]) : [],
+          error: typeof m.error === 'string' ? m.error : null,
+        },
+      }),
+    );
+  }, [latestMessage]);
+
+  // Manual context compaction. Sends `/compact` as a turn — Claude SDK
+  // summarizes the conversation so far and continues with a shrunken context.
+  // Only meaningful when a session is already running (needs an active uuid
+  // to resume against; on a fresh chat there's nothing to compact).
+  const compactContext = useCallback(() => {
+    if (thinking) return;
+    if (!sessionIdRef.current) return;
+    if (!isConnected) return;
+    if (!window.confirm('Komprimovat kontext této session?\nClaude shrne dosavadní konverzaci a uvolní tokeny pro pokračování.')) {
+      return;
+    }
+    send('/compact');
+  }, [thinking, isConnected, send]);
+
+  // ── Slash commands ────────────────────────────────────────────────────────
+  // App-mapped commands (/mcp, /model, /settings, …) are CLI-only in Claude
+  // Code and have no Agent-SDK equivalent, so we run them against Beyond's own
+  // UI. Everything else — custom `.claude/commands`, plugin skills, and the
+  // SDK-honoured `/compact` & `/clear` — is passed straight through by `send`.
+  const runAppCommand = useCallback(
+    (action: BeyondAppAction, args: string) => {
+      switch (action) {
+        case 'mcp':
+          window.dispatchEvent(new CustomEvent('beyond:open-connectors'));
+          break;
+        case 'settings':
+          window.dispatchEvent(new CustomEvent('beyond:open-settings'));
+          break;
+        case 'model': {
+          const wanted = args.trim().toLowerCase();
+          const match = wanted
+            ? modelOptions.find(
+                (o) =>
+                  o.value.toLowerCase() === wanted ||
+                  o.displayName.toLowerCase() === wanted ||
+                  o.short.toLowerCase() === wanted,
+              )
+            : null;
+          if (match) changeModel(match.value);
+          else window.dispatchEvent(new CustomEvent('beyond:open-settings'));
+          break;
+        }
+        case 'new':
+          startNewSession();
+          break;
+        case 'sessions':
+          setSessionsOpen(true);
+          break;
+        case 'compact':
+          compactContext();
+          break;
+        case 'cost': {
+          const b = tokenBudget;
+          const text =
+            b && b.total > 0
+              ? `**Využití kontextu**\n\n- Použito: ${b.used.toLocaleString('cs-CZ')} / ${b.total.toLocaleString('cs-CZ')} tokenů (${Math.round((b.used / b.total) * 100)} %)${b.autoCompactThreshold ? `\n- Auto-compact při ${b.autoCompactThreshold.toLocaleString('cs-CZ')} tokenech` : ''}`
+              : 'Zatím nemám data o využití tokenů — pošli první zprávu a ukazatel v liště se naplní.';
+          setMessages((prev) => [...prev, { id: uid(), role: 'assistant', kind: 'text', text }]);
+          break;
+        }
+        case 'help': {
+          const rows = BEYOND_APP_COMMANDS.filter((c, i, arr) => arr.findIndex((x) => x.action === c.action) === i)
+            .map((c) => `- \`${c.name}\` — ${c.description}`)
+            .join('\n');
+          const text =
+            `**Příkazy v Beyond Brain**\n\nNapiš \`/\` a vyber z nabídky. Aplikační příkazy:\n\n${rows}\n\n` +
+            'Kromě toho fungují i vlastní příkazy z `.claude/commands`, skilly a `/compact` — ty se pošlou přímo Claudovi.';
+          setMessages((prev) => [...prev, { id: uid(), role: 'assistant', kind: 'text', text }]);
+          break;
+        }
+      }
+    },
+    [modelOptions, changeModel, startNewSession, compactContext, tokenBudget],
+  );
+
+  // Selecting from the autocomplete: app commands run now; passthrough commands
+  // are dropped into the composer (with a trailing space) so the user can add
+  // args before Enter. Setting the value clears the lone-slash query, which
+  // closes the menu on its own.
+  const onChooseCommand = useCallback(
+    (cmd: BeyondSlashCommand) => {
+      if (cmd.kind === 'app' && cmd.action) {
+        runAppCommand(cmd.action, '');
+        setValue('');
+        return;
+      }
+      setValue(`${cmd.name} `);
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    },
+    [runAppCommand],
+  );
+
+  const slash = useBeyondSlashCommands({
+    value,
+    projectPath: BRAIN_PROJECT_PATH,
+    onChoose: onChooseCommand,
+  });
+
+  // Submit from the composer: intercept app commands, else send to the SDK.
+  const submit = useCallback(
+    (text: string) => {
+      const parsed = parseSlash(text);
+      const app = parsed ? findAppCommand(parsed.name) : null;
+      speech.stop();
+      if (app && app.action) {
+        runAppCommand(app.action, parsed?.args ?? '');
+        setValue('');
+        return;
+      }
+      send(text);
+    },
+    [runAppCommand, send, speech],
+  );
+
+  // Load the live model list (real version names) once on mount; keep the
+  // static fallback if the fetch yields nothing.
+  useEffect(() => {
+    let cancelled = false;
+    fetchBeyondModels().then((opts) => {
+      if (!cancelled && opts.length) setModelOptions(opts);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Auto-send any initial prompt once when the client mounts.
   const sentInitialRef = useRef(false);
   useEffect(() => {
@@ -789,7 +1387,7 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
 
   return (
     <div
-      className="relative flex h-full w-full flex-col bg-[#fafafa]"
+      className="bb-scope relative flex h-full w-full flex-col"
       onDragEnter={(e) => {
         if (e.dataTransfer?.types?.includes('Files')) {
           e.preventDefault();
@@ -821,7 +1419,8 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
-            className="pointer-events-none absolute inset-3 z-50 flex items-center justify-center rounded-3xl border-2 border-dashed border-beyond-ink/30 bg-white/70 backdrop-blur-sm"
+            className="bb-glass pointer-events-none absolute inset-3 z-50 flex items-center justify-center rounded-3xl border-2 border-dashed"
+            style={{ borderColor: 'color-mix(in srgb, var(--bb-ink) 28%, transparent)' }}
           >
             <div className="flex flex-col items-center gap-2 text-beyond-dim">
               <Upload className="h-6 w-6" strokeWidth={1.8} />
@@ -831,56 +1430,58 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
           </motion.div>
         )}
       </AnimatePresence>
-      {/* Header — floating rounded card with Beyond glyph avatar.
-          Left padding leaves room for the shell's hamburger toggle (~52px). */}
-      <header className="flex flex-shrink-0 items-center px-4 pb-3 pl-16 pr-4 pt-4 sm:px-6 sm:pl-20 sm:pr-6 sm:pt-5">
-        <div className="relative mx-auto flex w-full max-w-[760px] items-center gap-3 rounded-2xl bg-white px-4 py-3 shadow-[0_2px_16px_-8px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.04]">
-          <BeyondGlyph size={28} />
+      {/* Header — thin glass bar. Title opens the sessions menu; left padding
+          leaves room for the shell's hamburger toggle when the sidebar is hidden. */}
+      <header className="bb-header" style={{ position: 'relative', paddingLeft: 56 }}>
+        <button
+          type="button"
+          onClick={() => setSessionsOpen((v) => !v)}
+          className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+          title="Seznam chatů s tímto klientem"
+        >
+          <span className="flex-shrink-0 text-[13.5px] font-medium text-beyond-ink">{client.name}</span>
+          <span className="truncate text-[13px] text-beyond-faint">
+            {activeSession ? `· ${activeSession.title}` : client.week ? `· ${client.week}` : '· Nový chat'}
+          </span>
+          <ChevronRight
+            className={`h-[14px] w-[14px] flex-shrink-0 text-beyond-faint transition-transform ${sessionsOpen ? 'rotate-90' : ''}`}
+            strokeWidth={1.8}
+          />
+        </button>
+
+        {canvasPath && (
           <button
             type="button"
-            onClick={() => setSessionsOpen((v) => !v)}
-            className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
-            title="Seznam chatů s tímto klientem"
+            className="bb-pill"
+            aria-pressed={canvasOpen}
+            title={canvasOpen ? 'Zavřít dokument' : 'Otevřít poslední dokument'}
+            onClick={() => {
+              if (canvasOpen) {
+                window.dispatchEvent(new CustomEvent('beyond:close-file'));
+              } else {
+                window.dispatchEvent(new CustomEvent('beyond:open-file', { detail: { path: canvasPath } }));
+              }
+            }}
           >
-            <div className="min-w-0 flex-1">
-              <h2 className="truncate text-[14px] font-medium leading-tight text-beyond-ink">
-                {client.name}
-              </h2>
-              <p className="truncate text-[12px] leading-tight text-beyond-faint">
-                {activeSession ? activeSession.title : client.week || 'Nový chat'}
-              </p>
-            </div>
-            <ChevronRight
-              className={`h-[14px] w-[14px] flex-shrink-0 text-beyond-faint transition-transform ${sessionsOpen ? 'rotate-90' : ''}`}
-              strokeWidth={1.8}
-            />
+            <PanelRight size={16} strokeWidth={1.8} />
+            Canvas
           </button>
-          <button
-            type="button"
-            onClick={startNewSession}
-            title="Nový chat"
-            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-black/[0.04] hover:text-beyond-dim"
-          >
+        )}
+
+        <div className="flex flex-shrink-0 items-center gap-0.5">
+          <button type="button" onClick={startNewSession} title="Nový chat" className="bb-ib">
             <Plus className="h-[16px] w-[16px]" strokeWidth={1.8} />
           </button>
-          <AnimatePresence>
-            {sessionsOpen && (
-              <BeyondSessionsMenu
-                sessions={sessions}
-                activeUuid={sessionIdRef.current}
-                onPick={switchToSession}
-                onDelete={deleteSession}
-                onNew={startNewSession}
-                onClose={() => setSessionsOpen(false)}
-              />
-            )}
-          </AnimatePresence>
           <button
             type="button"
-            onClick={() => setPermsOpen(true)}
-            title="Nastavení oprávnění"
-            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-black/[0.04] hover:text-beyond-dim"
+            onClick={compactContext}
+            disabled={!sessionIdRef.current || thinking || !isConnected}
+            title="Komprimovat kontext (/compact) — Claude shrne konverzaci a uvolní tokeny"
+            className="bb-ib disabled:opacity-30"
           >
+            <Sparkles className="h-[16px] w-[16px]" strokeWidth={1.8} />
+          </button>
+          <button type="button" onClick={() => setPermsOpen(true)} title="Nastavení oprávnění" className="bb-ib">
             <SettingsIcon className="h-[16px] w-[16px]" strokeWidth={1.8} />
           </button>
           <button
@@ -892,9 +1493,8 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
                 : 'Zapnout bypass režim (dangerously skip permissions)'
             }
             aria-pressed={bypassPermissions}
-            className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full transition-colors ${bypassPermissions
-              ? 'bg-amber-50 text-amber-600 hover:bg-amber-100'
-              : 'text-beyond-faint hover:bg-black/[0.04] hover:text-beyond-dim'}`}
+            className="bb-ib"
+            style={bypassPermissions ? { background: 'rgba(217,119,6,.15)', color: '#B45309' } : undefined}
           >
             {bypassPermissions ? (
               <ShieldOff className="h-[16px] w-[16px]" strokeWidth={1.8} />
@@ -903,19 +1503,35 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
             )}
           </button>
         </div>
+
+        <AnimatePresence>
+          {sessionsOpen && (
+            <BeyondSessionsMenu
+              sessions={sessions}
+              activeUuid={sessionIdRef.current}
+              onPick={switchToSession}
+              onDelete={deleteSession}
+              onNew={startNewSession}
+              onClose={() => setSessionsOpen(false)}
+            />
+          )}
+        </AnimatePresence>
       </header>
 
       {/* Messages */}
-      <div ref={scrollerRef} className="flex-1 overflow-y-auto overflow-x-hidden">
-        <div className="mx-auto flex w-full min-w-0 max-w-[760px] flex-col gap-6 px-4 py-8 sm:px-6 sm:py-10">
+      <div ref={scrollerRef} className="bb-scroll">
+        <div className="bb-thread">
           {messages.length === 0 && !thinking && (
-            <p className="text-center text-[15px] text-beyond-faint">
-              {loadingHistory ? 'Načítám historii…' : 'Tady jsem.'}
-            </p>
+            <div className="flex min-h-[58vh] flex-col items-center justify-center gap-5 text-center">
+              <BeyondBrainMark size={88} side={0.76} animate="pulse" />
+              <p className="text-[14px] text-beyond-faint">
+                {loadingHistory ? 'Načítám…' : 'Tady jsem.'}
+              </p>
+            </div>
           )}
 
           {messages.map((m) => (
-            <MessageBlock key={m.id} message={m} />
+            <MessageBlock key={m.id} message={m} streaming={m.id === streamingId} />
           ))}
 
           <AnimatePresence>
@@ -926,10 +1542,12 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.4, ease: 'easeOut' }}
-                className="flex items-center gap-2.5 pl-4 text-[14px] text-beyond-dim"
+                className="bb-think"
+                data-active="true"
+                style={{ cursor: 'default' }}
               >
-                <span className="beyond-dot" aria-hidden="true" />
-                <span>Přemýšlím</span>
+                <BeyondBrainMark size={34} side={0.76} animate="pulse" />
+                <BeyondThinkingStates />
               </motion.div>
             )}
           </AnimatePresence>
@@ -993,91 +1611,119 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
         <span className="sr-only">{header}</span>
       </div>
 
-      {/* Composer — floating rounded card. */}
-      <div className="flex-shrink-0 px-4 pb-6 pt-3 sm:px-6 sm:pb-8 sm:pt-4">
-        <div className="mx-auto w-full max-w-[760px]">
-          <div className="rounded-[24px] bg-white px-4 py-3 shadow-[0_4px_24px_-8px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.04] focus-within:shadow-[0_8px_32px_-8px_rgba(0,0,0,0.12)] focus-within:ring-black/[0.06]">
-            {attachments.length > 0 && (
-              <div className="mb-2 flex flex-wrap gap-1.5 pb-1">
-                {attachments.map((a) => (
-                  <AttachmentChip key={a.id} attachment={a} onRemove={() => removeAttachment(a.id)} />
-                ))}
-              </div>
-            )}
-            <div className="flex items-end gap-2">
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept="image/*,.md,.txt,.json,.csv,.yaml,.yml,.log,.html,.css,.js,.ts,.tsx,.jsx,.py,.sh,.toml,.ini,.env,.jsonl"
-                className="hidden"
-                onChange={async (e) => {
-                  const files = Array.from(e.target.files || []);
-                  for (const f of files) await ingestFile(f);
-                  if (fileInputRef.current) fileInputRef.current.value = '';
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                tabIndex={-1}
-                aria-label="Příloha"
-                title="Přidat soubor (obrázek nebo text)"
-                className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-black/[0.04] hover:text-beyond-dim"
-              >
-                <Paperclip className="h-[18px] w-[18px]" strokeWidth={1.8} />
-              </button>
-              <textarea
-                ref={textareaRef}
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    send(value);
-                  }
-                }}
-                placeholder="Napiš, co řešíme…"
-                rows={1}
-                className="min-h-[40px] flex-1 resize-none border-0 bg-transparent py-2 text-[16px] leading-snug text-beyond-ink placeholder:text-beyond-faint focus:outline-none focus:ring-0"
-              />
-              {thinking ? (
-                <button
-                  type="button"
-                  onClick={stop}
-                  aria-label="Zastav"
-                  title="Zastav agenta"
-                  className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-beyond-ink text-white shadow-[0_2px_8px_-2px_rgba(0,0,0,0.25)] transition-all hover:scale-105"
-                >
-                  <Square className="h-[14px] w-[14px] fill-current" strokeWidth={0} />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => send(value)}
-                  disabled={(!value.trim() && attachments.length === 0) || !isConnected}
-                  aria-label="Pošli"
-                  className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-beyond-ink text-white shadow-[0_2px_8px_-2px_rgba(0,0,0,0.25)] transition-all hover:scale-105 disabled:bg-black/[0.08] disabled:text-black/30 disabled:shadow-none disabled:hover:scale-100"
-                >
-                  <ArrowUp className="h-[18px] w-[18px]" strokeWidth={2.2} />
-                </button>
-              )}
-            </div>
+      {/* Composer — glass, handoff layout (textarea + bottom bar). */}
+      <div
+        className="bb-composer__wrap"
+        style={{ position: 'relative', paddingBottom: 'max(22px, calc(env(safe-area-inset-bottom) + 8px))' }}
+      >
+        {slash.open && (
+          <BeyondSlashMenu
+            items={slash.items}
+            activeIndex={slash.activeIndex}
+            onHover={slash.setActiveIndex}
+            onSelect={onChooseCommand}
+          />
+        )}
+        <div className="bb-composer">
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*,.md,.txt,.json,.csv,.yaml,.yml,.log,.html,.css,.js,.ts,.tsx,.jsx,.py,.sh,.toml,.ini,.env,.jsonl"
+            className="hidden"
+            onChange={async (e) => {
+              const files = Array.from(e.target.files || []);
+              for (const f of files) await ingestFile(f);
+              if (fileInputRef.current) fileInputRef.current.value = '';
+            }}
+          />
 
-            <div className="mt-2 flex flex-wrap items-center gap-1">
-              {QUICK_ACTIONS.map((label) => (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => send(quickPrompt(label, client.name))}
-                  className="rounded-full px-3 py-1 text-[12px] text-beyond-faint transition-colors hover:bg-black/[0.04] hover:text-beyond-ink"
-                >
-                  {label}
-                </button>
+          {attachments.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 px-3 pt-3">
+              {attachments.map((a) => (
+                <AttachmentChip key={a.id} attachment={a} onRemove={() => removeAttachment(a.id)} />
               ))}
             </div>
+          )}
+
+          {speech.listening && (
+            <div className="bb-mic">
+              <div className="bb-mic__bars" aria-hidden="true">
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <i key={i} style={{ animationDelay: `${i * 0.12}s` }} />
+                ))}
+              </div>
+              <span style={{ fontSize: 13.5, color: 'var(--bb-ink2)' }}>Poslouchám… (česky)</span>
+            </div>
+          )}
+
+          <textarea
+            ref={textareaRef}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (slash.onKeyDown(e)) return;
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                submit(value);
+              }
+            }}
+            placeholder="Napiš, co řešíme… (/ pro příkazy)"
+            rows={1}
+          />
+
+          <div className="bb-composer__bar">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              tabIndex={-1}
+              aria-label="Příloha"
+              title="Přidat soubor (obrázek nebo text)"
+              className="bb-ib bb-ib--tool"
+            >
+              <Paperclip className="h-[18px] w-[18px]" strokeWidth={1.8} />
+            </button>
+            {speech.supported && (
+              <button
+                type="button"
+                onClick={speech.toggle}
+                aria-pressed={speech.listening}
+                aria-label="Diktovat"
+                title={speech.listening ? 'Zastavit diktování' : 'Diktovat (česky)'}
+                className="bb-ib bb-ib--tool"
+              >
+                <Mic className="h-[18px] w-[18px]" strokeWidth={1.8} />
+              </button>
+            )}
+            <ModelPicker value={model} options={modelOptions} onChange={changeModel} />
+            <TokenBudgetChip budget={tokenBudget} />
+            <span className="bb-composer__hint">Enter odešle · Shift + Enter nový řádek</span>
+            {thinking ? (
+              <button
+                type="button"
+                onClick={stop}
+                aria-label="Zastav"
+                title="Zastav agenta"
+                className="bb-send"
+                data-active="true"
+              >
+                <Square className="h-[13px] w-[13px] fill-current" strokeWidth={0} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => submit(value)}
+                disabled={(!value.trim() && attachments.length === 0) || !isConnected}
+                aria-label="Pošli"
+                className="bb-send"
+                data-active={(value.trim() || attachments.length > 0) && isConnected ? 'true' : 'false'}
+              >
+                <ArrowUp className="h-[18px] w-[18px]" strokeWidth={2.2} />
+              </button>
+            )}
           </div>
         </div>
+        <div className="bb-disclaimer">Beyond Brain může chybovat. U důležitých věcí prověř zdroje.</div>
       </div>
 
       <AnimatePresence>
@@ -1093,7 +1739,7 @@ export default function BeyondChat({ client, initialPrompt }: Props) {
   );
 }
 
-function MessageBlock({ message }: { message: ChatMessage }) {
+function MessageBlock({ message, streaming = false }: { message: ChatMessage; streaming?: boolean }) {
   const variants = {
     hidden: { opacity: 0, y: 8 },
     show: { opacity: 1, y: 0 },
@@ -1108,12 +1754,12 @@ function MessageBlock({ message }: { message: ChatMessage }) {
         animate="show"
         variants={variants}
         transition={transition}
-        className="flex justify-end"
+        className="bb-user"
       >
-        <div className="max-w-[85%] min-w-0 rounded-[22px] rounded-br-[6px] bg-white px-4 py-3 shadow-[0_2px_12px_-6px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.04]">
-          <p className="whitespace-pre-line break-words text-[15px] leading-relaxed text-beyond-ink">
-            {message.text}
-          </p>
+        <div className="bb-user__col">
+          <div className="bb-bubble min-w-0">
+            <p className="whitespace-pre-line break-words">{message.text}</p>
+          </div>
         </div>
       </motion.div>
     );
@@ -1138,38 +1784,80 @@ function MessageBlock({ message }: { message: ChatMessage }) {
       animate="show"
       variants={variants}
       transition={transition}
-      className="beyond-prose min-w-0 break-words text-[15px] leading-relaxed text-beyond-ink [&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1 [&_strong]:font-semibold [&_em]:italic [&_h1]:mb-2 [&_h1]:mt-4 [&_h1]:text-[18px] [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-[16px] [&_h2]:font-semibold [&_h3]:mb-1 [&_h3]:mt-3 [&_h3]:text-[15px] [&_h3]:font-semibold"
+      className="beyond-prose flex gap-2.5 min-w-0 break-words text-[15px] leading-relaxed text-beyond-ink [&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1 [&_li]:pl-1 [&_li>ul]:my-1 [&_li>ol]:my-1 [&_strong]:font-semibold [&_em]:italic [&_h1]:mb-2 [&_h1]:mt-4 [&_h1]:text-[18px] [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-[16px] [&_h2]:font-semibold [&_h3]:mb-1 [&_h3]:mt-3 [&_h3]:text-[15px] [&_h3]:font-semibold [&_h4]:mb-1 [&_h4]:mt-3 [&_h4]:text-[14px] [&_h4]:font-semibold [&_hr]:my-4 [&_hr]:border-0 [&_hr]:border-t [&_hr]:border-black/10 [&_blockquote]:my-3 [&_blockquote]:border-l-2 [&_blockquote]:border-black/15 [&_blockquote]:pl-3 [&_blockquote]:text-beyond-dim [&_thead]:bg-black/[0.025] [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:text-[12.5px] [&_th]:font-semibold [&_th]:text-beyond-dim [&_th]:whitespace-nowrap [&_td]:px-3 [&_td]:py-2 [&_td]:align-top [&_td]:border-t [&_td]:border-black/[0.06] [&_td]:text-[14px]"
     >
+      <BeyondBrainMark size={42} animate="in" className="mt-[2px] shrink-0 text-beyond-dim" title="Beyond" />
+      <div className="min-w-0 flex-1">
+      {streaming ? (
+        <StreamingText text={message.text} />
+      ) : (
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkBeyondFilePaths]}
+        // react-markdown sanitises hrefs to a safe-protocol allowlist, which
+        // strips our custom `beyondfile:` scheme (→ empty href → navigates to
+        // the app root). Preserve our scheme; delegate everything else to the
+        // default sanitiser.
+        urlTransform={(url) =>
+          url.startsWith(BEYOND_FILE_SCHEME) ? url : defaultUrlTransform(url)
+        }
         components={{
-          a: ({ ...rest }) => (
-            <a
-              {...rest}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-beyond-ink underline decoration-black/20 underline-offset-2 hover:decoration-black/50"
-            />
-          ),
-          code: ({ className, children, ...rest }) => {
-            const isBlock = /\n/.test(String(children ?? ''));
-            if (isBlock) {
+          a: ({ href, children, ...rest }) => {
+            const filePath = parseBeyondFileHref(href);
+            if (filePath) {
+              // A bare file path the agent mentioned — open the preview sheet
+              // instead of navigating away.
               return (
-                <pre className="my-2 overflow-x-auto rounded-[14px] bg-black/[0.04] px-4 py-3 text-[13px]">
-                  <code className={className} {...rest}>{children}</code>
-                </pre>
+                <button
+                  type="button"
+                  onClick={() =>
+                    window.dispatchEvent(
+                      new CustomEvent('beyond:open-file', { detail: { path: filePath } }),
+                    )
+                  }
+                  title={`Otevřít ${filePath}`}
+                  className="bb-fileref inline rounded px-1 py-0.5 font-mono text-[0.85em] underline underline-offset-2 transition-colors"
+                >
+                  {children}
+                </button>
               );
             }
             return (
-              <code className="rounded-md bg-black/[0.05] px-1.5 py-0.5 font-mono text-[0.9em] text-beyond-ink">
+              <a
+                {...rest}
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-beyond-ink underline decoration-black/20 underline-offset-2 hover:decoration-black/50"
+              >
+                {children}
+              </a>
+            );
+          },
+          code: ({ className, children }) => {
+            const raw = String(children ?? '');
+            const isBlock = /\n/.test(raw);
+            if (isBlock) {
+              return <BeyondCodeBlock code={raw.replace(/\n$/, '')} className={className} />;
+            }
+            return (
+              <code className="bb-inlinecode rounded-md px-1.5 py-0.5 font-mono text-[0.9em]">
                 {children}
               </code>
             );
           },
+          // GFM tables — wrap in a rounded, horizontally-scrollable card so wide
+          // tables never blow out the chat column.
+          table: ({ children }) => (
+            <div className="my-3 overflow-x-auto rounded-[12px] border border-black/[0.07]">
+              <table className="w-full border-collapse text-left">{children}</table>
+            </div>
+          ),
         }}
       >
         {message.text}
       </ReactMarkdown>
+      )}
+      </div>
     </motion.div>
   );
 }
@@ -1196,12 +1884,12 @@ function StepRow({ step, isLast }: { step: ToolStep; isLast: boolean }) {
       {!isLast && (
         <span
           aria-hidden
-          className="absolute left-[11px] top-7 h-[calc(100%-12px)] w-px bg-black/[0.08]"
+          className="bb-step-line absolute left-[11px] top-7 h-[calc(100%-12px)] w-px"
         />
       )}
 
       {/* Icon badge */}
-      <div className="relative z-10 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-black/[0.04] text-beyond-dim">
+      <div className="bb-step-badge relative z-10 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md text-beyond-dim">
         <Icon className="h-[14px] w-[14px]" strokeWidth={1.8} />
       </div>
 
@@ -1270,7 +1958,7 @@ function PreBlock({
     <div>
       <p className="mb-1 text-[11px] uppercase tracking-wide text-beyond-faint">{label}</p>
       <pre
-        className={`max-h-[260px] overflow-auto whitespace-pre-wrap break-words rounded-[10px] px-3 py-2 font-mono text-[12px] leading-relaxed ${tone === 'error' ? 'bg-red-50 text-red-700' : 'bg-black/[0.04] text-beyond-dim'}`}
+        className={`max-h-[260px] overflow-auto whitespace-pre-wrap break-words rounded-[10px] px-3 py-2 font-mono text-[12px] leading-relaxed ${tone === 'error' ? 'bb-pre--error' : 'bb-pre'}`}
       >
         {content}
       </pre>
@@ -1345,18 +2033,20 @@ function quickPrompt(label: string, clientName: string): string {
 /* defensive helpers for variable-shape backend payloads               */
 /* ------------------------------------------------------------------ */
 
-function appendAssistantText(
+function appendAssistantTextById(
   setMessages: Dispatch<SetStateAction<ChatMessage[]>>,
+  id: string,
   text: string,
 ): void {
   setMessages((prev) => {
     const last = prev[prev.length - 1];
-    // Stream into the previous assistant text bubble; a tool-step block ends
-    // the streaming bubble so a fresh text block appears below the steps.
-    if (last && last.role === 'assistant' && last.kind === 'text') {
+    // Append into the streaming bubble (matched by its stable id) so the caller
+    // can key the word-by-word cross-blur render off that same id. A tool-step
+    // block resets the id upstream, so a fresh bubble appears below the steps.
+    if (last && last.id === id && last.role === 'assistant' && last.kind === 'text') {
       return [...prev.slice(0, -1), { ...last, text: last.text + text }];
     }
-    return [...prev, { id: uid(), role: 'assistant', kind: 'text', text }];
+    return [...prev, { id, role: 'assistant', kind: 'text', text }];
   });
 }
 
@@ -1430,6 +2120,159 @@ function shortenPath(p?: string): string {
   return parts.slice(-2).join('/');
 }
 
+/** Compact context-usage chip in the composer footer. Shows the live size of
+ *  Claude's current context window (re-sent every turn), not cumulative spend.
+ *  Color thresholds key off the SDK's `autoCompactThreshold` when available so
+ *  the user sees red exactly when auto-compact is about to fire. */
+/** Compact dropdown to pick the Anthropic model used for this chat. Options
+ *  carry version-bearing names pulled from the installed Claude Code. */
+function ModelPicker({
+  value,
+  options,
+  onChange,
+}: {
+  value: string;
+  options: BeyondModelOption[];
+  onChange: (next: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener('mousedown', onDoc);
+    return () => window.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
+  const current = options.find((o) => o.value === value);
+  const chipLabel = current?.short || value;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        title="Vybrat Claude model"
+        aria-expanded={open}
+        className="bb-modelbtn"
+      >
+        <Sparkles className="h-[13px] w-[13px]" strokeWidth={1.8} style={{ color: 'var(--bb-ink2)' }} />
+        {chipLabel}
+        <ChevronDown
+          className={`h-[13px] w-[13px] transition-transform ${open ? 'rotate-180' : ''}`}
+          strokeWidth={1.8}
+          style={{ color: 'var(--bb-ink2)' }}
+        />
+      </button>
+      {open && (
+        <div
+          className="bb-glass absolute bottom-full right-0 z-20 mb-2 max-h-[280px] min-w-[240px] overflow-y-auto rounded-[14px] p-1.5"
+          style={{ boxShadow: 'var(--bb-shadow-pop), inset 0 1px 0 0 var(--bb-rim)' }}
+        >
+          {options.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => {
+                onChange(o.value);
+                setOpen(false);
+              }}
+              className="flex w-full items-start justify-between gap-3 rounded-[10px] px-2.5 py-2 text-left transition-colors hover:bg-[var(--bb-panel2)]"
+              style={o.value === value ? { background: 'var(--bb-accent-soft)' } : undefined}
+            >
+              <span className="min-w-0">
+                <span
+                  className={`block text-[12.5px] ${
+                    o.value === value ? 'font-medium text-beyond-ink' : 'text-beyond-ink'
+                  }`}
+                >
+                  {o.short}
+                </span>
+                {o.description && (
+                  <span className="block truncate text-[11px] text-beyond-faint">
+                    {o.description}
+                  </span>
+                )}
+              </span>
+              {o.value === value && (
+                <Check className="mt-0.5 h-[13px] w-[13px] flex-shrink-0 text-beyond-ink" strokeWidth={2} />
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TokenBudgetChip({
+  budget,
+}: {
+  budget: {
+    used: number;
+    total: number;
+    autoCompactThreshold?: number | null;
+    isAutoCompactEnabled?: boolean;
+  } | null;
+}) {
+  // Always render — user wants the chip visible from the moment the chat opens,
+  // even before the first turn (or before a resumed session's backfill arrives).
+  if (!budget || budget.total <= 0) {
+    return (
+      <div
+        className="flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] text-beyond-faint"
+        title="Kontext zatím prázdný — počká na první odpověď"
+      >
+        <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-neutral-300" aria-hidden />
+        <span>—</span>
+      </div>
+    );
+  }
+  const pct = Math.min(100, (budget.used / budget.total) * 100);
+  // If the SDK gave us a real auto-compact threshold use it; otherwise pick
+  // sensible defaults (50 % blue, 75 % amber, beyond red).
+  const compactPct = budget.autoCompactThreshold
+    ? (budget.autoCompactThreshold / budget.total) * 100
+    : null;
+  const color = compactPct
+    ? pct < compactPct * 0.7
+      ? 'bg-blue-500'
+      : pct < compactPct
+        ? 'bg-amber-500'
+        : 'bg-red-500'
+    : pct < 50
+      ? 'bg-blue-500'
+      : pct < 75
+        ? 'bg-amber-500'
+        : 'bg-red-500';
+  const usedK = budget.used >= 1000 ? `${(budget.used / 1000).toFixed(1)}k` : `${budget.used}`;
+  // Render very large totals (Opus 4.7's 1M window) as "1M" instead of "1000k".
+  const totalK = budget.total >= 1_000_000
+    ? `${(budget.total / 1_000_000).toFixed(budget.total % 1_000_000 === 0 ? 0 : 1)}M`
+    : `${Math.round(budget.total / 1000)}k`;
+  const tooltipLines = [
+    `${budget.used.toLocaleString()} / ${budget.total.toLocaleString()} tokenů v kontextu`,
+  ];
+  if (budget.autoCompactThreshold) {
+    tooltipLines.push(`Auto-compact při ${budget.autoCompactThreshold.toLocaleString()} tokenech`);
+  }
+  if (budget.isAutoCompactEnabled === false) {
+    tooltipLines.push('Auto-compact je vypnutý');
+  }
+  return (
+    <div
+      className="flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] text-beyond-faint"
+      title={tooltipLines.join('\n')}
+    >
+      <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${color}`} aria-hidden />
+      <span>{pct.toFixed(0)} % · {usedK} / {totalK}</span>
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* AskUserQuestion — interactive panel in Beyond style                 */
 /* ------------------------------------------------------------------ */
@@ -1445,6 +2288,7 @@ function BeyondAskPanel({
 }) {
   const questions = request.input.questions || [];
   const [selections, setSelections] = useState<Record<number, Set<string>>>({});
+  const [customAnswers, setCustomAnswers] = useState<Record<number, string>>({});
 
   if (questions.length === 0) return null;
 
@@ -1462,13 +2306,36 @@ function BeyondAskPanel({
     });
   };
 
-  const canSubmit = questions.every((_, idx) => (selections[idx]?.size ?? 0) > 0);
+  const setCustom = (qIdx: number, value: string) => {
+    setCustomAnswers((prev) => ({ ...prev, [qIdx]: value }));
+  };
+
+  // Submittable when, for every question, the user has either picked an
+  // option or typed a custom answer (or both — they're combined on submit).
+  const canSubmit = questions.every((_, idx) => {
+    const hasPick = (selections[idx]?.size ?? 0) > 0;
+    const hasCustom = (customAnswers[idx] || '').trim().length > 0;
+    return hasPick || hasCustom;
+  });
 
   const submit = () => {
     const answers: Record<string, string> = {};
     questions.forEach((q, idx) => {
       const picks = Array.from(selections[idx] || []);
-      if (picks.length > 0) answers[q.question] = picks.join(', ');
+      const custom = (customAnswers[idx] || '').trim();
+      // Merge picks + custom into a single answer string the agent can read.
+      // Mirrors how Claude Code's CLI surfaces the "Other" answer: the custom
+      // free-text is the source of truth when present, optionally annotated
+      // with which preset options the user also flagged.
+      let value = '';
+      if (picks.length > 0 && custom) {
+        value = `${picks.join(', ')} — ${custom}`;
+      } else if (picks.length > 0) {
+        value = picks.join(', ');
+      } else if (custom) {
+        value = custom;
+      }
+      if (value) answers[q.question] = value;
     });
     onAnswer(answers);
   };
@@ -1479,9 +2346,9 @@ function BeyondAskPanel({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.22, ease: 'easeOut' }}
-      className="overflow-hidden rounded-2xl bg-white shadow-[0_4px_24px_-8px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.04]"
+      className="bb-card overflow-hidden rounded-2xl"
     >
-      <div className="flex flex-col divide-y divide-black/[0.04]">
+      <div className="bb-vdivide flex flex-col">
         {questions.map((q, qIdx) => {
           const multi = Boolean(q.multiSelect);
           const selected = selections[qIdx] || new Set<string>();
@@ -1489,7 +2356,7 @@ function BeyondAskPanel({
             <div key={qIdx} className="px-5 py-4">
               <div className="mb-3 flex items-center gap-2">
                 {q.header && (
-                  <span className="rounded-full bg-black/[0.04] px-2 py-0.5 text-[11px] uppercase tracking-wide text-beyond-faint">
+                  <span className="bb-chip rounded-full px-2 py-0.5 text-[11px] uppercase tracking-wide">
                     {q.header}
                   </span>
                 )}
@@ -1508,16 +2375,14 @@ function BeyondAskPanel({
                       key={opt.label}
                       type="button"
                       onClick={() => toggle(qIdx, opt.label, multi)}
-                      className={`group flex w-full items-start gap-3 rounded-[14px] border px-3.5 py-2.5 text-left transition-all ${isOn
-                        ? 'border-black/15 bg-black/[0.03]'
-                        : 'border-black/[0.06] hover:border-black/[0.12] hover:bg-black/[0.02]'}`}
+                      data-on={isOn ? 'true' : 'false'}
+                      className="bb-optcard group flex w-full items-start gap-3 rounded-[14px] px-3.5 py-2.5 text-left"
                     >
                       <span
-                        className={`mt-1 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border transition-colors ${isOn
-                          ? 'border-beyond-ink bg-beyond-ink'
-                          : 'border-black/15 bg-white'}`}
+                        data-on={isOn ? 'true' : 'false'}
+                        className="bb-radio mt-1 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full transition-colors"
                       >
-                        {isOn && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                        {isOn && <span className="bb-radio__dot h-1.5 w-1.5 rounded-full" />}
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block text-[14px] font-medium leading-tight text-beyond-ink">
@@ -1533,16 +2398,36 @@ function BeyondAskPanel({
                   );
                 })}
               </div>
+              <div className="mt-2.5">
+                <label className="mb-1 block text-[11px] uppercase tracking-wide text-beyond-faint">
+                  {selected.size > 0 ? 'Doplnit vlastními slovy' : 'Nebo napsat vlastní odpověď'}
+                </label>
+                <textarea
+                  value={customAnswers[qIdx] || ''}
+                  onChange={(e) => setCustom(qIdx, e.target.value)}
+                  onKeyDown={(e) => {
+                    // Cmd/Ctrl+Enter from inside the textarea submits the whole
+                    // panel — same shortcut as the main chat composer.
+                    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && canSubmit) {
+                      e.preventDefault();
+                      submit();
+                    }
+                  }}
+                  placeholder="Napiš odpověď přesně tak, jak ji chceš…"
+                  rows={2}
+                  className="bb-field w-full resize-y rounded-[14px] px-3.5 py-2.5 text-[14px] leading-snug"
+                />
+              </div>
             </div>
           );
         })}
       </div>
 
-      <div className="flex items-center justify-end gap-2 border-t border-black/[0.04] bg-black/[0.015] px-5 py-3">
+      <div className="flex items-center justify-end gap-2 bb-card__foot px-5 py-3">
         <button
           type="button"
           onClick={onSkip}
-          className="rounded-full px-3 py-1.5 text-[12px] text-beyond-faint transition-colors hover:bg-black/[0.04] hover:text-beyond-dim"
+          className="rounded-full px-3 py-1.5 text-[12px] bb-btn-ghost transition-colors"
         >
           Přeskočit
         </button>
@@ -1550,7 +2435,7 @@ function BeyondAskPanel({
           type="button"
           onClick={submit}
           disabled={!canSubmit}
-          className="rounded-full bg-beyond-ink px-4 py-1.5 text-[12px] font-medium text-white shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2)] transition-all hover:shadow-[0_4px_12px_-2px_rgba(0,0,0,0.25)] disabled:bg-black/[0.08] disabled:text-black/30 disabled:shadow-none"
+          className="bb-btn-primary rounded-full px-4 py-1.5 text-[12px] font-medium"
         >
           Odeslat
         </button>
@@ -1600,18 +2485,18 @@ function BeyondPermissionPanel({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.22, ease: 'easeOut' }}
-      className="overflow-hidden rounded-2xl bg-white shadow-[0_4px_24px_-8px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.04]"
+      className="bb-card overflow-hidden rounded-2xl"
     >
       <div className="px-5 py-4">
         <div className="mb-3 flex items-center gap-2">
-          <span className="rounded-full bg-black/[0.04] px-2 py-0.5 text-[11px] uppercase tracking-wide text-beyond-faint">
+          <span className="bb-chip rounded-full px-2 py-0.5 text-[11px] uppercase tracking-wide">
             Povolení
           </span>
           <span className="text-[11px] text-beyond-faint">Agent chce použít nástroj</span>
         </div>
 
         <div className="mb-3 flex items-center gap-2.5">
-          <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-black/[0.04] text-beyond-dim">
+          <div className="bb-step-badge flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-beyond-dim">
             <Icon className="h-[15px] w-[15px]" strokeWidth={1.8} />
           </div>
           <div className="min-w-0 flex-1">
@@ -1627,32 +2512,32 @@ function BeyondPermissionPanel({
             <summary className="cursor-pointer select-none text-beyond-dim hover:text-beyond-ink">
               Detaily volání
             </summary>
-            <pre className="mt-2 max-h-[200px] overflow-auto whitespace-pre-wrap break-words rounded-[10px] bg-black/[0.04] px-3 py-2 font-mono text-[11px] leading-relaxed text-beyond-dim">
+            <pre className="bb-pre mt-2 max-h-[200px] overflow-auto whitespace-pre-wrap break-words rounded-[10px] px-3 py-2 font-mono text-[11px] leading-relaxed">
               {inputPreview}
             </pre>
           </details>
         )}
       </div>
 
-      <div className="flex flex-wrap items-center justify-end gap-2 border-t border-black/[0.04] bg-black/[0.015] px-5 py-3">
+      <div className="flex flex-wrap items-center justify-end gap-2 bb-card__foot px-5 py-3">
         <button
           type="button"
           onClick={() => onDecision({ kind: 'deny' })}
-          className="rounded-full px-3 py-1.5 text-[12px] text-beyond-faint transition-colors hover:bg-black/[0.04] hover:text-beyond-dim"
+          className="rounded-full px-3 py-1.5 text-[12px] bb-btn-ghost transition-colors"
         >
           Odmítnout
         </button>
         <button
           type="button"
           onClick={() => onDecision({ kind: 'allow-once' })}
-          className="rounded-full bg-black/[0.04] px-3.5 py-1.5 text-[12px] font-medium text-beyond-ink transition-colors hover:bg-black/[0.08]"
+          className="bb-btn-soft rounded-full px-3.5 py-1.5 text-[12px] font-medium"
         >
           Jednou
         </button>
         <button
           type="button"
           onClick={() => onDecision({ kind: 'always-allow', entry: alwaysScope })}
-          className="rounded-full bg-beyond-ink px-3.5 py-1.5 text-[12px] font-medium text-white shadow-[0_2px_8px_-2px_rgba(0,0,0,0.2)] transition-all hover:shadow-[0_4px_12px_-2px_rgba(0,0,0,0.25)]"
+          className="bb-btn-primary rounded-full px-3.5 py-1.5 text-[12px] font-medium"
           title={`Při dalším volání automaticky povolit ${alwaysScopeLabel}`}
         >
           Vždy povolit {mcpMatch ? `(${alwaysScopeLabel})` : ''}
@@ -1689,10 +2574,10 @@ function BeyondPermissionsSheet({
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 12, scale: 0.98 }}
         transition={{ duration: 0.22, ease: 'easeOut' }}
-        className="w-full max-w-[480px] overflow-hidden rounded-2xl bg-white shadow-[0_24px_64px_-16px_rgba(0,0,0,0.28)] ring-1 ring-black/[0.04]"
+        className="bb-card w-full max-w-[480px] overflow-hidden rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="border-b border-black/[0.06] px-5 py-4">
+        <div className="px-5 py-4" style={{ borderBottom: '1px solid var(--bb-line2)' }}>
           <h3 className="text-[15px] font-medium text-beyond-ink">Povolené nástroje</h3>
           <p className="mt-0.5 text-[12px] text-beyond-faint">
             Agent může používat tyto nástroje bez ptaní. Hvězdička (`*`) značí celý MCP server.
@@ -1728,11 +2613,11 @@ function BeyondPermissionsSheet({
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t border-black/[0.06] bg-black/[0.015] px-5 py-3">
+        <div className="bb-card__foot flex items-center justify-end gap-2 px-5 py-3">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full bg-black/[0.04] px-3.5 py-1.5 text-[12px] font-medium text-beyond-ink transition-colors hover:bg-black/[0.08]"
+            className="bb-btn-soft rounded-full px-3.5 py-1.5 text-[12px] font-medium"
           >
             Hotovo
           </button>
@@ -1848,7 +2733,7 @@ function BeyondWhatsAppActionCard({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.22, ease: 'easeOut' }}
-      className="overflow-hidden rounded-2xl bg-white shadow-[0_4px_24px_-8px_rgba(0,0,0,0.08)] ring-1 ring-emerald-200"
+      className="bb-card overflow-hidden rounded-2xl"
     >
       <div className="flex items-center gap-2 border-b border-emerald-100 bg-emerald-50/60 px-5 py-3">
         <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-700">
@@ -1870,7 +2755,7 @@ function BeyondWhatsAppActionCard({
             value={text}
             onChange={(e) => setText(e.target.value)}
             rows={Math.max(3, text.split('\n').length)}
-            className="w-full resize-none rounded-[14px] border border-black/[0.08] bg-white px-3 py-2 text-[14px] leading-relaxed text-beyond-ink focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+            className="bb-field w-full resize-none rounded-[14px] px-3 py-2 text-[14px] leading-relaxed"
             autoFocus
           />
         ) : (
@@ -1882,18 +2767,18 @@ function BeyondWhatsAppActionCard({
         )}
       </div>
 
-      <div className="flex items-center justify-end gap-2 border-t border-black/[0.04] bg-black/[0.015] px-5 py-3">
+      <div className="flex items-center justify-end gap-2 bb-card__foot px-5 py-3">
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-full px-3 py-1.5 text-[12px] text-beyond-faint transition-colors hover:bg-black/[0.04] hover:text-beyond-dim"
+          className="rounded-full px-3 py-1.5 text-[12px] bb-btn-ghost transition-colors"
         >
           Zrušit
         </button>
         <button
           type="button"
           onClick={() => setEditing((v) => !v)}
-          className="rounded-full bg-black/[0.04] px-3.5 py-1.5 text-[12px] font-medium text-beyond-ink transition-colors hover:bg-black/[0.08]"
+          className="bb-btn-soft rounded-full px-3.5 py-1.5 text-[12px] font-medium"
         >
           {editing ? 'Hotovo' : 'Upravit'}
         </button>
@@ -1941,20 +2826,21 @@ function BeyondSessionsMenu({
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: -4, scale: 0.98 }}
         transition={{ duration: 0.16, ease: 'easeOut' }}
-        className="absolute left-3 right-3 top-full z-40 mt-2 overflow-hidden rounded-2xl bg-white shadow-[0_16px_48px_-12px_rgba(0,0,0,0.18)] ring-1 ring-black/[0.04]"
+        className="bb-glass absolute left-3 right-3 top-full z-40 mt-2 overflow-hidden rounded-2xl"
+        style={{ boxShadow: 'var(--bb-shadow-pop), inset 0 1px 0 0 var(--bb-rim)' }}
       >
         <button
           type="button"
           onClick={onNew}
-          className="flex w-full items-center gap-2.5 px-4 py-3 text-left transition-colors hover:bg-black/[0.03]"
+          className="flex w-full items-center gap-2.5 px-4 py-3 text-left transition-colors hover:bg-[var(--bb-panel2)]"
         >
-          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-beyond-ink text-white">
+          <div className="flex h-7 w-7 items-center justify-center rounded-full" style={{ background: 'var(--bb-accent)', color: 'var(--bb-on-accent)' }}>
             <Plus className="h-[14px] w-[14px]" strokeWidth={2} />
           </div>
           <span className="text-[13px] font-medium text-beyond-ink">Nový chat</span>
         </button>
 
-        <div className="max-h-[60vh] overflow-y-auto border-t border-black/[0.04]">
+        <div className="max-h-[60vh] overflow-y-auto" style={{ borderTop: '1px solid var(--bb-line2)' }}>
           {sessions.length === 0 ? (
             <p className="px-4 py-4 text-[12px] text-beyond-faint">
               Žádné dřívější chaty.

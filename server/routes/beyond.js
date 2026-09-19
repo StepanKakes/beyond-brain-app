@@ -8,10 +8,19 @@
  */
 import express from 'express';
 import fs from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+
+import {
+  BROWSER_SLUG_RE,
+  UNIVERSAL_SLUG,
+  getSessionIndex,
+  mergeSessionIndex,
+} from '../services/beyond-sessions-store.js';
+import { getSupportedModels, runSdkOneShot } from '../claude-sdk.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -335,17 +344,73 @@ async function buildTree(absPath, relPath, depth = 0, maxDepth = 4) {
 
 /** Read a file from the brain repo. Only paths under BRAIN_PATH are allowed —
  *  no traversal, no symlinks out, max 1 MB returned. */
+// ---------------------------------------------------------------------------
+// File viewing — let the chat surface any file the agent created or mentioned.
+//
+// The agent runs with cwd = brain repo, so most files it writes land under
+// BRAIN_PATH, but it also references absolute paths ("tady je file:
+// /path/x.png"). `resolveOpenablePath` accepts either an absolute path or one
+// relative to the brain repo and proves it sits under an allowed root, so a
+// stray `../` or a path pointing at secrets can't be served.
+//
+// Allowed roots: the brain repo + the OS temp dir (agent scratch/images) +
+// anything in `BEYOND_OPEN_FILE_ROOTS` (comma/semicolon-separated). Even inside
+// a root, obviously-sensitive paths (.env, .ssh, auth.db, keys, …) are refused.
+// ---------------------------------------------------------------------------
+const OPEN_FILE_ROOTS = (() => {
+  const roots = [path.resolve(BRAIN_PATH), path.resolve(os.tmpdir())];
+  for (const r of (process.env.BEYOND_OPEN_FILE_ROOTS || '')
+    .split(/[;,]/)
+    .map((s) => s.trim())
+    .filter(Boolean)) {
+    roots.push(path.resolve(r));
+  }
+  return [...new Set(roots)];
+})();
+
+const SENSITIVE_PATH_RE =
+  /(^|[\\/])(\.env(\.|$)|\.ssh|\.cloudcli|\.claude|\.git|\.aws|\.gnupg|\.docker|\.kube|\.npmrc|node_modules|auth\.db|beyond-sessions\.json|beyond-mcp-connectors\.json|\.credentials\.json|id_rsa|id_ed25519)([\\/]|$)/i;
+const SENSITIVE_EXT_RE = /\.(pem|key|p12|pfx|crt|keystore)$/i;
+
+const EXT_MIME = {
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
+  '.bmp': 'image/bmp', '.ico': 'image/x-icon', '.avif': 'image/avif',
+  '.pdf': 'application/pdf', '.txt': 'text/plain; charset=utf-8',
+  '.md': 'text/markdown; charset=utf-8', '.json': 'application/json; charset=utf-8',
+  '.csv': 'text/csv; charset=utf-8', '.html': 'text/html; charset=utf-8',
+  '.mp4': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime',
+  '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg',
+};
+function mimeFor(abs) {
+  return EXT_MIME[path.extname(abs).toLowerCase()] || 'application/octet-stream';
+}
+
+/** Resolve an absolute-or-brain-relative path to a vetted absolute path.
+ *  Returns `{ abs }` on success or `{ error, status }` on rejection. */
+function resolveOpenablePath(input) {
+  if (!input || typeof input !== 'string') return { error: 'Missing path', status: 400 };
+  // Tolerate the chat conventions: a leading `@` and wrapping quotes/backticks.
+  let p = input.trim().replace(/^@/, '').replace(/^["'`]+|["'`]+$/g, '').trim();
+  if (!p) return { error: 'Missing path', status: 400 };
+  const abs = path.isAbsolute(p) ? path.resolve(p) : path.resolve(BRAIN_PATH, p);
+  const underRoot = OPEN_FILE_ROOTS.some(
+    (root) => abs === root || abs.startsWith(root + path.sep),
+  );
+  if (!underRoot) return { error: 'Path outside allowed roots', status: 403 };
+  if (SENSITIVE_PATH_RE.test(abs) || SENSITIVE_EXT_RE.test(abs)) {
+    return { error: 'Refused (sensitive path)', status: 403 };
+  }
+  return { abs };
+}
+
+// JSON read for the text/markdown preview sheet. Capped at 1 MB — big/binary
+// files go through `/raw-file` instead.
 router.get('/file', async (req, res) => {
   try {
-    const rel = typeof req.query.path === 'string' ? req.query.path : '';
-    if (!rel || rel.includes('..') || rel.startsWith('/')) {
-      return res.status(400).json({ error: 'Invalid path' });
-    }
-    const abs = path.resolve(BRAIN_PATH, rel);
-    const root = path.resolve(BRAIN_PATH);
-    if (!abs.startsWith(root + path.sep) && abs !== root) {
-      return res.status(403).json({ error: 'Path outside brain' });
-    }
+    const resolved = resolveOpenablePath(req.query.path);
+    if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
+    const abs = resolved.abs;
     let stat;
     try {
       stat = await fs.stat(abs);
@@ -364,11 +429,11 @@ router.get('/file', async (req, res) => {
     }
     const buf = await fs.readFile(abs);
     // Best-effort utf-8 check — return base64 only for clearly binary content.
-    let content = buf.toString('utf8');
+    const content = buf.toString('utf8');
     const looksBinary = content.includes(' ');
     if (looksBinary) {
       return res.json({
-        path: rel,
+        path: req.query.path,
         size: stat.size,
         binary: true,
         content: buf.toString('base64'),
@@ -376,7 +441,7 @@ router.get('/file', async (req, res) => {
       });
     }
     res.json({
-      path: rel,
+      path: req.query.path,
       size: stat.size,
       binary: false,
       content,
@@ -385,6 +450,50 @@ router.get('/file', async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: err.message || 'file read failed' });
+  }
+});
+
+// Raw byte stream with a guessed Content-Type — lets the viewer render images,
+// PDFs, video, etc. inline. The client fetches this as a blob (so it rides the
+// auth header) and renders an object URL.
+router.get('/raw-file', async (req, res) => {
+  const resolved = resolveOpenablePath(req.query.path);
+  if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
+  const abs = resolved.abs;
+  let stat;
+  try {
+    stat = await fs.stat(abs);
+  } catch {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  if (!stat.isFile()) return res.status(400).json({ error: 'Not a file' });
+  const MAX_BYTES = 50 * 1024 * 1024;
+  if (stat.size > MAX_BYTES) {
+    return res.status(413).json({
+      error: `Soubor je velký (${Math.round(stat.size / 1024 / 1024)} MB > 50 MB)`,
+      size: stat.size,
+    });
+  }
+  res.setHeader('Content-Type', mimeFor(abs));
+  res.setHeader('Content-Length', String(stat.size));
+  res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(path.basename(abs))}"`);
+  res.setHeader('Cache-Control', 'private, max-age=30');
+  const stream = createReadStream(abs);
+  stream.on('error', () => {
+    if (!res.headersSent) res.status(500).json({ error: 'read failed' });
+    else res.destroy();
+  });
+  stream.pipe(res);
+});
+
+// Models the installed Claude Code offers, with version-bearing names — feeds
+// the chat's model picker so it shows "Opus 4.7" etc. instead of bare aliases.
+router.get('/models', async (_req, res) => {
+  try {
+    const models = await getSupportedModels();
+    res.json({ models });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'models failed', models: [] });
   }
 });
 
@@ -420,47 +529,59 @@ router.post('/sync', async (_req, res) => {
       });
     }
 
-    const status = await repoStatus({ fetch: false });
+    let status = await repoStatus({ fetch: false });
 
     if (!status.exists) {
       return res.status(400).json({ ok: false, error: 'No git repo at brain path' });
     }
 
-    // Decide what to do based on state.
+    let committed = 0;
+    let pulled = 0;
+    let pushed = 0;
+
+    // Local changes? Don't make the user drop to a shell — just commit them.
+    // Stage everything and commit with an auto-generated message, then let the
+    // pull/push steps below carry it to origin.
     if (status.dirty) {
-      return res.status(409).json({
-        ok: false,
-        action: 'blocked',
-        reason: 'dirty',
-        message: `Lokální změny (${status.dirtyCount}). Commitni je dřív než sync.`,
-        status,
-      });
+      const add = await git(['add', '-A']);
+      if (!add.ok) {
+        return res.status(502).json({
+          ok: false,
+          action: 'commit',
+          error: add.stderr || 'git add failed',
+          status,
+        });
+      }
+      const stamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
+      const commit = await git(['commit', '-m', `Sync z Beyond Brain — ${stamp}`]);
+      if (!commit.ok) {
+        return res.status(502).json({
+          ok: false,
+          action: 'commit',
+          error: commit.stderr || 'git commit failed',
+          status,
+        });
+      }
+      committed = status.dirtyCount;
+      status = await repoStatus({ fetch: false });
     }
 
-    if (status.ahead > 0 && status.behind > 0) {
-      return res.status(409).json({
-        ok: false,
-        action: 'blocked',
-        reason: 'diverged',
-        message: `Branch se rozešel (${status.ahead}↑ / ${status.behind}↓). Vyřeš ručně.`,
-        status,
-      });
-    }
-
+    // Behind (or diverged after our commit) → rebase local commits on top of origin.
     if (status.behind > 0) {
       const pull = await git(['pull', '--rebase', '--quiet', 'origin', status.branch]);
       if (!pull.ok) {
         return res.status(502).json({
           ok: false,
           action: 'pull',
-          error: pull.stderr || 'git pull failed',
+          error: pull.stderr || 'git pull --rebase failed',
           status,
         });
       }
-      const after = await repoStatus({ fetch: false });
-      return res.json({ ok: true, action: 'pull', pulled: status.behind, status: after });
+      pulled = status.behind;
+      status = await repoStatus({ fetch: false });
     }
 
+    // Ahead → push.
     if (status.ahead > 0) {
       const push = await git(['push', '--quiet', 'origin', status.branch]);
       if (!push.ok) {
@@ -471,13 +592,166 @@ router.post('/sync', async (_req, res) => {
           status,
         });
       }
-      const after = await repoStatus({ fetch: false });
-      return res.json({ ok: true, action: 'push', pushed: status.ahead, status: after });
+      pushed = status.ahead;
+      status = await repoStatus({ fetch: false });
     }
 
-    return res.json({ ok: true, action: 'noop', status });
+    let action = 'noop';
+    if (pushed) action = 'push';
+    else if (pulled) action = 'pull';
+    else if (committed) action = 'commit';
+
+    return res.json({ ok: true, action, committed, pulled, pushed, status });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message || 'sync failed' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Beyond chat sessions — cross-device session index per client slug.
+// ---------------------------------------------------------------------------
+//
+// Storage lives in `services/beyond-sessions-store.js` so the Telegram agent
+// route can share the same file + helpers. Browser slugs are restricted to
+// the conservative regex; the agent route accepts a wider AGENT_SLUG_RE for
+// its `__telegram__:<chatId>` style synthetic slugs.
+
+router.get('/sessions/:slug', async (req, res) => {
+  const { slug } = req.params;
+  if (slug !== UNIVERSAL_SLUG && !BROWSER_SLUG_RE.test(slug)) {
+    return res.status(400).json({ error: 'Invalid slug' });
+  }
+  try {
+    const index = await getSessionIndex(slug);
+    res.json({ slug, ...index });
+  } catch (err) {
+    console.error('[beyond] /sessions GET failed', err);
+    res.status(500).json({ error: 'Failed to read sessions' });
+  }
+});
+
+router.put('/sessions/:slug', async (req, res) => {
+  const { slug } = req.params;
+  if (slug !== UNIVERSAL_SLUG && !BROWSER_SLUG_RE.test(slug)) {
+    return res.status(400).json({ error: 'Invalid slug' });
+  }
+  try {
+    const body = req.body || {};
+    // Non-destructive merge: the index is shared across every browser on the
+    // single Beyond login, so a PUT must never drop sessions it didn't send
+    // (it may be working from a stale snapshot). Removals are explicit via
+    // `deletedUuids`. See beyond-sessions-store.js for the full rationale.
+    const persisted = await mergeSessionIndex(slug, {
+      activeUuid: body.activeUuid,
+      sessions: body.sessions,
+      deletedUuids: body.deletedUuids,
+    });
+    res.json({ slug, ...persisted });
+  } catch (err) {
+    console.error('[beyond] /sessions PUT failed', err);
+    res.status(500).json({ error: 'Failed to write sessions' });
+  }
+});
+
+/**
+ * Generate a short, human-readable chat title from the first user message.
+ * Runs a cheap, MCP-free Haiku one-shot so the sidebar shows "Plán obsahu pro
+ * Ivanu" instead of a raw snippet of the message. Best-effort: the client keeps
+ * its snippet fallback if this fails or times out.
+ */
+router.post('/sessions/suggest-title', async (req, res) => {
+  const raw = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
+  if (!raw) return res.status(400).json({ error: 'Missing text' });
+
+  const source = raw.slice(0, 2000);
+  const prompt =
+    'Pojmenuj chat podle první zprávy uživatele. Vytvoř výstižný název v češtině: ' +
+    '2–5 slov, bez uvozovek, bez koncové interpunkce, bez emoji, začni velkým písmenem. ' +
+    'Popiš téma, ne formu (ne "Dotaz", ale konkrétní téma). Vrať POUZE ten název, nic jiného.\n\n' +
+    `Zpráva uživatele:\n"""\n${source}\n"""`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 25_000);
+  try {
+    const result = await runSdkOneShot({
+      command: prompt,
+      cwd: BRAIN_PATH,
+      model: 'haiku',
+      loadMcp: false,
+      allowedTools: [],
+      skipPermissions: true,
+      signal: controller.signal,
+    });
+    const title = sanitizeTitle(result?.text || '');
+    if (!title) return res.status(502).json({ error: 'No title produced' });
+    res.json({ title });
+  } catch (err) {
+    console.warn('[beyond] suggest-title failed', err?.message || err);
+    res.status(500).json({ error: 'Title generation failed' });
+  } finally {
+    clearTimeout(timer);
+  }
+});
+
+/** Trim a model reply down to a clean one-line title. */
+function sanitizeTitle(text) {
+  let t = String(text || '').trim();
+  // Model sometimes wraps the answer or adds a lead-in — take the last
+  // non-empty line, which is almost always the title itself.
+  const lines = t.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  if (lines.length) t = lines[lines.length - 1];
+  t = t.replace(/^["'`«»„“”\s]+|["'`«»„“”\s]+$/g, ''); // strip surrounding quotes
+  t = t.replace(/[.。!?]+$/g, '').trim();               // strip trailing punctuation
+  t = t.replace(/\s+/g, ' ');
+  if (t.length > 60) t = t.slice(0, 60).trim();
+  return t;
+}
+
+const SESSION_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const BUDGET_DEFAULT_TOTAL = 200_000;
+
+/** Backfill the context-window budget for a resumed session before the next turn
+ *  emits a fresh `token_budget` WS event. Scans every ~/.claude/projects/<cwd-hash>
+ *  dir because the project hash changes whenever cwd resolution changes (e.g. the
+ *  mac-path bug previously stored sessions under a phantom hash). Reads the JSONL
+ *  from end to start, returns the first `message.usage` it finds. */
+router.get('/sessions/:uuid/budget', async (req, res) => {
+  const { uuid } = req.params;
+  if (!SESSION_UUID_RE.test(uuid)) {
+    return res.status(400).json({ error: 'Invalid uuid' });
+  }
+  const projectsDir = path.join(os.homedir(), '.claude', 'projects');
+  try {
+    const dirs = await fs.readdir(projectsDir).catch(() => []);
+    for (const dir of dirs) {
+      const jsonlPath = path.join(projectsDir, dir, `${uuid}.jsonl`);
+      let content;
+      try {
+        content = await fs.readFile(jsonlPath, 'utf8');
+      } catch {
+        continue;
+      }
+      const lines = content.split('\n');
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const line = lines[i];
+        if (!line || line.indexOf('"usage"') === -1) continue;
+        let obj;
+        try { obj = JSON.parse(line); } catch { continue; }
+        const usage = obj && obj.message && obj.message.usage;
+        if (!usage) continue;
+        const used = (usage.input_tokens || 0)
+          + (usage.output_tokens || 0)
+          + (usage.cache_read_input_tokens || 0)
+          + (usage.cache_creation_input_tokens || 0);
+        if (used > 0) {
+          return res.json({ used, total: BUDGET_DEFAULT_TOTAL });
+        }
+      }
+    }
+    res.json({ used: 0, total: BUDGET_DEFAULT_TOTAL });
+  } catch (err) {
+    console.error('[beyond] /sessions/:uuid/budget failed', err);
+    res.status(500).json({ error: 'Failed to read session budget' });
   }
 });
 

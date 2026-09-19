@@ -58,11 +58,16 @@ const authenticateToken = async (req, res, next) => {
       return res.status(401).json({ error: 'Invalid token. User not found.' });
     }
 
-    // Auto-refresh: if token is past halfway through its lifetime, issue a new one
+    // Sliding refresh: roll the token forward whenever it's more than a day old,
+    // so ANY active use keeps it alive indefinitely. The old "past halfway"
+    // rule meant a long-open tab that only talks over the WebSocket (no HTTP)
+    // could silently age out — then WS reconnects fail (stuck "thinking") and
+    // the session index 401s (history vanishes). A day-granular slide + a long
+    // base TTL makes that effectively impossible during normal use.
     if (decoded.exp && decoded.iat) {
       const now = Math.floor(Date.now() / 1000);
-      const halfLife = (decoded.exp - decoded.iat) / 2;
-      if (now > decoded.iat + halfLife) {
+      const ONE_DAY = 24 * 60 * 60;
+      if (now > decoded.iat + ONE_DAY) {
         const newToken = generateToken(user);
         res.setHeader('X-Refreshed-Token', newToken);
       }
@@ -72,7 +77,12 @@ const authenticateToken = async (req, res, next) => {
     next();
   } catch (error) {
     console.error('Token verification error:', error);
-    return res.status(403).json({ error: 'Invalid token' });
+    // 401 = bad/expired credential (client should re-login). Must NOT be 403:
+    // the browser's authenticatedFetch treats 403 as a *resource* forbidden
+    // (e.g. a file outside allowed roots) and leaves the session intact, while
+    // 401 is what triggers its re-login self-heal. Mislabeling an expired token
+    // as 403 previously meant the self-heal never fired on expiry.
+    return res.status(401).json({ error: 'Invalid or expired token' });
   }
 };
 
@@ -84,7 +94,11 @@ const generateToken = (user) => {
       username: user.username
     },
     JWT_SECRET,
-    { expiresIn: '7d' }
+    // Long base TTL — this is a single-user, shared-login personal tool, so a
+    // short window buys no security but bricks the app on return after a break.
+    // Combined with the day-granular sliding refresh above, an actively-used
+    // session never expires; only a genuinely idle one (90d untouched) does.
+    { expiresIn: '90d' }
   );
 };
 

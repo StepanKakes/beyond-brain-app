@@ -1,5 +1,24 @@
 import { IS_PLATFORM } from "../constants/config";
 
+// One-shot guard so a burst of concurrent 401s triggers a single recovery,
+// not a reload storm.
+let authFailureHandled = false;
+
+/**
+ * Recover from an expired/invalid token: drop it and reload so the app falls
+ * back to the login screen instead of silently hanging (dead WebSocket = stuck
+ * "thinking", 401 on the session index = vanishing history). Without this, an
+ * expired token is only noticed on a fresh page load, so a long-open tab breaks
+ * quietly.
+ */
+const handleAuthFailure = () => {
+  if (authFailureHandled || IS_PLATFORM) return;
+  if (!localStorage.getItem('auth-token')) return; // nothing was logged in
+  authFailureHandled = true;
+  localStorage.removeItem('auth-token');
+  window.location.reload();
+};
+
 // Utility function for authenticated API calls
 export const authenticatedFetch = (url, options = {}) => {
   const token = localStorage.getItem('auth-token');
@@ -25,6 +44,14 @@ export const authenticatedFetch = (url, options = {}) => {
     const refreshedToken = response.headers.get('X-Refreshed-Token');
     if (refreshedToken) {
       localStorage.setItem('auth-token', refreshedToken);
+    } else if (!IS_PLATFORM && response.status === 401) {
+      // 401 = the token itself is bad/expired → force re-login rather than let
+      // the UI hang. A 403 is deliberately NOT treated as an auth failure: our
+      // resource endpoints (e.g. /api/beyond/file for a path outside allowed
+      // roots, or a sensitive/binary file) legitimately return 403, and those
+      // must never log the user out. The auth middleware returns 401 for token
+      // problems (see server/middleware/auth.js).
+      handleAuthFailure();
     }
     return response;
   });

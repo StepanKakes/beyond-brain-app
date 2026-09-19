@@ -48,7 +48,7 @@ export const ThemeProvider = ({ children }) => {
       }
       const themeColorMeta = document.querySelector('meta[name="theme-color"]');
       if (themeColorMeta) {
-        themeColorMeta.setAttribute('content', '#0F1626');
+        themeColorMeta.setAttribute('content', '#0A0C10');
       }
     } else {
       document.documentElement.classList.remove('dark');
@@ -59,7 +59,7 @@ export const ThemeProvider = ({ children }) => {
       }
       const themeColorMeta = document.querySelector('meta[name="theme-color"]');
       if (themeColorMeta) {
-        themeColorMeta.setAttribute('content', '#FAF6F1');
+        themeColorMeta.setAttribute('content', '#EEF1F6');
       }
     }
   }, [isDarkMode]);
@@ -103,10 +103,22 @@ export const ThemeProvider = ({ children }) => {
     setIsDarkMode(computeAutoTheme());
   };
 
+  // Explicit 3-way setter used by the Settings dialog (auto | light | dark).
+  const setTheme = (mode) => {
+    if (mode === 'auto') {
+      localStorage.removeItem('theme');
+      setIsDarkMode(computeAutoTheme());
+    } else {
+      localStorage.setItem('theme', mode);
+      setIsDarkMode(mode === 'dark');
+    }
+  };
+
   const value = {
     isDarkMode,
     toggleDarkMode,
     resetThemePreference,
+    setTheme,
   };
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

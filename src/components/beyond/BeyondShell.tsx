@@ -4,21 +4,38 @@ import { PanelLeft } from 'lucide-react';
 import BeyondSidebarPreview from './BeyondSidebarPreview';
 
 /**
- * Beyond Brain — v2 application shell.
+ * Beyond Brain — v3 application shell (Liquid Glass).
  *
- * Default state: sidebar HIDDEN. Tiny "≡" toggle in the top-left corner.
- * Open → sidebar slides in from the left (280px, spring physics), white
- * surface with a single right border. Picking a client auto-collapses it.
+ * Desktop (≥900px): a persistent 300px glass sidebar that pushes the main
+ * column; the collapse button in the sidebar head slides it to 0 width.
+ * Mobile (<900px): the sidebar is a fixed overlay with a scrim; picking a
+ * client or tapping the scrim closes it.
  *
- * Designed to host either the welcome screen or chat view as children.
+ * Hosts either the welcome screen or the chat view as children.
  */
 
+const DESKTOP_QUERY = '(min-width: 900px)';
+
+function useIsDesktop() {
+  const [isDesktop, setIsDesktop] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia(DESKTOP_QUERY).matches : true,
+  );
+  useEffect(() => {
+    if (!window.matchMedia) return;
+    const mq = window.matchMedia(DESKTOP_QUERY);
+    const onChange = () => setIsDesktop(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return isDesktop;
+}
+
 type Props = {
-  /** Currently-selected client slug, if any. */
   selectedSlug?: string | null;
-  /** Called when the user picks a client. */
   onSelectClient?: (slug: string) => void;
-  /** Main view content. */
+  onGoHome?: () => void;
+  onOpenUniversalChat?: () => void;
+  onSwitchUniversalSession?: (uuid: string) => void;
   children?: ReactNode;
   /** Force-open the sidebar on mount (used by preview /__preview/sidebar). */
   defaultOpen?: boolean;
@@ -27,79 +44,100 @@ type Props = {
 export default function BeyondShell({
   selectedSlug,
   onSelectClient,
+  onGoHome,
+  onOpenUniversalChat,
+  onSwitchUniversalSession,
   children,
-  defaultOpen = false,
+  defaultOpen,
 }: Props) {
-  const [open, setOpen] = useState(defaultOpen);
+  const isDesktop = useIsDesktop();
+  // Open by default on desktop, closed on mobile.
+  const [open, setOpen] = useState(defaultOpen ?? (typeof window !== 'undefined' ? window.matchMedia(DESKTOP_QUERY).matches : true));
 
-  // Esc closes the sidebar.
+  // Follow the viewport when it crosses the breakpoint (unless forced open).
   useEffect(() => {
-    if (!open) return;
+    if (defaultOpen) return;
+    setOpen(isDesktop);
+  }, [isDesktop, defaultOpen]);
+
+  // Esc closes the sidebar on mobile (where it's an overlay).
+  useEffect(() => {
+    if (!open || isDesktop) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false);
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [open]);
+  }, [open, isDesktop]);
+
+  const closeOnMobile = () => {
+    if (!isDesktop) setOpen(false);
+  };
 
   const handleSelect = (slug: string) => {
     onSelectClient?.(slug);
-    // Auto-collapse after picking a client per VISION.md.
-    setOpen(false);
+    closeOnMobile();
+  };
+  const handleGoHome = () => {
+    onGoHome?.();
+    closeOnMobile();
+  };
+  const handleOpenUniversal = () => {
+    onOpenUniversalChat?.();
+    closeOnMobile();
+  };
+  const handleSwitchUniversal = (uuid: string) => {
+    onSwitchUniversalSession?.(uuid);
+    closeOnMobile();
   };
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-white">
-      {/* Toggle — tiny, top-left, always visible */}
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-label={open ? 'Skrýt panel' : 'Zobrazit panel'}
-        aria-expanded={open}
-        className="fixed left-5 top-5 z-40 flex h-9 w-9 items-center justify-center rounded-full text-beyond-dim transition-colors hover:bg-black/5 hover:text-beyond-ink"
-      >
-        <PanelLeft className="h-[18px] w-[18px]" strokeWidth={1.8} />
-      </button>
+    <div className="bb-app bb-scope">
+      {/* Sidebar (in-flow push on desktop, fixed overlay on mobile via CSS) */}
+      <aside className="bb-side" data-open={open ? 'true' : 'false'}>
+        <div className="bb-side__inner">
+          <BeyondSidebarPreview
+            selectedSlug={selectedSlug}
+            onSelectClient={handleSelect}
+            onGoHome={onGoHome ? handleGoHome : undefined}
+            onOpenUniversalChat={onOpenUniversalChat ? handleOpenUniversal : undefined}
+            onSwitchUniversalSession={onSwitchUniversalSession ? handleSwitchUniversal : undefined}
+            onCollapse={() => setOpen(false)}
+          />
+        </div>
+      </aside>
 
-      {/* Main view */}
-      <main className="absolute inset-0 z-10 h-full w-full">{children}</main>
-
-      {/* Sidebar overlay (click outside closes) */}
+      {/* Mobile scrim (hidden ≥900px via CSS) */}
       <AnimatePresence>
         {open && (
           <motion.div
-            key="scrim"
-            className="fixed inset-0 z-20 bg-black/0"
-            initial={{ backgroundColor: 'rgba(0,0,0,0)' }}
-            animate={{ backgroundColor: 'rgba(0,0,0,0.04)' }}
-            exit={{ backgroundColor: 'rgba(0,0,0,0)' }}
-            transition={{ duration: 0.25, ease: 'easeOut' }}
+            key="side-scrim"
+            className="bb-side-scrim"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
             onClick={() => setOpen(false)}
             aria-hidden="true"
           />
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {open && (
-          <motion.aside
-            key="sidebar"
-            className="fixed left-0 top-0 z-30 h-full w-[280px] max-w-[88vw] bg-white shadow-[1px_0_0_0_#f0f0f0]"
-            initial={{ x: -296 }}
-            animate={{ x: 0 }}
-            exit={{ x: -296 }}
-            transition={{ type: 'spring', stiffness: 280, damping: 30 }}
+      {/* Main column */}
+      <div className="bb-main">
+        {!open && (
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            aria-label="Zobrazit panel"
+            className="bb-ib bb-burger bb-glass"
+            style={{ borderRadius: 10 }}
           >
-            {/* Push sidebar content below the toggle visually */}
-            <div className="h-full pt-2">
-              <BeyondSidebarPreview
-                selectedSlug={selectedSlug}
-                onSelectClient={handleSelect}
-              />
-            </div>
-          </motion.aside>
+            <PanelLeft size={18} strokeWidth={1.8} />
+          </button>
         )}
-      </AnimatePresence>
+        {children}
+      </div>
     </div>
   );
 }
