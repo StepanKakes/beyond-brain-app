@@ -595,6 +595,14 @@ async function readClient(activeDir, slug) {
     slug,
     ...profile,
     initials: initialsFromName(profile.name),
+    /**
+     * Still being managed. A client whose program is marked finished stays in
+     * `clients/aktivni/` (the daily pulls write there, and the history is worth
+     * keeping to hand) but drops out of triage entirely: raising "program po
+     * termínu" on a program someone has already closed is exactly the kind of
+     * noise that teaches people to ignore the screen.
+     */
+    isActive: !profile.stav || /^aktivní/i.test(profile.stav),
     programWeek,
     totalWeeks,
     daysElapsed: elapsed,

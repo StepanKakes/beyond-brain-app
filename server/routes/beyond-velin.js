@@ -32,6 +32,7 @@ function clientCard(client, row, calls) {
     name: client.name,
     initials: client.initials,
     stav: client.stav,
+    isActive: client.isActive,
     programWeek: client.programWeek,
     totalWeeks: client.totalWeeks,
     daysToEnd: client.daysToEnd,
@@ -94,7 +95,8 @@ router.get('/', async (req, res) => {
         next: calls.calls.find((c) => !c.live) || null,
       },
       totals: {
-        clients: index.clients.length,
+        clients: index.clients.filter((c) => c.isActive !== false).length,
+        finished: index.clients.filter((c) => c.isActive === false).length,
         critical: rows.filter((r) => r.counts.critical > 0).length,
         needsUs: needsUs.length,
       },

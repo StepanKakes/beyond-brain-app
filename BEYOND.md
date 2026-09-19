@@ -162,6 +162,27 @@ Tři pravidla, která parser drží a bez kterých by dashboard lhal:
 Signál, který platí pro většinu portfolia, se zvedne mezi systémové stavy
 a uvede jednou. Bez toho by devět stejných řádků pohřbilo dva skutečné.
 
+Klient s `Stav: Doběhl` negeneruje žádné signály a v mřížce sedí zvlášť. Zůstává
+v `clients/aktivni/` (denní pully tam zapisují a historie se hodí), jen vypadne
+z triáže. Znovuotevření je jedno slovo v `profil.md`.
+
+---
+
+## Obsah z přepisů: co se smí brát
+
+Přepisy v `raw/fathom/` mají označené mluvčí (`[00:15] TIM:` proti
+`[00:18] Jakub Bolek:`) a v hlavičce seznam účastníků. Díky tomu je pravidlo
+vynutitelné v kódu, ne jen slibem.
+
+**Bere se jen naše řeč.** Hlasy klientů, jejich názory a otázky se do obsahové
+knihovny nedostanou vůbec. Není to opatrnost navíc: hodnota je v tom, co Tim
+na callech opakovaně vysvětluje, ne v tom, co se ptá klient.
+
+Prakticky to znamená, že těžba momentů filtruje repliky podle mluvčího a
+klientskou stranu zahodí ještě před tím, než se text dostane k modelu.
+Souhrny z Fathomu (sekce „Key Takeaways") jsou psané o hovoru jako celku,
+takže do obsahu nejdou, jen do klientského zápisu.
+
 #### Agentní endpoint
 
 `POST /api/beyond-agent/query` řeší několik věcí, které stojí za zapamatování:

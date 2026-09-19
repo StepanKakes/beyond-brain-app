@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 
 import { fetchVelin, type Signal, type Velin } from './api';
-import { Empty, LiveCall, SectionHead, SeverityChip, formatTime, usePolled } from './bits';
+import { Empty, LiveCall, SectionHead, SeverityChip, formatTime, usePolled, vocative } from './bits';
 
 /**
  * Beyond Brain — the velín.
@@ -74,10 +74,12 @@ export default function VelinPage({ onOpenClient, onOpenCalls }: Props) {
         <header className="bb-vel__head">
           <div>
             <h1 className="bb-vel__title">
-              {greeting()}{me ? `, ${me}` : ''}. <em>Co dnes hoří?</em>
+              {greeting()}{me ? `, ${vocative(me)}` : ''}. <em>Co dnes hoří?</em>
             </h1>
             <p className="bb-vel__sub">
-              {today} · {totals.clients} klientů · {totals.critical} v kritickém stavu
+              {today} · {totals.clients} aktivních klientů
+              {totals.finished > 0 && ` · ${totals.finished} doběhlo`}
+              {totals.critical > 0 && ` · ${totals.critical} v kritickém stavu`}
             </p>
           </div>
         </header>

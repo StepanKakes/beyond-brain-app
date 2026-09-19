@@ -81,6 +81,41 @@ export function days(n: number): string {
 }
 
 /**
+ * Czech vocative for a first name, because greeting someone in the nominative
+ * ("Dobré ráno, Štěpán") reads as a form letter. Covers the endings that
+ * actually occur in a Czech address book; anything it does not recognise is
+ * returned unchanged, which is always safer than mangling a name.
+ */
+export function vocative(name: string): string {
+  const n = (name || '').trim();
+  if (!n) return n;
+  const lower = n.toLowerCase();
+
+  // Feminine -a → -o (Ivana → Ivano, Lucie stays Lucie).
+  if (lower.endsWith('a')) {
+    // Masculine names in -a take -o as well (Honza → Honzo), same rule.
+    return `${n.slice(0, -1)}o`;
+  }
+  // Soft consonants take -i (Tomáš → Tomáši, Ondřej → Ondřeji).
+  if (/[šžčřcj]$/i.test(n)) return `${n}i`;
+  // Velars take -u (Marek → Marku, but the -e- drops out first).
+  if (/[kgh]$/i.test(n)) {
+    const stem = /ek$/i.test(n) ? `${n.slice(0, -2)}k` : n;
+    return `${stem}u`;
+  }
+  // -r after a consonant hardens (Petr → Petře).
+  if (/[bcdfghjklmnpqrstvwxz]r$/i.test(n)) return `${n.slice(0, -1)}ře`;
+  // -ec / -el drop the vowel (Pavel → Pavle).
+  if (/el$/i.test(n)) return `${n.slice(0, -2)}le`;
+  // Everything else ending in a hard consonant takes -e (Štěpán → Štěpáne).
+  if (/[a-záčďéěíňóřšťúůýž]$/i.test(n) && !/[aeiouyáéěíóúůý]$/i.test(n)) {
+    return `${n}e`;
+  }
+  // Ends in a vowel we have no rule for (Jiří, Ondra handled above) — leave it.
+  return n;
+}
+
+/**
  * A metric value. The whole point of this component is the dash: a blank week
  * in `mereni.md` means "we don't know" and a 0 means "tried and it didn't
  * work", so an unknown must never be drawn as a zero.

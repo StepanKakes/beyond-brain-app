@@ -295,6 +295,13 @@ const WEIGHT = { critical: 10, watch: 3 };
  * client with one missed promise, which is the whole point of triage.
  */
 export function signalsForClient(client, { now = Date.now(), upcomingCalls = [] } = {}) {
+  // A closed program produces nothing. Everything here measures whether a live
+  // engagement is drifting, and a finished one cannot drift. Reopening is a
+  // one-word edit to `Stav` in profil.md.
+  if (client.isActive === false) {
+    return { signals: [], score: 0, worst: null, counts: { critical: 0, watch: 0 } };
+  }
+
   const hasUpcomingCall = upcomingCalls.some((c) => c.clientSlug === client.slug);
 
   const found = [
@@ -383,6 +390,10 @@ const SYSTEMIC_COPY = {
  */
 export function inbox(clients, opts = {}) {
   const rows = signalsForRoster(clients, opts);
+  // "Most of the roster" means most of the LIVE roster. Counting finished
+  // programs in the denominator would stop a real roster-wide problem from
+  // ever crossing the threshold.
+  const active = clients.filter((c) => c.isActive !== false);
 
   const byType = new Map();
   for (const row of rows) {
@@ -396,7 +407,7 @@ export function inbox(clients, opts = {}) {
   const systemic = [];
   for (const [type, hits] of byType) {
     if (hits.length < SYSTEMIC_MIN_CLIENTS) continue;
-    if (hits.length / clients.length < SYSTEMIC_SHARE) continue;
+    if (hits.length / Math.max(1, active.length) < SYSTEMIC_SHARE) continue;
     systemicTypes.add(type);
     const copy = SYSTEMIC_COPY[type] || {};
     systemic.push({
@@ -404,7 +415,7 @@ export function inbox(clients, opts = {}) {
       title: copy.title || type,
       meaning: copy.meaning || null,
       count: hits.length,
-      total: clients.length,
+      total: active.length,
       severity: hits.some((h) => h.severity === 'critical') ? 'critical' : 'watch',
       clients: hits,
     });

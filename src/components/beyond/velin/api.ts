@@ -71,7 +71,7 @@ export type Velin = {
     live: Call[];
     next: Call | null;
   };
-  totals: { clients: number; critical: number; needsUs: number };
+  totals: { clients: number; finished: number; critical: number; needsUs: number };
 };
 
 export type MetricValues = Record<string, number | null>;
@@ -81,6 +81,7 @@ export type BoardClient = {
   name: string;
   initials: string;
   stav: string | null;
+  isActive: boolean;
   programWeek: number | null;
   totalWeeks: number | null;
   daysToEnd: number | null;

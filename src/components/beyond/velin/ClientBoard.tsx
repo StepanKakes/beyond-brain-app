@@ -49,15 +49,17 @@ export default function ClientBoard({ onOpenClient }: { onOpenClient: (slug: str
   }
   if (!data) return null;
 
-  const clients = [...data.clients].sort((a, b) => {
-    if (sort === 'name') return a.name.localeCompare(b.name, 'cs');
-    if (sort === 'ending') {
-      const av = a.daysToEnd ?? 9999;
-      const bv = b.daysToEnd ?? 9999;
-      return av - bv;
-    }
-    return b.score - a.score;
-  });
+  const order = (list: BoardClient[]) =>
+    [...list].sort((a, b) => {
+      if (sort === 'name') return a.name.localeCompare(b.name, 'cs');
+      if (sort === 'ending') return (a.daysToEnd ?? 9999) - (b.daysToEnd ?? 9999);
+      return b.score - a.score;
+    });
+
+  // Finished programs stay reachable but out of the way. They are history, not
+  // a to-do list, and mixing them in would put dead rows above live ones.
+  const clients = order(data.clients.filter((c) => c.isActive));
+  const finished = order(data.clients.filter((c) => !c.isActive));
 
   return (
     <div className="bb-vel">
@@ -65,7 +67,10 @@ export default function ClientBoard({ onOpenClient }: { onOpenClient: (slug: str
         <header className="bb-vel__head">
           <div>
             <h1 className="bb-vel__title">Klienti</h1>
-            <p className="bb-vel__sub">{clients.length} aktivních</p>
+            <p className="bb-vel__sub">
+              {clients.length} aktivních
+              {finished.length > 0 && ` · ${finished.length} doběhlo`}
+            </p>
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
             {SORTS.map((s) => (
@@ -103,6 +108,31 @@ export default function ClientBoard({ onOpenClient }: { onOpenClient: (slug: str
             </tbody>
           </table>
         </div>
+
+        {finished.length > 0 && (
+          <section>
+            <SectionHead title="Doběhlé programy" count={finished.length} />
+            <div className="bb-prom">
+              {finished.map((c) => (
+                <button
+                  key={c.slug}
+                  type="button"
+                  className="bb-prom__i"
+                  style={{ background: 'none', border: 'none', borderTop: '1px solid var(--bb-line2)', width: '100%', textAlign: 'left', cursor: 'pointer' }}
+                  onClick={() => onOpenClient(c.slug)}
+                >
+                  <span className="bb-prom__age">{c.endIso || '—'}</span>
+                  <span style={{ color: 'var(--bb-ink2)' }}>
+                    {c.name}
+                    {c.openOurs > 0 && (
+                      <span className="neg"> · nedodělali jsme {c.openOurs}</span>
+                    )}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
 
         <section>
           <SectionHead title="Jak číst tabulku" />
