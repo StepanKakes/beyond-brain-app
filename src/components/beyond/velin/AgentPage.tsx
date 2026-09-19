@@ -3,6 +3,7 @@ import { Play } from 'lucide-react';
 
 import { authenticatedFetch } from '../../../utils/api';
 import { Empty, SectionHead, ago, usePolled } from './bits';
+import Proposals from './Proposals';
 
 /**
  * Beyond Brain — what the agent did, and the switch that stops it.
@@ -114,6 +115,8 @@ export default function AgentPage() {
             {scheduler.paused ? 'Spustit' : 'Pozastavit vše'}
           </button>
         </header>
+
+        <Proposals />
 
         <section>
           <SectionHead title="Co dělá sám" count={jobs.filter((j) => j.enabled).length} />

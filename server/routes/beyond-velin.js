@@ -15,6 +15,16 @@ import { getPeople, personForUser } from '../services/beyond-people.js';
 import { JOBS } from '../services/beyond-jobs.js';
 import { getJobState, listRuns, setJobEnabled } from '../services/beyond-runs.js';
 import { runJob, schedulerStatus, setPaused } from '../services/beyond-scheduler.js';
+import {
+  countPending,
+  editProposal,
+  getProposal,
+  listProposals,
+  markFailed,
+  markSent,
+  rejectProposal,
+} from '../services/beyond-proposals.js';
+import { isConfigured as wahaConfigured, sendText } from '../services/beyond-waha.js';
 
 const router = express.Router();
 
@@ -97,6 +107,7 @@ router.get('/', async (req, res) => {
         live: calls.live,
         next: calls.calls.find((c) => !c.live) || null,
       },
+      proposals: { waiting: countPending(), canSend: wahaConfigured() },
       totals: {
         clients: index.clients.filter((c) => c.isActive !== false).length,
         finished: index.clients.filter((c) => c.isActive === false).length,
@@ -224,6 +235,70 @@ router.post('/refresh', async (_req, res) => {
     res.json({ ok: true, builtAt: index.builtAt, clients: index.clients.length });
   } catch (err) {
     res.status(500).json({ ok: false, error: err?.message || 'refresh selhal' });
+  }
+});
+
+/* ------------------------------------------------------------------ */
+/* prepared messages                                                   */
+/* ------------------------------------------------------------------ */
+
+/** What is written and waiting for a click. */
+router.get('/navrhy', (req, res) => {
+  try {
+    res.json({
+      canSend: wahaConfigured(),
+      pending: listProposals({ status: 'pending' }),
+      recent: listProposals({ status: 'all', limit: 20 }).filter((p) => p.status !== 'pending'),
+    });
+  } catch (err) {
+    console.error('[velin] /navrhy failed', err);
+    res.status(500).json({ error: err?.message || 'návrhy selhaly' });
+  }
+});
+
+/** Edit the text before sending. */
+router.patch('/navrhy/:id', (req, res) => {
+  try {
+    const updated = editProposal(Number(req.params.id), req.body?.body, req.user?.username);
+    res.json({ ok: true, proposal: updated });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'úprava selhala' });
+  }
+});
+
+router.post('/navrhy/:id/zahodit', (req, res) => {
+  try {
+    res.json({ ok: true, proposal: rejectProposal(Number(req.params.id), req.user?.username) });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'nešlo zahodit' });
+  }
+});
+
+/**
+ * Send it. The stored text goes out untouched — the point of the click is that
+ * what was read is what leaves, so nothing re-renders it here.
+ */
+router.post('/navrhy/:id/odeslat', async (req, res) => {
+  const id = Number(req.params.id);
+  try {
+    const p = getProposal(id);
+    if (!p) return res.status(404).json({ ok: false, error: 'Návrh neexistuje' });
+    if (p.status !== 'pending') {
+      return res.status(409).json({ ok: false, error: `Návrh je ve stavu ${p.status}` });
+    }
+    if (p.channel !== 'whatsapp') {
+      return res.status(400).json({ ok: false, error: `Kanál ${p.channel} zatím neumíme` });
+    }
+    console.log(`[velin] ${req.user?.username} odesílá návrh ${id} klientovi ${p.clientSlug}`);
+    await sendText({ chatId: p.target, text: p.body });
+    res.json({ ok: true, proposal: markSent(id, req.user?.username) });
+  } catch (err) {
+    const message = err?.message || 'odeslání selhalo';
+    console.error(`[velin] odeslání návrhu ${id} selhalo:`, message);
+    try {
+      markFailed(id, message);
+    } catch { /* keep the original error */ }
+    res.status(502).json({ ok: false, error: message });
   }
 });
 

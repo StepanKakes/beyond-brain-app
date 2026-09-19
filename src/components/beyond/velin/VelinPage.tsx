@@ -3,6 +3,7 @@ import { ChevronRight } from 'lucide-react';
 
 import { fetchVelin, type Signal, type Velin } from './api';
 import { Empty, LiveCall, SectionHead, SeverityChip, formatTime, usePolled, vocative } from './bits';
+import Proposals from './Proposals';
 
 /**
  * Beyond Brain — the velín.
@@ -129,6 +130,10 @@ export default function VelinPage({ onOpenClient, onOpenCalls }: Props) {
             </div>
           )}
         </section>
+
+        {/* Written and waiting. First, because it is the cheapest thing on the
+            screen to finish: read it, click, done. */}
+        <Proposals compact />
 
         {/* What a human has to move. */}
         <section>

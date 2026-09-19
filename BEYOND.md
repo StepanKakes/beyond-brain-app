@@ -182,6 +182,7 @@ potřebuje brain repo a SDK session. Ty žijí tady, takže tu teď běží i ho
 |---|---|---|
 | `zpracuj-call` | každých 10 min | Když v `raw/fathom/` přibude přepis novější než poslední zápis v `cally.md`, přepíše ho do zápisu, vytáhne sliby na obě strany a čísla z check-inu |
 | `sync-klientu` | denně 06:20 | Skill `sync-client all`, promítne noční raw vrstvu do kurátorských souborů |
+| `napsat-navrhy` | denně 06:35 | Kde klient klouže nebo se dlouho neozval, napíše návrh zprávy a nechá ho čekat na kliknutí |
 | `ranni-brief` | denně 06:40 | Spočítá signály, napíše krátký brief, uloží do `workspace/reporty/` a pošle na Telegram |
 | `pripravit-hovory` | denně 18:30 | Pro každý hovor do 36 hodin vygeneruje brief skillem `pre-call` do `workspace/briefy/` |
 | `roadmap-check` | pondělí 08:00 | Plán proti realitě u všech aktivních klientů |
@@ -204,6 +205,30 @@ který předá práci některému z jedenácti skillů v `.claude/skills/`. Znam
 
 Vypnout jde jednotlivá úloha, všechno naráz (tlačítko Pozastavit) nebo celý
 plánovač přes `BEYOND_SCHEDULER=0`.
+
+### Návrhy zpráv: jedno kliknutí, ale tvoje
+
+Tohle je jediná cesta, kterou něco opouští brain. Agent napíše zprávu, řekne
+komu a proč, a čeká. Odeslat může jen člověk.
+
+**Pravidlo, ze kterého plyne všechno ostatní: odsouhlasený text odejde doslova.**
+Mezi kliknutím a drátem ho nevidí žádný model. Kdyby se text mohl po přečtení
+změnit, nemělo by čtení smysl. Proto odesílá server přímo přes WAHA REST
+(`server/services/beyond-waha.js`), ne agent přes MCP.
+
+Zábrany proti otravování:
+
+- **Jeden čekající návrh na klienta.** Dvě nevyřízené zprávy jednomu člověku je
+  přesně způsob, jak se z asistenta stane otrava.
+- **Nic tomu, komu jsme psali v posledních 72 hodinách.**
+- **Návrh starší než 48 hodin propadne.** Popíchnutí napsané předevčírem je
+  o situaci, která se mezitím pohnula.
+- **Vysoká laťka na to, aby vůbec vznikl.** Zamítnutý návrh stojí víc
+  pozornosti, než kolik ušetří.
+
+Klíč k WhatsAppu se bere z `BEYOND_WAHA_URL` a `BEYOND_WAHA_API_KEY`, a když
+nejsou, přečte se z WAHA MCP záznamu v `~/.claude.json`, který na stroji stejně
+už je. Bez klíče se návrhy pořád píšou a dají přečíst, jen nejdou odeslat.
 
 ---
 
