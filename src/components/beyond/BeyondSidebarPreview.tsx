@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
   Search, Plus, Check, MessagesSquare, Trash2, Plug,
   PanelLeftClose, Settings, Sun, Moon,
-  Gauge, Users, CalendarDays, MessageSquare,
+  Gauge, Users, CalendarDays, MessageSquare, Bot,
 } from 'lucide-react';
 import { initialsFor } from './BeyondGlyph';
 import BeyondBrainMark from './BeyondBrainMark';
@@ -42,6 +42,7 @@ type Props = {
   onGoHome?: () => void;
   onOpenBoard?: () => void;
   onOpenCalls?: () => void;
+  onOpenAgent?: () => void;
   onOpenUniversalChat?: () => void;
   onSwitchUniversalSession?: (uuid: string) => void;
   /** Collapse the sidebar (rendered as a button in the head). */
@@ -56,6 +57,7 @@ export default function BeyondSidebarPreview({
   onGoHome,
   onOpenBoard,
   onOpenCalls,
+  onOpenAgent,
   onOpenUniversalChat,
   onSwitchUniversalSession,
   onCollapse,
@@ -175,6 +177,19 @@ export default function BeyondSidebarPreview({
               <CalendarDays size={15} strokeWidth={1.8} style={{ color: 'var(--bb-ink2)' }} />
             </span>
             <span className="bb-row__label">Hovory</span>
+          </button>
+        )}
+        {onOpenAgent && (
+          <button
+            type="button"
+            className="bb-row"
+            aria-current={section === 'agent' ? 'true' : undefined}
+            onClick={onOpenAgent}
+          >
+            <span className="bb-avatar" style={{ background: 'transparent', boxShadow: 'none' }}>
+              <Bot size={15} strokeWidth={1.8} style={{ color: 'var(--bb-ink2)' }} />
+            </span>
+            <span className="bb-row__label">Agent</span>
           </button>
         )}
         {onOpenUniversalChat && (

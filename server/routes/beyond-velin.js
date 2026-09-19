@@ -12,6 +12,9 @@ import { getBrainIndex, invalidateBrainIndex, daysSince } from '../services/brai
 import { inbox, signalsForClient } from '../services/brain-signals.js';
 import { getCalls, isConfigured as callsConfigured } from '../services/beyond-calls.js';
 import { getPeople, personForUser } from '../services/beyond-people.js';
+import { JOBS } from '../services/beyond-jobs.js';
+import { getJobState, listRuns, setJobEnabled } from '../services/beyond-runs.js';
+import { runJob, schedulerStatus, setPaused } from '../services/beyond-scheduler.js';
 
 const router = express.Router();
 
@@ -222,6 +225,69 @@ router.post('/refresh', async (_req, res) => {
   } catch (err) {
     res.status(500).json({ ok: false, error: err?.message || 'refresh selhal' });
   }
+});
+
+/* ------------------------------------------------------------------ */
+/* the agent                                                           */
+/* ------------------------------------------------------------------ */
+
+/** What the agent does, when it last did it, and how the last runs went. */
+router.get('/agent', (_req, res) => {
+  try {
+    res.json({
+      scheduler: schedulerStatus(),
+      jobs: JOBS.map((j) => {
+        const state = getJobState(j.name);
+        return {
+          name: j.name,
+          title: j.title,
+          description: j.description,
+          cadence: j.everyMs
+            ? `každých ${Math.round(j.everyMs / 60000)} min`
+            : j.dailyAt
+              ? `denně ${String(j.dailyAt.hour).padStart(2, '0')}:${String(j.dailyAt.minute).padStart(2, '0')}`
+              : j.weeklyAt
+                ? `týdně, ${['ne', 'po', 'út', 'st', 'čt', 'pá', 'so'][j.weeklyAt.weekday]} ${String(j.weeklyAt.hour).padStart(2, '0')}:${String(j.weeklyAt.minute).padStart(2, '0')}`
+                : 'ručně',
+          enabled: state.enabled,
+          lastRunAt: state.lastRunAt,
+        };
+      }),
+      runs: listRuns({ limit: 30 }),
+    });
+  } catch (err) {
+    console.error('[velin] /agent failed', err);
+    res.status(500).json({ error: err?.message || 'agent selhal' });
+  }
+});
+
+/** Run one job now. Answers immediately; the run shows up in the log. */
+router.post('/agent/run/:job', async (req, res) => {
+  try {
+    const name = req.params.job;
+    console.log(`[velin] ${req.user?.username} spustil ručně ${name}`);
+    res.json({ ok: true, started: name });
+    runJob(name, { triggerKind: 'manual', triggerDetail: req.user?.username || null }).catch(
+      (err) => console.error('[velin] ruční běh selhal', err?.message || err),
+    );
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'nešlo spustit' });
+  }
+});
+
+/** Turn a single job on or off. */
+router.post('/agent/job/:job', (req, res) => {
+  const enabled = Boolean(req.body?.enabled);
+  setJobEnabled(req.params.job, enabled);
+  console.log(`[velin] ${req.user?.username} ${enabled ? 'zapnul' : 'vypnul'} ${req.params.job}`);
+  res.json({ ok: true, job: req.params.job, enabled });
+});
+
+/** The kill switch for everything at once. */
+router.post('/agent/pause', (req, res) => {
+  const paused = setPaused(Boolean(req.body?.paused));
+  console.log(`[velin] ${req.user?.username} ${paused ? 'pozastavil' : 'pustil'} agenta`);
+  res.json({ ok: true, paused });
 });
 
 /** Whether the calendar is wired up at all, for the settings surface. */

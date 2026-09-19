@@ -12,6 +12,7 @@ import VelinPage from './velin/VelinPage';
 import ClientBoard from './velin/ClientBoard';
 import ClientDetail from './velin/ClientDetail';
 import CallsPage from './velin/CallsPage';
+import AgentPage from './velin/AgentPage';
 import { useBeyondClients, type BeyondClient } from './useBeyondClients';
 import { UNIVERSAL_SLUG } from './beyondSessionsApi';
 
@@ -50,6 +51,7 @@ type View =
   | { kind: 'board' }
   | { kind: 'client'; slug: string }
   | { kind: 'calls' }
+  | { kind: 'agent' }
   | { kind: 'chat' };
 
 function parseView(pathname: string): View {
@@ -57,6 +59,7 @@ function parseView(pathname: string): View {
   if (parts.length === 0) return { kind: 'velin' };
   if (parts[0] === 'klienti') return { kind: 'board' };
   if (parts[0] === 'hovory') return { kind: 'calls' };
+  if (parts[0] === 'agent') return { kind: 'agent' };
   if (parts[0] === 'klient' && parts[1]) return { kind: 'client', slug: decodeURIComponent(parts[1]) };
   return { kind: 'chat' };
 }
@@ -238,6 +241,7 @@ export default function BeyondApp() {
   const openClient = useCallback((slug: string) => navigate(`/klient/${encodeURIComponent(slug)}`), [navigate]);
   const openBoard = useCallback(() => navigate('/klienti'), [navigate]);
   const openCalls = useCallback(() => navigate('/hovory'), [navigate]);
+  const openAgent = useCallback(() => navigate('/agent'), [navigate]);
 
   return (
     <BeyondShell
@@ -247,6 +251,7 @@ export default function BeyondApp() {
       onGoHome={handleGoHome}
       onOpenBoard={openBoard}
       onOpenCalls={openCalls}
+      onOpenAgent={openAgent}
       onOpenUniversalChat={handleOpenUniversalChat}
       onSwitchUniversalSession={handleSwitchUniversalSession}
     >
@@ -267,6 +272,8 @@ export default function BeyondApp() {
             <ClientDetail slug={view.slug} onBack={openBoard} onOpenChat={handleSelectClient} />
           ) : view.kind === 'calls' ? (
             <CallsPage onOpenClient={openClient} />
+          ) : view.kind === 'agent' ? (
+            <AgentPage />
           ) : activeClient ? (
             <BeyondChat
               client={activeClient}

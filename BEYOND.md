@@ -168,6 +168,45 @@ z triáže. Znovuotevření je jedno slovo v `profil.md`.
 
 ---
 
+## Agent: co dělá sám
+
+Do tohohle commitu appka neplánovala nic, veškeré hodiny držel n8n a volal
+dovnitř. To sedí na raw pully, které jen stahují, ale ne na práci, která
+potřebuje brain repo a SDK session. Ty žijí tady, takže tu teď běží i hodiny.
+
+`server/services/beyond-scheduler.js` je záměrně hloupý: jeden časovač, jedna
+úloha v jednu chvíli, každá si sama řekne, jestli je na řadě. Žádná fronta,
+žádná souběžnost. Je to jeden stroj a šest úloh.
+
+| Úloha | Kdy | Co dělá |
+|---|---|---|
+| `zpracuj-call` | každých 10 min | Když v `raw/fathom/` přibude přepis novější než poslední zápis v `cally.md`, přepíše ho do zápisu, vytáhne sliby na obě strany a čísla z check-inu |
+| `sync-klientu` | denně 06:20 | Skill `sync-client all`, promítne noční raw vrstvu do kurátorských souborů |
+| `ranni-brief` | denně 06:40 | Spočítá signály, napíše krátký brief, uloží do `workspace/reporty/` a pošle na Telegram |
+| `pripravit-hovory` | denně 18:30 | Pro každý hovor do 36 hodin vygeneruje brief skillem `pre-call` do `workspace/briefy/` |
+| `roadmap-check` | pondělí 08:00 | Plán proti realitě u všech aktivních klientů |
+| `srovnat-profily` | pondělí 08:30 | Opraví „Aktuální týden" tam, kde se rozešel s datem startu |
+
+Práce samotná není v kódu, je v brainu. Každá úloha je jen trigger plus prompt,
+který předá práci některému z jedenácti skillů v `.claude/skills/`. Znamená to,
+že se chování agenta mění editací markdownu, ne deployem.
+
+**Tři pojistky:**
+
+- **Nic neopouští brain.** Úlohy čtou repo a zapisují zpátky do něj. Git je
+  auditní stopa i vrácení zpět. Cokoli, co by šlo ke klientovi, končí jako
+  draft v `workspace/drafty/`, nikdy jako odeslaná zpráva.
+- **Úloha bez práce nespotřebuje nic.** Než se sáhne na model, každá se zeptá
+  sama sebe, jestli je co dělat, a hlasitě přeskočí.
+- **Každý běh je vidět.** Obrazovka Agent ukazuje, co běh tvrdí, že udělal,
+  a vedle toho git diff toho, co se skutečně změnilo. To jsou dvě různá
+  tvrzení a záměrně se zobrazují zvlášť.
+
+Vypnout jde jednotlivá úloha, všechno naráz (tlačítko Pozastavit) nebo celý
+plánovač přes `BEYOND_SCHEDULER=0`.
+
+---
+
 ## Obsah z přepisů: co se smí brát
 
 Přepisy v `raw/fathom/` mají označené mluvčí (`[00:15] TIM:` proti

@@ -71,6 +71,7 @@ import providerRoutes from './modules/providers/provider.routes.js';
 // Beyond Brain — client-focused endpoints (reads ~/Documents/GitHub/beyond-brain)
 import beyondRoutes from './routes/beyond.js';
 import beyondVelinRoutes from './routes/beyond-velin.js';
+import { startScheduler } from './services/beyond-scheduler.js';
 // Beyond Brain — MCP connectors (add/manage/OAuth). Two routers: protected CRUD
 // + the unauthenticated OAuth callback target.
 import beyondMcpRoutes, { oauthCallbackRouter as beyondMcpOauthCallbackRouter } from './routes/beyond-mcp.js';
@@ -1517,6 +1518,12 @@ async function startServer() {
             startEnabledPluginServers().catch(err => {
                 console.error('[Plugins] Error during startup:', err.message);
             });
+
+            // Beyond Brain — the agent's clock. The jobs that think need the
+            // brain repo and the SDK, both of which live in this process, so
+            // they run here; n8n keeps the jobs that only fetch.
+            // Disable with BEYOND_SCHEDULER=0.
+            startScheduler();
         });
 
         await closeSessionsWatcher();

@@ -505,6 +505,10 @@ body { background: var(--bb-bg) !important; color: var(--bb-ink); font-family: v
 .bb-sev { display: inline-flex; align-items: center; flex: none; font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; padding: 2px 7px; border-radius: 6px; background: var(--bb-panel2); color: var(--bb-ink3); }
 .bb-sev[data-sev="critical"] { background: var(--bb-danger-soft); color: var(--bb-danger); font-weight: 600; }
 .bb-sev[data-sev="watch"]    { background: var(--bb-warn-soft);   color: var(--bb-warn); }
+/* Agent surface: a finished run and a disabled job are states, not severities,
+   so they stay on the neutral scale rather than borrowing an alarm colour. */
+.bb-sev[data-sev="ok"]       { background: var(--bb-accent-soft); color: var(--bb-ink2); }
+.bb-sev[data-sev="off"]      { background: transparent; color: var(--bb-ink3); box-shadow: inset 0 0 0 1px var(--bb-line); }
 
 /* --- signal list ---------------------------------------------------------- */
 .bb-sig { display: flex; flex-direction: column; border: 1px solid var(--bb-line); border-radius: var(--bb-rc); background: var(--bb-raise); overflow: hidden; }
