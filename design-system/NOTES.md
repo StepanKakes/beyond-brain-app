@@ -1,6 +1,12 @@
-# Beyond Brain Redesign — Notes
+# Beyond Brain Redesign — Notes (v1/v2, HISTORIE)
 
 Pracovní deník redesignu. Decisions, gotchas, follow-ups.
+
+> **Popisuje fáze A až E, tedy v1 a v2.** Většina konkrétních věcí tady už
+> v kódu není: glass karty s `bg-glass`, gradient podle denní doby, sidebar
+> s `SidebarProjectList`, smart foldery. Platný stav je v
+> [`BEYOND.md`](../BEYOND.md). Follow-upy a TODO níže ber jako historické, ne
+> jako backlog.
 
 ## Fáze A — Foundation
 

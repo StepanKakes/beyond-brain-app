@@ -1,4 +1,10 @@
-# Beyond Brain App — Design Vision (v2 — REWRITE)
+# Beyond Brain App — Design Vision (v2 — HISTORIE)
+
+> **Tenhle dokument už neplatí.** Je to zadání v2, po kterém přišlo v3
+> (Liquid Glass podle design handoffu). Kód se řídí
+> [`src/styles/beyond-glass.css`](../src/styles/beyond-glass.css), přehled je
+> v [`BEYOND.md`](../BEYOND.md). Nech si ho jako záznam, proč se směr dvakrát
+> otočil, ale nestav podle něj.
 
 **⚠️ Tato verze je kompletní redesign směru.** První pokus (v1) byl peach/sunrise glassmorphism, Tim řekl „strašný". Pivot na **hyperminimalismus**.
 

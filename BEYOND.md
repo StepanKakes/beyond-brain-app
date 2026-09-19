@@ -1,28 +1,38 @@
 # Beyond Brain — osobní AI asistent
 
-Apple-sleek mentoringová appka pro Tima Trnku. Postavená na forku
-[siteboon/claudecodeui](https://github.com/siteboon/claudecodeui) (AGPL-3.0),
-backend wrapuje Claude Code CLI. Frontend kompletně přepsán do
-Beyond Brain design jazyka.
+Mentoringová appka pro Tima Trnku. Fork
+[siteboon/claudecodeui](https://github.com/siteboon/claudecodeui) (AGPL-3.0):
+z upstreamu zůstal backend, který obaluje Claude Agent SDK, frontend je celý
+vlastní. Data čte z repa `beyond-brain` (klienti, cally, sliby).
 
-> Originální README pro upstream: viz [`README.md`](README.md).
+Běží na Timově Windows stroji jako služba `BeyondBrainApp`, nasazuje se samo
+push do `main` (viz [Deploy](#deploy)).
+
+> Upstream README: [`README.md`](README.md).
 
 ---
 
-## Design vibe
+## Design: v3 Liquid Glass
 
-- Soft pastel gradient pozadí (sunrise / day / sunset / night podle hodiny).
-- Instrument Serif hero text v češtině ("Dobré ráno, Štěpáne. Co dnes řešíme?").
-- Glassmorphism cards (`bg-glass`, `beyond-card`).
-- Sidebar zaměřený na **6 aktivních klientů** (Ivana Juříková, Jakub Bolek,
-  Jakub Přívara, Lukáš Rusek, Patrik Kruntorad, Pavel Sedláček) s W## a počty
-  otevřených slibů.
-- Framer Motion stagger / spring na všech klíčových interakcích.
-- Default light mode, automaticky přepne na dark mezi 22–05.
+Zdroj pravdy je [`src/styles/beyond-glass.css`](src/styles/beyond-glass.css).
+Reprodukuje `tokens.css` + `chat.css` z design handoffu 1:1 (světlé téma) a
+přidává dark variantu, můstek na Tailwind a styly pro plochy, které handoff
+neobsahoval (permission a ask panely, konektory, náhled souborů, nastavení).
 
-Detailní spec: [`design-system/VISION.md`](design-system/VISION.md).
-Iterační deník: [`design-system/NOTES.md`](design-system/NOTES.md).
-Screenshoty: [`design-system/progress/`](design-system/progress/).
+Všechno kreslí `--bb-*` tokeny a `.bb-*` třídy. Načítá se v `main.jsx` až po
+`index.css`, takže přebíjí starší vrstvu.
+
+**Historie směru**, ať je jasné, co už neplatí:
+
+| Verze | Směr | Stav |
+|---|---|---|
+| v1 | Peach glassmorphism, gradient podle denní doby, Instrument Serif hero | zahozeno |
+| v2 | Hyperminimalismus, bílá, prázdný prostor, skrytý sidebar | zahozeno |
+| v3 | Liquid Glass podle handoffu | **platí** |
+
+[`design-system/VISION.md`](design-system/VISION.md) a
+[`design-system/NOTES.md`](design-system/NOTES.md) popisují v1 a v2. Drž je jako
+deník rozhodnutí, ne jako zadání — kód se jimi neřídí.
 
 ---
 
@@ -31,108 +41,165 @@ Screenshoty: [`design-system/progress/`](design-system/progress/).
 ```bash
 git clone git@github.com:StepanKakes/beyond-brain-app.git
 cd beyond-brain-app
-git checkout redesign  # dokud nepřejdeme na main
 
 cp .env.example .env
-# uprav SERVER_PORT, VITE_PORT, HOST dle potřeby
-
 npm install
 npm run dev            # server (3001) + vite client (5173)
 ```
 
-Otevři `http://localhost:5173`. Při prvním spuštění tě nasměruje na
-SetupForm — zaregistruj single-user (např. `tim`).
+Otevři `http://localhost:5173`. Při prvním spuštění tě SetupForm nechá založit
+jediného uživatele.
 
-### Beyond client data
+Sidebar čte živá data z `clients/aktivni/*` v beyond-brain repu. Když repo na
+očekávané cestě není, zobrazí prázdný seznam.
 
-Sidebar čte živá data z `~/Documents/GitHub/beyond-brain/clients/aktivni/*/`.
-Pokud beyond-brain repo není na téhle cestě, sidebar zobrazí jen smart-folders
-a hlášku „Naklonuj beyond-brain repo".
-
-Override:
+### Ověření před pushem
 
 ```bash
-export BEYOND_BRAIN_PATH=/jiná/cesta/beyond-brain
+npm run typecheck      # klient i server
+npm run lint           # 0 chyb je podmínka, varování projdou
 ```
 
-Volitelně pro zelenou n8n status tečku:
+Deploy pouští obojí na runneru, takže rozbitý typecheck nenasadí, ale neprojde.
 
-```bash
-export BEYOND_N8N_HEALTH=https://n8n.tvojedoména.cz/healthz
+---
+
+## Architektura
+
+### Frontend — `src/components/beyond/`
+
+`BeyondApp` je jediná route; URL nese, který chat je otevřený:
+
+```
+/                    welcome
+/c/<client-slug>     chat klienta (naváže na jeho aktivní session)
+/c/new               čerstvý univerzální chat
+/c/new/<uuid>        konkrétní univerzální session
 ```
 
----
+`BeyondApp` se nikdy neodmountuje a parsuje `location.pathname` sám — vnořené
+`<Route>` by ho při každé změně parametru remountovaly a shodily rozepsaný chat.
 
-## Preview / iterace bez backendu
-
-Pro design iterace bez auth / WS:
-
-- `/__preview/welcome` — welcome screen
-- `/__preview/chat` — mock chat s 3 messages
-- `/__preview/sidebar` — sidebar v izolaci
-- `/__preview/all` — sidebar + welcome split
-
-URL parametry:
-
-- `?bg=morning|day|evening|night` — vynutit gradient + greeting
-- `?theme=light|dark` — vynutit theme override
-
-Příklad: `http://localhost:5173/__preview/all?bg=evening&theme=light`.
-
----
-
-## Klíčové soubory
-
-| Soubor | Co to dělá |
+| Soubor | Co dělá |
 |---|---|
-| `tailwind.config.js` | Beyond pastel paleta, `font-serif`/`font-sans`, glass shadows |
-| `src/index.css` | Beyond Brain Design System utilities (`.beyond-bg-*`, `.beyond-card`, `.bg-glass*`, `.beyond-chip`) |
-| `src/App.tsx` | Mount `BeyondBackground` vně `ProtectedRoute` + `/__preview` router |
-| `src/components/beyond/BeyondBackground.tsx` | Time-of-day gradient (auto + URL override) |
-| `src/components/beyond/BeyondWelcome.tsx` | Hero greeting + suggestion chips |
-| `src/components/beyond/BeyondClientsList.tsx` | Živý 6-klient sidebar (hook `useBeyondClients`) |
-| `src/components/beyond/BeyondStatusFooter.tsx` | n8n / git / raw stáří dots |
-| `src/components/beyond/BeyondChatPreview.tsx` | Mock chat (referenční, pro screenshoty) |
-| `src/components/beyond/BeyondAssistantAvatar.tsx` | Sdílený gradient avatar |
-| `server/routes/beyond.js` | `/api/beyond/clients` + `/api/beyond/status` |
-| `src/contexts/ThemeContext.jsx` | Auto-dark v noci, manual override |
+| `BeyondApp.tsx` | routování, otevírání bočních ploch |
+| `BeyondShell.tsx` | sidebar (push na desktopu, overlay pod 900 px) + hlavní sloupec |
+| `BeyondChat.tsx` | životní cyklus tahu: socket, session, streaming, schvalování nástrojů, přílohy, composer |
+| `chat/` | vše, co chat vykresluje, plus čisté transformace |
+| `BeyondFilePreview.tsx` | náhled souboru z brain repa |
+| `BeyondHtmlCanvas.tsx` | živé HTML/SVG z odpovědi agenta |
+| `BeyondConnectors.tsx` | správa MCP konektorů |
+| `BeyondSettings.tsx` | model, animace přemýšlení |
 
----
+Boční plochy se otevírají window eventy, ne prop drillingem:
+`beyond:open-file`, `beyond:open-html`, `beyond:open-connectors`,
+`beyond:open-settings`, `beyond:set-model`, `beyond:set-loader`.
 
-## Screenshoty
+#### `chat/`
 
-| Fáze | Snapshot |
+Rozdělené z `BeyondChat.tsx`, který měl 2 900 řádků.
+
+| Soubor | Co dělá |
 |---|---|
-| A — Foundation | `design-system/progress/fase-A-{morning,day,evening,night}.png` |
-| B — Welcome + Chat | `design-system/progress/fase-B-{welcome,chat,all}.png` |
-| C — Sidebar | `design-system/progress/fase-C-sidebar-{morning,day,evening,night}.png` |
-| D — Animations | `design-system/progress/fase-D-*.png` + `design-system/demos/welcome-anim-*ms.png` |
-| E — Mobile / PWA | `design-system/progress/fase-E-mobile-*.png` + `fase-E-desktop-*.png` |
+| `types.ts` | tvary transkriptu a panelů |
+| `transcript.ts` | payload backendu → `ChatMessage[]`, bez Reactu |
+| `toolDisplay.ts` | jak se volání nástroje jmenuje, ikona, náhled |
+| `prefs.ts` | povolené nástroje, bypass, model (localStorage) |
+| `attachments.ts` | co composer bere jako přílohu a limity |
+| `format.ts` | drobné formátování, signál o změně sessions |
+| `MessageBlock.tsx` | jeden řádek transkriptu včetně kroků nástrojů |
+| `AskPanel.tsx` | AskUserQuestion |
+| `PermissionPanel.tsx` | Jednou / Vždy / Odmítnout |
+| `PermissionsSheet.tsx` | seznam a odebrání uložených povolení |
+| `WhatsAppActionCard.tsx` | náhled a úprava odchozí WhatsApp zprávy před odesláním |
+| `SessionsMenu.tsx` | historie chatů klienta |
+| `ModelPicker.tsx`, `TokenBudgetChip.tsx`, `AttachmentChip.tsx` | prvky composeru |
+
+### Backend — `server/`
+
+| Mount | Auth | K čemu |
+|---|---|---|
+| `/api/beyond` | JWT | `config`, `clients`, `status`, `repo-status`, `file`, `raw-file`, `tree`, `models`, `sync`, `sessions/*` |
+| `/api/beyond/mcp` | JWT | CRUD konektorů, test, start OAuth |
+| `/api/beyond-mcp-oauth` | žádná (callback) | návrat z OAuth |
+| `/api/beyond-agent` | sdílený secret | jednorázové dotazy pro n8n a Telegram |
+| `/health` | žádná | health check pro deploy |
+
+Cesta k brain repu má **jednoho vlastníka**: `server/utils/brain-path.js`.
+Prohlížeč si ji nikdy neodvozuje, ptá se na `GET /api/beyond/config`
+(hook `useBrainPath()`). Natvrdo zadaná cesta v klientovi kdysi vyrobila
+fantomový strom `C:\Users\stepankakes\...` na Windows boxu.
+
+Seznam aktivních klientů je taky jen jeden: adresáře v `clients/aktivni/`,
+přes `server/services/beyond-clients.js`.
+
+#### Agentní endpoint
+
+`POST /api/beyond-agent/query` řeší několik věcí, které stojí za zapamatování:
+
+- **Idempotence** podle `(telegramChatId, telegramMessageId)`. Telegram opakuje
+  webhook po 60 s; bez toho SDK běželo na stejný vstup dvakrát.
+- **Reset po nečinnosti** (výchozí 1 h). Bez něj JSONL jednoho Telegram vlákna
+  roste donekonečna a každý tah platí plný `cache_creation`.
+- **202 hned**, odpověď doručí sám do Telegramu. Obchází to 100s limit
+  Cloudflare, takže žádná 524 a žádný retry.
+- **`[TG]` prefix** u všeho, co skončí v Telegramu, aby brain CLAUDE.md
+  přepnulo z markdownu na Telegram HTML.
 
 ---
 
-## Deploy (Coolify)
+## Preview bez backendu
 
-`growbeyond.cz` (a tedy i Beyond Brain produkce) je hostovaná na
-[Coolify](https://coolify.io/), ne na Vercelu — vyhni se Vercel-specific
-recommendations.
+Pro design iterace bez auth a WS: `/__preview/welcome`, `/__preview/chat`,
+`/__preview/sidebar`, `/__preview/shell`, `/__preview/all`.
 
-Coolify nastavení:
+---
 
-1. Type: **Nixpacks** (auto-detect Node).
-2. Build command: `npm run build`
-3. Start command: `npm run server`
-4. Port: `3001` (matchuje `SERVER_PORT` z `.env`).
-5. Env vars: `SERVER_PORT`, `HOST`, optional `BEYOND_BRAIN_PATH`,
-   `BEYOND_N8N_HEALTH`, JWT_SECRET, ENCRYPTION_KEY (viz `.env.example`).
-6. Persistent volume: namapuj `~/.cloudcli/` (kde žije auth.db) na host
-   storage, ať přežije rebuildy.
-7. Optional: mountni si `~/Documents/GitHub/beyond-brain` jako read-only
-   volume, ať klienti list funguje on-host.
+## Env
+
+Kompletní seznam je v [`.env.example`](.env.example), tohle jsou ty, na kterých
+záleží:
+
+| Proměnná | K čemu |
+|---|---|
+| `SERVER_PORT`, `VITE_PORT`, `HOST` | porty a bind |
+| `BEYOND_BRAIN_PATH` | cesta k brain repu; bez ní `~/Documents/GitHub/beyond-brain` |
+| `BEYOND_AGENT_TOKEN` | sdílený secret pro `/api/beyond-agent`, je to credential |
+| `BEYOND_AGENT_ALLOWED_TG_USERS` | allow list Telegram ID, prázdné = kdokoli s tokenem |
+| `BEYOND_TG_BOT_TOKEN` | doručení odpovědi a průběhu do Telegramu |
+| `BEYOND_AGENT_IDLE_RESET_MS` | reset session po nečinnosti, `0` vypne |
+| `BEYOND_AGENT_IDEMPOTENCY_MS` | okno pro deduplikaci, `0` vypne |
+| `BEYOND_N8N_HEALTH` | zelená tečka stavu n8n |
+| `CONTEXT_WINDOW`, `VITE_CONTEXT_WINDOW` | velikost kontextu |
+
+---
+
+## Deploy
+
+`.github/workflows/deploy.yml`, self hosted runner na Windows stroji. Push do
+`main` udělá:
+
+1. `git fetch` + `git reset --hard` na pushnutý commit
+2. `npm ci` jen když se hnul lockfile
+3. `npm run typecheck`
+4. `npm run lint`
+5. `npm run build:client` + `npm run build:server`
+6. `Restart-Service BeyondBrainApp`
+7. poll `/health`, dokud neodpoví (max ~60 s)
+
+Cokoli z 3 až 5 spadne, služba se nerestartuje a běží dál stará verze. Když
+služba nastartuje, ale `/health` neodpoví, run spadne — crash loop se nedá
+přehlédnout.
+
+Přepsatelné strojovými env proměnnými na runneru: `BEYOND_APP_DIR`,
+`BEYOND_SERVICE_NAME`, `BEYOND_HEALTH_URL`.
+
+Runner se zakládá jednorázově přes `scripts/setup-actions-runner.ps1`
+(spustit jako správce).
 
 ---
 
 ## Licence
 
-AGPL-3.0-or-later, dědí z claudecodeui upstreamu. Beyond Brain doplňky
-jsou pod stejnou licencí.
+AGPL-3.0-or-later, dědí z claudecodeui upstreamu. Beyond Brain doplňky jsou pod
+stejnou licencí.
