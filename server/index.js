@@ -73,6 +73,7 @@ import beyondRoutes from './routes/beyond.js';
 import beyondVelinRoutes from './routes/beyond-velin.js';
 import { startScheduler } from './services/beyond-scheduler.js';
 import beyondEventsRoutes from './routes/beyond-events.js';
+import { startTelegramBot } from './services/beyond-telegram-bot.js';
 // Beyond Brain — MCP connectors (add/manage/OAuth). Two routers: protected CRUD
 // + the unauthenticated OAuth callback target.
 import beyondMcpRoutes, { oauthCallbackRouter as beyondMcpOauthCallbackRouter } from './routes/beyond-mcp.js';
@@ -1531,6 +1532,9 @@ async function startServer() {
             // they run here; n8n keeps the jobs that only fetch.
             // Disable with BEYOND_SCHEDULER=0.
             startScheduler();
+            // Telegram bot by long polling, opt-in (BEYOND_TG_POLLING=1);
+            // exclusive with the n8n webhook, see beyond-telegram-bot.js.
+            startTelegramBot().catch((err) => console.error('[tg-bot] start failed', err?.message || err));
         });
 
         await closeSessionsWatcher();

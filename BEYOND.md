@@ -369,6 +369,25 @@ klientskou stranu zahodí ještě před tím, než se text dostane k modelu.
 Souhrny z Fathomu (sekce „Key Takeaways") jsou psané o hovoru jako celku,
 takže do obsahu nejdou, jen do klientského zápisu.
 
+#### Telegram bot v appce
+
+`server/services/beyond-telegram-bot.js` dělá long polling (`getUpdates`)
+a každou zprávu předá `askAgent` ve `services/beyond-agent-query.js`, což je
+totéž jádro, které obsluhuje `/api/beyond-agent/query`. Zapíná se
+`BEYOND_TG_POLLING=1` a je to výhybka: Telegram dovolí botovi buď webhook,
+nebo polling, takže start smaže webhook a n8n Telegram Inbound přestane
+dostávat zprávy. Offset je v SQLite (`beyond_kv`), restart nic neztratí.
+Hlasovky přepisuje `system/scripts/transcribe-voice.*` z brainu, náhradně
+OpenAI Whisper. Allow list `BEYOND_AGENT_ALLOWED_TG_USERS` platí i tady.
+
+#### Sync po klientech
+
+`sync-klientu` a `roadmap-check` běží jako jeden tah agenta na klienta,
+`BEYOND_SYNC_PARALLEL` (výchozí 2) najednou. Každý tah končí řádkem JSON
+(`zmena`, `shrnuti`, `navrh`), který se parsuje; kdo ho nedodá, počítá se
+jeho text. Jeden zmatený klient tak neshodí ostatní a návrhy vlajek pro
+Tima se sbírají na konec souhrnu. Helper `forEachClient` v `beyond-jobs.js`.
+
 #### Agentní endpoint
 
 `POST /api/beyond-agent/query` řeší několik věcí, které stojí za zapamatování:

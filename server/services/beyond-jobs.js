@@ -69,6 +69,86 @@ async function runAgent(command, { timeoutMs = JOB_TIMEOUT_MS, model = undefined
   }
 }
 
+/**
+ * Run one agent turn per client, a few at a time, and collect what each one
+ * reported. One long session over ten clients reads everything before it
+ * writes anything, so a timeout loses the lot and one confused client poisons
+ * the next; separate turns fail separately.
+ *
+ * Each turn is asked to end with one JSON line so the outcome is data, not
+ * prose to be re-read: {"zmena": true|false, "shrnuti": "...", "navrh": "..."}.
+ * A turn that does not comply still counts, its text becomes the summary.
+ */
+const FAN_OUT_PARALLEL = Math.max(1, Math.min(4, Number(process.env.BEYOND_SYNC_PARALLEL) || 2));
+
+const REPORT_INSTRUCTION = [
+  'Úplně na konec odpovědi dej jeden řádek JSON, nic za ním:',
+  '{"zmena": true nebo false, "shrnuti": "jedna věta co se změnilo", "navrh": "návrh vlajky nebo poznámky pro Tima, jinak prázdné"}',
+].join('\n');
+
+function parseReport(text) {
+  const raw = String(text || '');
+  const lines = raw.trim().split('\n');
+  for (let i = lines.length - 1; i >= Math.max(0, lines.length - 5); i -= 1) {
+    const line = lines[i].trim().replace(/^```(json)?|```$/g, '').trim();
+    if (!line.startsWith('{')) continue;
+    try {
+      const parsed = JSON.parse(line);
+      if (typeof parsed === 'object' && parsed) {
+        return {
+          ok: true,
+          zmena: Boolean(parsed.zmena),
+          shrnuti: String(parsed.shrnuti || '').trim(),
+          navrh: String(parsed.navrh || '').trim(),
+        };
+      }
+    } catch {
+      /* not the report line */
+    }
+  }
+  return { ok: false, zmena: null, shrnuti: raw.replace(/\s+/g, ' ').trim().slice(0, 300), navrh: '' };
+}
+
+async function forEachClient(clients, makePrompt, { log, parallel = FAN_OUT_PARALLEL, timeoutMs = 10 * 60 * 1000 } = {}) {
+  const queue = clients.slice();
+  const results = [];
+  const worker = async () => {
+    while (queue.length) {
+      const client = queue.shift();
+      const t0 = Date.now();
+      try {
+        const result = await runAgent(`${makePrompt(client)}\n\n${REPORT_INSTRUCTION}`, { timeoutMs });
+        const report = parseReport(result.text);
+        results.push({ client, ...report, ms: Date.now() - t0 });
+        log?.(`${client.name}: ${report.zmena === false ? 'beze změny' : report.shrnuti || 'hotovo'} (${Math.round((Date.now() - t0) / 1000)} s)`);
+      } catch (err) {
+        results.push({ client, ok: false, error: err?.message || String(err), zmena: null, shrnuti: '', navrh: '' });
+        log?.(`${client.name}: selhalo (${err?.message || err})`);
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(parallel, clients.length || 1) }, worker));
+  return results;
+}
+
+function summarizeFanOut(results) {
+  const changed = results.filter((r) => r.zmena === true);
+  const same = results.filter((r) => r.zmena === false);
+  const failed = results.filter((r) => r.error);
+  const unclear = results.filter((r) => !r.error && r.zmena === null);
+  const lines = [];
+  for (const r of changed) lines.push(`${r.client.name}: ${r.shrnuti}`);
+  for (const r of unclear) lines.push(`${r.client.name}: ${r.shrnuti}`);
+  if (same.length) lines.push(`Beze změny: ${same.map((r) => r.client.name).join(', ')}`);
+  for (const r of failed) lines.push(`SELHALO ${r.client.name}: ${r.error}`);
+  const proposals = results.filter((r) => r.navrh);
+  if (proposals.length) {
+    lines.push('', 'Návrhy pro Tima:');
+    for (const r of proposals) lines.push(`- ${r.client.name}: ${r.navrh}`);
+  }
+  return { text: lines.join('\n'), failed: failed.length, total: results.length };
+}
+
 /* ------------------------------------------------------------------ */
 /* 1. a call happened → put it in the brain                            */
 /* ------------------------------------------------------------------ */
@@ -192,33 +272,31 @@ const syncClients = {
   dailyAt: { hour: 6, minute: 20 },
   async run({ log, context } = {}) {
     // From an event (a Notion change, a relay from n8n) the scope is one
-    // client; the morning run covers everyone.
+    // client; the morning run covers everyone, one agent turn per client.
+    const index = await getBrainIndex({ force: true });
     const slug = context?.slug ? String(context.slug) : null;
-    if (slug) log(`jen ${slug}`);
-    const result = await runAgent(
-      [
-        slug ? `Použij skill sync-client na klienta \`${slug}\`.` : 'Použij skill sync-client s parametrem `all`.',
-        '',
-        slug
-          ? 'Promítni do jeho kurátorských souborů to, co přibylo v `raw/`.'
-          : 'Projdi všechny aktivní klienty a promítni do jejich kurátorských souborů to,',
-        slug ? '' : 'co přibylo v `raw/`.',
-        'Drž pravidla skillu: append-only u cally, feedback',
-        'a whatsapp, kurátorské sekce a flags nepřepisuj, Notion je zdroj faktů',
-        'a brain zdroj interpretace.',
-        '',
-        'Klienta se stavem jiným než Aktivní přeskoč.',
-        '',
-        slug
-          ? 'Na konci napiš jednu větu o tom, co se změnilo.'
-          : 'Na konci napiš jednu větu na klienta, u kterého se něco změnilo, a klienty beze změny jen vyjmenuj.',
-      ]
-        .filter((l) => l !== '')
-        .join('\n'),
-      { timeoutMs: 20 * 60 * 1000 },
+    const clients = index.clients.filter((c) => c.isActive !== false && (!slug || c.slug === slug));
+    if (!clients.length) return { skipped: slug ? `${slug} není aktivní klient` : 'žádný aktivní klient' };
+    log(slug ? `jen ${slug}` : `${clients.length} klientů, ${FAN_OUT_PARALLEL} najednou`);
+
+    const results = await forEachClient(
+      clients,
+      (c) =>
+        [
+          `Použij skill sync-client na klienta \`${c.slug}\`.`,
+          '',
+          'Promítni do jeho kurátorských souborů to, co přibylo v `raw/`.',
+          'Drž pravidla skillu: append-only u cally, feedback a whatsapp,',
+          'kurátorské sekce a flags nepřepisuj, Notion je zdroj faktů a brain',
+          'zdroj interpretace. Jiné klienty nečti a neměň. Git neřeš, commit',
+          'udělá appka po běhu.',
+        ].join('\n'),
+      { log },
     );
     invalidateBrainIndex();
-    return { summary: String(result.text || '').slice(0, 4000) };
+    const out = summarizeFanOut(results);
+    if (out.failed === out.total) throw new Error(`sync selhal u všech ${out.total} klientů`);
+    return { summary: out.text.slice(0, 4000) };
   },
 };
 
@@ -423,21 +501,26 @@ const roadmapCheck = {
   title: 'Týdenní roadmap check',
   description: 'Porovná u každého aktivního klienta plán s realitou a zapíše snapshot.',
   weeklyAt: { weekday: 1, hour: 8, minute: 0 }, // pondělí
-  async run() {
-    const result = await runAgent(
-      [
-        'Použij skill roadmap-check s parametrem `all`.',
-        '',
-        'U každého aktivního klienta porovnej, kde reálně je, proti jeho roadmapě.',
-        'Zapiš snapshot do brainu. Úpravy roadmapy v Notionu jen navrhni,',
-        'nezapisuj je tam.',
-        '',
-        'Na konci shrň, kdo je napřed, kdo v plánu a kdo pozadu.',
-      ].join('\n'),
-      { timeoutMs: 20 * 60 * 1000 },
+  async run({ log } = {}) {
+    const index = await getBrainIndex({ force: true });
+    const clients = index.clients.filter((c) => c.isActive !== false);
+    if (!clients.length) return { skipped: 'žádný aktivní klient' };
+    const results = await forEachClient(
+      clients,
+      (c) =>
+        [
+          `Použij skill roadmap-check na klienta \`${c.slug}\`.`,
+          '',
+          'Porovnej, kde reálně je, proti jeho roadmapě, a zapiš snapshot do brainu.',
+          'Úpravy roadmapy v Notionu jen navrhni, nezapisuj je tam. Jiné klienty',
+          'nečti a neměň. Do "shrnuti" napiš: napřed, v plánu, nebo pozadu, a proč.',
+        ].join('\n'),
+      { log },
     );
     invalidateBrainIndex();
-    return { summary: String(result.text || '').slice(0, 4000) };
+    const out = summarizeFanOut(results);
+    if (out.failed === out.total) throw new Error(`roadmap check selhal u všech ${out.total} klientů`);
+    return { summary: out.text.slice(0, 4000) };
   },
 };
 
