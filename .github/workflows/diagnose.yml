@@ -51,6 +51,25 @@ jobs:
             }
           }
 
+          Write-Host "=== claude on the box"
+          try {
+            $cfg = Get-Content "$env:USERPROFILE\.claude.json" -Raw | ConvertFrom-Json
+            Write-Host "account: $($cfg.oauthAccount.emailAddress)  org: $($cfg.oauthAccount.organizationName)  sub: $($cfg.oauthAccount.subscriptionType)"
+          } catch { Write-Host "no .claude.json: $_" }
+          try { Write-Host "version: $(claude --version 2>&1)" } catch { Write-Host "claude not on PATH: $_" }
+          foreach ($m in 'sonnet', 'opus') {
+            Write-Host "--- probe $m"
+            $job = Start-Job -ScriptBlock { param($mm, $dir) Set-Location $dir; claude -p 'Odpověz jedním slovem: ok' --model $mm --output-format json 2>&1 | Out-String } -ArgumentList $m, $app
+            if (Wait-Job $job -Timeout 120) {
+              $out = Receive-Job $job
+              try {
+                $j = $out | ConvertFrom-Json
+                Write-Host "is_error=$($j.is_error) subtype=$($j.subtype) result=$(($j.result | Out-String).Trim().Substring(0, [Math]::Min(160, ($j.result | Out-String).Trim().Length)))"
+              } catch { Write-Host ($out | Out-String).Substring(0, [Math]::Min(400, ($out | Out-String).Length)) }
+            } else { Write-Host "no answer in 120 s"; Stop-Job $job }
+            Remove-Job $job -Force
+          }
+
           Write-Host "=== app history (last 40 chat messages)"
           node scripts\diagnose.cjs
 
