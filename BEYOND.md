@@ -175,8 +175,15 @@ dovnitř. To sedí na raw pully, které jen stahují, ale ne na práci, která
 potřebuje brain repo a SDK session. Ty žijí tady, takže tu teď běží i hodiny.
 
 `server/services/beyond-scheduler.js` je záměrně hloupý: jeden časovač, jedna
-úloha v jednu chvíli, každá si sama řekne, jestli je na řadě. Žádná fronta,
-žádná souběžnost. Je to jeden stroj a deset úloh.
+úloha v jednu chvíli, každá si sama řekne, jestli je na řadě. Žádná
+souběžnost. Je to jeden stroj.
+
+Běh spouští dvě věci: **hodiny** (každá úloha má rozvrh, z kódu nebo
+z `system/ulohy.json` v brainu) a **událost** (zpráva na WhatsAppu, hotový
+přepis, nový booking, doručené na `/api/beyond-events`). Události mají
+přednost: tik nejdřív vyřídí, co čeká ve frontě, a teprve pak se dívá na
+kalendář. Před každým během se brain pullne, aby viděl, co mezitím commitl
+n8n, a po běhu se commitne a pushne, co běh změnil, pod jménem úlohy.
 
 Když se služba restartuje uprostřed běhu (což dělá každý deploy), záznam by
 zůstal navždy ve stavu „běží". Při startu se takové běhy uzavřou jako chyba
@@ -184,7 +191,8 @@ s důvodem, ať obrazovka Agent neukazuje fantoma.
 
 | Úloha | Kdy | Co dělá |
 |---|---|---|
-| `zpracuj-call` | každých 10 min | Když v `raw/fathom/` přibude přepis novější než poslední zápis v `cally.md`, přepíše ho do zápisu, vytáhne sliby na obě strany a čísla z check-inu |
+| `zpracuj-call` | každých 10 min, nebo událost `fathom` | Když v `raw/fathom/` přibude přepis novější než poslední zápis v `cally.md`, přepíše ho do zápisu, vytáhne sliby na obě strany a čísla z check-inu, a připraví klientovi shrnutí do fronty |
+| `wa-check` | jen událost `waha` | Po dávce zpráv od klienta načte živé vlákno přes WAHA, doplní `whatsapp.md`, případně připraví návrh odpovědi |
 | `sync-klientu` | denně 06:20 | Skill `sync-client all`, promítne noční raw vrstvu do kurátorských souborů |
 | `napsat-navrhy` | denně 06:35 | Kde klient klouže nebo se dlouho neozval, napíše návrh zprávy a nechá ho čekat na kliknutí |
 | `pripomenout-hovor` | každých 10 min | Hodinu před hovorem pošle na Telegram, s kým je, co je otevřené a na co si dát pozor |
@@ -194,6 +202,11 @@ s důvodem, ať obrazovka Agent neukazuje fantoma.
 | `pripravit-hovory` | denně 18:30 | Pro každý hovor do 36 hodin vygeneruje brief skillem `pre-call` do `workspace/briefy/` |
 | `roadmap-check` | pondělí 08:00 | Plán proti realitě u všech aktivních klientů |
 | `srovnat-profily` | pondělí 08:30 | Opraví „Aktuální týden" tam, kde se rozešel s datem startu |
+| `uceni-review` | denně 21:00 | Projde zprávy, které Tim před odesláním přepsal, a dnešní běhy; z toho, co se opakuje, navrhne patch skillu nebo zápis do paměti. Levnější model (`BEYOND_REVIEW_MODEL`, výchozí sonnet) |
+
+Rozvrh každé vestavěné úlohy jde přepsat v `system/ulohy.json` (`rozvrh`),
+bez deploye. Rozvrhy: `every`, `daily`, `weekly`, `cron` (pět polí), `at`
+(jednou), `manual`. Parser je `server/services/beyond-schedule.js`.
 
 Práce samotná není v kódu, je v brainu. Každá úloha je jen trigger plus prompt,
 který předá práci některému z jedenácti skillů v `.claude/skills/`. Znamená to,
@@ -212,6 +225,101 @@ který předá práci některému z jedenácti skillů v `.claude/skills/`. Znam
 
 Vypnout jde jednotlivá úloha, všechno naráz (tlačítko Pozastavit) nebo celý
 plánovač přes `BEYOND_SCHEDULER=0`.
+
+### Vlastní úlohy: úloha je data, ne kód
+
+`system/ulohy.json` v brainu drží vedle přepsaných rozvrhů i **vlastní
+úlohy**: prompt, rozvrh, volitelně skill, kam doručit (`telegram`, `soubor`
+do `workspace/reporty/`, `nic`), kolikrát (`repeat`), `continuity` (úloha
+dostane svůj minulý výstup, aby nehlásila totéž) a `noAgent` (text se
+doručí doslova, bez modelu, na připomínky). Jednorázová úloha se po běhu
+sama vypne. Odpověď `[TICHO]` znamená nic nedoručovat.
+
+Zakládá je nástroj `beyond_schedule` z chatu nebo Telegramu („za tři dny mi
+připomeň, jestli Honza poslal metriky"), nebo `POST /api/beyond/velin/agent/tasks`.
+**Uvnitř naplánovaného běhu je plánování vypnuté** (ochrana proti rekurzi).
+Každá změna souboru je commit v brainu, takže historie úloh je v gitu.
+Kód: `server/services/beyond-tasks.js`.
+
+### Události: reagovat, ne pollovat
+
+`POST /api/beyond-events/<cesta>` je dveře pro cizí systémy. Cesty jsou
+v brainu v `system/udalosti.json`; každá říká:
+
+- **auth**: `secret` (hlavička, výchozí `X-Beyond-Secret`), `hmac` (podpis
+  těla, `sha256`/`sha512`, hex i base64), `standard-webhooks`. Secret se
+  bere z env proměnné pojmenované v `secretEnv`, nebo z `BEYOND_EVENT_SECRET`.
+  Ověřuje se na syrových bajtech, proto je router namountovaný před JSON
+  parserem.
+- **events** + `eventField`/`eventHeader`: které události bere.
+- **filters**: deklarativní (`equals`, `notEquals`, `in`, `contains`,
+  `exists`, `regex`) nad tělem.
+- **coalesce**: `key` (šablona), `windowSeconds`, `maxWaitSeconds`. Klient,
+  který pošle šest zpráv za minutu, vyrobí jeden běh, až se dávka usadí.
+- **job** a **context**: kterou úlohu spustit a co jí předat. Šablony
+  `{a.b.c}` berou hodnoty z těla; kontext je pro model data, ne instrukce.
+
+Duplicitní doručení (id z hlavičky, jinak hash těla) se hodinu ignoruje.
+Fronta je v SQLite (`beyond_events`), restart nic neztratí. Odpověď je hned:
+202 zařazeno nebo slito, 200 ignorováno, 401/404/429 když se volat nemělo.
+
+Zapojení zdrojů:
+
+| Zdroj | Jak | Poznámka |
+|---|---|---|
+| WAHA | webhook `message` na `/api/beyond-events/waha`, HMAC sha512 v `X-Webhook-Hmac` | klíč = `WHATSAPP_HOOK_HMAC_KEY` ve WAHA i `BEYOND_EVENT_SECRET_WAHA` tady; filtr jen skupiny, jen cizí zprávy |
+| Fathom | n8n workflow Fathom Calls po commitu přepisu zavolá `/api/beyond-events/fathom` s `X-Beyond-Secret` | přepis musí být v repu dřív, než agent běží; proto přes n8n, ne přímo z Fathomu |
+| Cal.com | webhook `BOOKING_CREATED`, `BOOKING_RESCHEDULED` na `/api/beyond-events/calcom`, podpis `X-Cal-Signature-256` | secret = `BEYOND_EVENT_SECRET_CALCOM` |
+| cokoliv | `/api/beyond-events/n8n` s tělem `{"job": "...", "context": {...}}` | obecné přeposlání |
+
+Aby sem webhooky došly, musí mít stroj veřejnou adresu:
+`scripts/setup-cloudflared.ps1` postaví Cloudflare Tunnel jako Windows
+službu. Bez tunelu jde všechno dál po starém (polling), jen pomaleji.
+Kód: `server/services/beyond-events.js`, `server/routes/beyond-events.js`.
+
+### Nástroje agenta nad appkou
+
+Každý běh (chat, Telegram, úloha) dostane in-process MCP server `beyond`
+(`server/services/beyond-agent-tools.js`), připojený v `attachBeyondLayer`
+v `claude-sdk.js`:
+
+| Nástroj | Co |
+|---|---|
+| `beyond_schedule` | list, create, update, pause, resume, remove, run úloh |
+| `hledej_historii` | fulltext nad historií všech konverzací (SQLite FTS5, bez modelu) |
+| `pamet` | add, replace, remove v paměti agenta; tvrdý limit znaků |
+| `skill_manage` | list, view, patch, create: návrh změny skillu nebo pravidla, čeká na schválení |
+
+### Paměť agenta
+
+`system/pamet-agenta.md` (2 200 znaků, o práci) a `system/tim.md` (1 375
+znaků, o lidech). Obojí jde celé do system promptu každého běhu, zmražené
+na začátku session (kvůli prompt cache). Limit hlídá nástroj: když je plno,
+odmítne a vrátí seznam, agent musí sloučit nebo odebrat. Zápis = commit.
+Fakta o klientech sem nepatří. Kód: `server/services/beyond-memory.js`.
+
+### Historie konverzací
+
+Každá zpráva, která projde SDK (chat, Telegram, úlohy), jde do SQLite
+`beyond_messages` s FTS5 indexem (`server/services/beyond-history.js`).
+Hledání je lexikální s hrubým odseknutím českých koncovek („miniatura"
+najde „miniaturu"). Odvozená data, mimo git, po 180 dnech se mažou.
+
+### Návrhy do mozku
+
+Agent smí navrhnout změnu `.claude/skills/*.md` a `system/*.md` (ne paměti
+a ne úloh, ty mají vlastní nástroje). Návrh je celý nový obsah souboru plus
+věta proč; čeká v `beyond_mozek`, Velín ukáže rozdíl, schválení zapíše
+a commitne, zahození smaže. Když se soubor mezitím změnil, schválení odmítne
+místo přepsání. Kód: `server/services/beyond-mozek.js`.
+
+### Stav běhu a incidenty
+
+Každá úloha má `last_status` (`ok`, `skipped`, `error`, `delivery_failed`,
+`blocked_config`) a sérii selhání. Po třech selháních po sobě odejde jedno
+hlášení na Telegram (`BEYOND_TG_ERROR_CHAT_ID`, jinak všem), připomínka po
+šesti hodinách, úspěch sérii vynuluje. Chyba doručení a chyba běhu jsou
+dvě různé věci a v logu se liší.
 
 ### Návrhy zpráv: jedno kliknutí, ale tvoje
 
@@ -295,6 +403,9 @@ záleží:
 | `BEYOND_AGENT_TOKEN` | sdílený secret pro `/api/beyond-agent`, je to credential |
 | `BEYOND_AGENT_ALLOWED_TG_USERS` | allow list Telegram ID, prázdné = kdokoli s tokenem |
 | `BEYOND_TG_BOT_TOKEN` | doručení odpovědi a průběhu do Telegramu |
+| `BEYOND_TG_CHAT_ID`, `BEYOND_TG_ERROR_CHAT_ID` | kam chodí briefy a připomínky, kam chyby |
+| `BEYOND_EVENT_SECRET_*`, `BEYOND_EVENT_SECRET` | secrety cest v `system/udalosti.json` |
+| `BEYOND_REVIEW_MODEL` | model pro večerní `uceni-review`, výchozí sonnet |
 | `BEYOND_AGENT_IDLE_RESET_MS` | reset session po nečinnosti, `0` vypne |
 | `BEYOND_AGENT_IDEMPOTENCY_MS` | okno pro deduplikaci, `0` vypne |
 | `BEYOND_N8N_HEALTH` | zelená tečka stavu n8n |

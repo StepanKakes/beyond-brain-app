@@ -33,7 +33,10 @@ import {
   updateConnector as updateBeyondConnector,
 } from './services/beyond-mcp-connectors-store.js';
 import { refreshIfNeeded as refreshBeyondConnectorToken } from './services/beyond-mcp-oauth.js';
-import { resolveBrainPath, resolveSpawnCwd } from './utils/brain-path.js';
+import { resolveSpawnCwd } from './utils/brain-path.js';
+import { buildBeyondToolsServer, BEYOND_TOOL_NAMES } from './services/beyond-agent-tools.js';
+import { promptBlock as memoryPromptBlock } from './services/beyond-memory.js';
+import { record as recordHistory, touchSession as touchHistorySession } from './services/beyond-history.js';
 
 const activeSessions = new Map();
 const pendingToolApprovals = new Map();
@@ -901,6 +904,8 @@ function runTurnOnBeyondStream(entry, command, options, ws) {
     refreshLiveMcpIfNeeded(entry)
       .then(() => buildBeyondUserMessage(command, options, entry))
       .then((msg) => {
+        if (entry.sdkSessionId) recordSdkMessage(entry.sdkSessionId, msg);
+        else entry.pendingHistoryUser?.push(msg);
         if (!entry.inputQueue.push(msg)) {
           entry.pendingTurnResolves = entry.pendingTurnResolves.filter((r) => r !== resolve);
           reject(new Error('Beyond stream input queue closed mid-turn'));
@@ -911,6 +916,77 @@ function runTurnOnBeyondStream(entry, command, options, ws) {
         reject(err);
       });
   });
+}
+
+/* ------------------------------------------------------------------ */
+/* Beyond layer: app tools, agent memory, searchable history           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Give a run the tools it has over the app itself (schedule, history, memory,
+ * skill proposals) and its own notes in the system prompt. Same for chat,
+ * Telegram and scheduled runs; the context says who is asking and what they
+ * may do. The memory block is read once here, so it is frozen for the session
+ * and the prompt prefix stays cacheable.
+ */
+async function attachBeyondLayer(sdkOptions, ctx = {}) {
+  let jobsApi = null;
+  try {
+    const mod = await import('./services/beyond-scheduler.js');
+    jobsApi = mod.jobsApi();
+  } catch (err) {
+    console.warn('[beyond] jobsApi není k dispozici:', err?.message || err);
+  }
+  try {
+    const server = buildBeyondToolsServer({ ...ctx, jobsApi });
+    sdkOptions.mcpServers = { ...(sdkOptions.mcpServers || {}), beyond: server };
+  } catch (err) {
+    console.warn('[beyond] nástroje agenta se nepodařilo připojit:', err?.message || err);
+  }
+  let block = '';
+  try {
+    block = memoryPromptBlock();
+  } catch (err) {
+    console.warn('[beyond] paměť agenta se nedá načíst:', err?.message || err);
+  }
+  const extra = [ctx.systemPromptAppend, block].filter(Boolean).join('\n\n');
+  if (extra) {
+    const base = sdkOptions.systemPrompt && typeof sdkOptions.systemPrompt === 'object'
+      ? sdkOptions.systemPrompt
+      : { type: 'preset', preset: 'claude_code' };
+    sdkOptions.systemPrompt = { ...base, append: [base.append, extra].filter(Boolean).join('\n\n') };
+  }
+  // Our own tools never need a permission prompt; they are the app talking to itself.
+  const allowed = Array.isArray(sdkOptions.allowedTools) ? sdkOptions.allowedTools : [];
+  for (const name of BEYOND_TOOL_NAMES) if (!allowed.includes(name)) allowed.push(name);
+  sdkOptions.allowedTools = allowed;
+}
+
+/** Put one SDK message into the searchable history. Never throws. */
+function recordSdkMessage(sessionId, message) {
+  if (!sessionId || !message) return;
+  try {
+    if (message.type === 'assistant' && Array.isArray(message.message?.content)) {
+      for (const block of message.message.content) {
+        if (block.type === 'text' && block.text?.trim()) {
+          recordHistory({ sessionId, role: 'assistant', content: block.text });
+        } else if (block.type === 'tool_use' && block.name) {
+          const input = block.input ? JSON.stringify(block.input).slice(0, 600) : '';
+          recordHistory({ sessionId, role: 'tool', content: `${block.name} ${input}`.trim(), toolName: block.name });
+        }
+      }
+    } else if (message.type === 'user' && message.message) {
+      const c = message.message.content;
+      if (typeof c === 'string') recordHistory({ sessionId, role: 'user', content: c });
+      else if (Array.isArray(c)) {
+        for (const block of c) {
+          if (block.type === 'text' && block.text?.trim()) recordHistory({ sessionId, role: 'user', content: block.text });
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[beyond] historie: zápis selhal', err?.message || err);
+  }
 }
 
 /**
@@ -962,6 +1038,13 @@ async function startNewBeyondStream(command, options, ws) {
   if (process.env.BEYOND_STRICT_MCP !== '0') {
     sdkOptions.strictMcpConfig = true;
   }
+  await attachBeyondLayer(sdkOptions, {
+    source: 'chat',
+    actor: ws?.username || ws?.userId || 'chat',
+    label: options.sessionSummary || null,
+  });
+  entry.historyUser = ws?.username || null;
+  entry.pendingHistoryUser = [];
 
   sdkOptions.hooks = {
     Notification: [{
@@ -1043,6 +1126,7 @@ async function startNewBeyondStream(command, options, ws) {
   // Push the initial user message before spawning so the iterator yields
   // it on first read.
   const firstUserMsg = await buildBeyondUserMessage(command, options, entry);
+  entry.pendingHistoryUser.push(firstUserMsg);
   entry.inputQueue.push(firstUserMsg);
 
   // Spawn the SDK in streaming-input mode by passing the iterable as prompt.
@@ -1146,6 +1230,14 @@ async function handleBeyondStreamMessage(entry, message) {
       }));
     }
   }
+  if (entry.sdkSessionId && !entry.historyTouched) {
+    entry.historyTouched = true;
+    try {
+      touchHistorySession({ id: entry.sdkSessionId, source: 'chat', label: entry.sessionSummary || null, user: entry.historyUser });
+    } catch { /* derived data, never fatal */ }
+    for (const m of entry.pendingHistoryUser?.splice(0) || []) recordSdkMessage(entry.sdkSessionId, m);
+  }
+  if (message.type === 'assistant') recordSdkMessage(entry.sdkSessionId, message);
 
   // Normalize + forward to client.
   const transformedMessage = transformMessage(message);
@@ -1788,6 +1880,7 @@ async function runSdkOneShot({
   signal,
   onProgress,
   loadMcp = true,
+  beyond = null,
 } = {}) {
   if (typeof command !== 'string' || !command.trim()) {
     throw new Error('runSdkOneShot: `command` is required.');
@@ -1829,11 +1922,27 @@ async function runSdkOneShot({
     }
   }
 
+  // The Beyond layer: app tools + agent memory + history. Callers that only
+  // want a bare model turn (a chat title) pass nothing and get nothing.
+  if (beyond) await attachBeyondLayer(sdkOptions, beyond);
+
   const startedAt = Date.now();
   let capturedSessionId = sessionId || null;
   let textChunks = [];
   let finishReason = null;
   let resultRaw = null;
+  let historyOpen = false;
+  const remember = (message) => {
+    if (!beyond || !capturedSessionId) return;
+    if (!historyOpen) {
+      historyOpen = true;
+      try {
+        touchHistorySession({ id: capturedSessionId, source: beyond.source || 'job', label: beyond.label || null, user: beyond.actor || null });
+      } catch { /* derived data */ }
+      recordHistory({ sessionId: capturedSessionId, role: 'user', content: command });
+    }
+    if (message) recordSdkMessage(capturedSessionId, message);
+  };
 
   const queryInstance = query({ prompt: command, options: sdkOptions });
 
@@ -1863,6 +1972,7 @@ async function runSdkOneShot({
       if (message.session_id && !capturedSessionId) {
         capturedSessionId = message.session_id;
       }
+      if (message.type === 'assistant') remember(message);
       // SDK 0.2.x emits `assistant` messages with a content array of blocks
       // (text + tool_use). Collect text blocks; surface tool_use as a
       // progress event so streaming callers can show what Claude is doing.

@@ -72,6 +72,7 @@ import providerRoutes from './modules/providers/provider.routes.js';
 import beyondRoutes from './routes/beyond.js';
 import beyondVelinRoutes from './routes/beyond-velin.js';
 import { startScheduler } from './services/beyond-scheduler.js';
+import beyondEventsRoutes from './routes/beyond-events.js';
 // Beyond Brain — MCP connectors (add/manage/OAuth). Two routers: protected CRUD
 // + the unauthenticated OAuth callback target.
 import beyondMcpRoutes, { oauthCallbackRouter as beyondMcpOauthCallbackRouter } from './routes/beyond-mcp.js';
@@ -140,6 +141,12 @@ const wss = createWebSocketServer(server, {
 app.locals.wss = wss;
 
 app.use(cors({ exposedHeaders: ['X-Refreshed-Token'] }));
+
+// Beyond Brain — incoming events (WAHA, Fathom, Cal.com, n8n relay). Mounted
+// before the JSON parser on purpose: signatures are checked on the raw bytes.
+// Auth is per route (see the brain's system/udalosti.json), not JWT.
+app.use('/api/beyond-events', beyondEventsRoutes);
+
 app.use(express.json({
     limit: '50mb',
     type: (req) => {

@@ -59,6 +59,7 @@ function shape(row) {
     target: row.target,
     title: row.title,
     body: row.body,
+    originalBody: row.original_body,
     edited: row.body !== row.original_body,
     reason: row.reason,
     status: row.status,

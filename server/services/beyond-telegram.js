@@ -82,6 +82,21 @@ async function post(method, payload) {
   }
 }
 
+/** Deliver to one chat, verbatim. Same return shape as broadcast. */
+export async function sendTo(chatId, text) {
+  if (!token()) return { sent: [], skipped: 'chybí BEYOND_TG_BOT_TOKEN' };
+  if (!chatId) return { sent: [], skipped: 'chybí chatId' };
+  if (!text || !text.trim()) return { sent: [], skipped: 'prázdný text' };
+  try {
+    for (const part of chunk(text.trim())) {
+      await post('sendMessage', { chat_id: String(chatId), text: part, disable_web_page_preview: true });
+    }
+    return { sent: [String(chatId)], failed: [], skipped: null };
+  } catch (err) {
+    return { sent: [], failed: [`${chatId}: ${err?.message || err}`], skipped: null };
+  }
+}
+
 /**
  * Deliver to everyone on the roster. Returns who got it; a failure for one
  * recipient does not stop the others, because a brief that reached one of two

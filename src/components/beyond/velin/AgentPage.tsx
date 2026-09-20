@@ -19,9 +19,47 @@ type Job = {
   title: string;
   description: string;
   cadence: string;
+  custom: boolean;
   enabled: boolean;
   lastRunAt: string | null;
+  lastStatus: string | null;
+  lastError: string | null;
+  failureStreak: number;
+  createdBy: string | null;
 };
+
+type EventRow = {
+  id: number;
+  route: string;
+  event: string | null;
+  job: string;
+  status: 'pending' | 'waiting' | 'running' | 'done' | 'error' | 'ignored';
+  count: number;
+  receivedAt: string;
+  error: string | null;
+};
+
+type RouteRow = {
+  name: string;
+  description: string | null;
+  job: string | null;
+  enabled: boolean;
+  configured: boolean;
+  auth: string;
+};
+
+type MozekItem = {
+  id: number;
+  path: string;
+  kind: string;
+  before: string | null;
+  after: string;
+  reason: string | null;
+  source: string | null;
+  createdAt: string;
+};
+
+type Memory = { title: string; entries: string[]; usage: { used: number; limit: number; pct: number } };
 
 type Run = {
   id: number;
@@ -36,10 +74,105 @@ type Run = {
 };
 
 type AgentData = {
-  scheduler: { enabled: boolean; paused: boolean; running: string | null; tickMs: number };
+  scheduler: { enabled: boolean; paused: boolean; running: string | null; tickMs: number; pendingEvents: number };
   jobs: Job[];
   runs: Run[];
+  events: EventRow[];
+  routes: RouteRow[];
+  mozek: { pending: number };
+  pamet: { agent: Memory; tim: Memory };
 };
+
+const EVENT_LABEL: Record<EventRow['status'], string> = {
+  pending: 'čeká',
+  waiting: 'sbírá',
+  running: 'běží',
+  done: 'hotovo',
+  error: 'chyba',
+  ignored: 'ignorováno',
+};
+
+/** Lines that are only in one of the two texts. Enough to see what a proposal does. */
+function roughDiff(before: string | null, after: string): { removed: string[]; added: string[] } {
+  const a = new Set((before || '').split('\n'));
+  const b = new Set(after.split('\n'));
+  return {
+    removed: [...a].filter((l) => l.trim() && !b.has(l)),
+    added: [...b].filter((l) => l.trim() && !a.has(l)),
+  };
+}
+
+function MozekQueue({ onChange }: { onChange: () => void }) {
+  const load = useCallback(async () => {
+    const res = await authenticatedFetch('/api/beyond/velin/agent/mozek');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return ((await res.json()) as { items: MozekItem[] }).items;
+  }, []);
+  const { data, reload } = usePolled<MozekItem[]>(load, 30_000);
+  const [open, setOpen] = useState<number | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const items = data || [];
+
+  const act = async (id: number, what: 'schvalit' | 'zahodit') => {
+    setErr(null);
+    const res = await authenticatedFetch(`/api/beyond/velin/agent/mozek/${id}/${what}`, { method: 'POST' });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      setErr(body.error || `HTTP ${res.status}`);
+    }
+    void reload();
+    onChange();
+  };
+
+  return (
+    <section>
+      <SectionHead title="Návrhy do mozku" count={items.length} />
+      {err && <Empty>{err}</Empty>}
+      {items.length === 0 ? (
+        <Empty>
+          Nic nečeká. Když agent narazí na opravu, která se opakuje, navrhne tu změnu skillu nebo
+          pravidla. Schválení ji zapíše a commitne, zahození ji smaže.
+        </Empty>
+      ) : (
+        <div className="bb-sig">
+          {items.map((m) => {
+            const isOpen = open === m.id;
+            const d = roughDiff(m.before, m.after);
+            return (
+              <div key={m.id} className="bb-sig__row" style={{ cursor: 'default' }}>
+                <span className="bb-sev">{m.kind === 'skill' ? 'skill' : 'pravidlo'}</span>
+                <span className="bb-sig__who">
+                  {ago(m.createdAt)}
+                  {m.source ? ` · ${m.source}` : ''}
+                </span>
+                <span className="bb-sig__t">{m.path.replace(/^\.claude\/skills\//, '').replace(/\.md$/, '')}</span>
+                <span className="bb-sig__d">{m.reason}</span>
+                <span className="bb-sig__m">
+                  <button type="button" className="bb-pill" onClick={() => setOpen(isOpen ? null : m.id)}>
+                    {isOpen ? 'Skrýt změnu' : `Ukázat změnu (+${d.added.length} / −${d.removed.length})`}
+                  </button>
+                  {isOpen && (
+                    <pre className="bb-pre" style={{ whiteSpace: 'pre-wrap', margin: '8px 0 0', padding: '8px 10px', borderRadius: 10, fontSize: 11.5 }}>
+                      {d.removed.map((l) => `− ${l}`).concat(d.added.map((l) => `+ ${l}`)).join('\n') || '(jen přesuny řádků)'}
+                    </pre>
+                  )}
+                </span>
+                <span className="bb-sig__go" style={{ opacity: 1, display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <button type="button" className="bb-pill" onClick={() => void act(m.id, 'schvalit')}>
+                    Schválit
+                  </button>
+                  <button type="button" className="bb-pill" onClick={() => void act(m.id, 'zahodit')}>
+                    Zahodit
+                  </button>
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
 
 const STATUS_LABEL: Record<Run['status'], string> = {
   running: 'běží',
@@ -88,7 +221,7 @@ export default function AgentPage() {
   }
   if (!data) return null;
 
-  const { scheduler, jobs, runs } = data;
+  const { scheduler, jobs, runs, events, routes, pamet } = data;
 
   return (
     <div className="bb-vel">
@@ -118,6 +251,8 @@ export default function AgentPage() {
 
         <Proposals />
 
+        <MozekQueue onChange={() => void reload()} />
+
         <section>
           <SectionHead title="Co dělá sám" count={jobs.filter((j) => j.enabled).length} />
           <div className="bb-sig">
@@ -126,10 +261,15 @@ export default function AgentPage() {
                 <span className="bb-sev" data-sev={j.enabled ? undefined : 'off'}>
                   {j.cadence}
                 </span>
-                <span className="bb-sig__t">{j.title}</span>
+                <span className="bb-sig__t">
+                  {j.title}
+                  {j.custom ? ` · vlastní${j.createdBy ? ` (${j.createdBy})` : ''}` : ''}
+                </span>
                 <span className="bb-sig__d">{j.description}</span>
                 <span className="bb-sig__m">
                   {j.lastRunAt ? `naposledy ${ago(j.lastRunAt)}` : 'zatím neběželo'}
+                  {j.lastStatus && j.lastStatus !== 'ok' && j.lastStatus !== 'skipped' ? ` · ${j.lastStatus}` : ''}
+                  {j.failureStreak >= 2 ? ` · ${j.failureStreak}× po sobě selhalo` : ''}
                 </span>
                 <span
                   className="bb-sig__go"
@@ -225,11 +365,80 @@ export default function AgentPage() {
         </section>
 
         <section>
+          <SectionHead title="Na co reaguje" count={routes.length} />
+          {routes.length === 0 ? (
+            <Empty>
+              Žádné cesty pro události. Zapisují se do <code>system/udalosti.json</code> v brainu:
+              WhatsApp zpráva, nový přepis z Fathomu, booking v Cal.com.
+            </Empty>
+          ) : (
+            <div className="bb-sig">
+              {routes.map((r) => (
+                <div key={r.name} className="bb-sig__row" style={{ cursor: 'default' }}>
+                  <span className="bb-sev" data-sev={!r.enabled ? 'off' : !r.configured ? 'watch' : undefined}>
+                    {!r.enabled ? 'vypnuto' : r.configured ? r.auth : 'chybí secret'}
+                  </span>
+                  <span className="bb-sig__t">{r.name}</span>
+                  <span className="bb-sig__d">
+                    {r.description || ''}
+                    {r.job ? ` → ${r.job}` : ''}
+                  </span>
+                  <span className="bb-sig__m">
+                    <code>POST /api/beyond-events/{r.name}</code>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          {events.length > 0 && (
+            <div className="bb-sig" style={{ marginTop: 10 }}>
+              {events.map((e) => (
+                <div key={e.id} className="bb-sig__row" style={{ cursor: 'default' }}>
+                  <span className="bb-sev" data-sev={e.status === 'error' ? 'critical' : e.status === 'done' ? 'ok' : undefined}>
+                    {EVENT_LABEL[e.status]}
+                  </span>
+                  <span className="bb-sig__who">{ago(e.receivedAt)}</span>
+                  <span className="bb-sig__t">
+                    {e.route}
+                    {e.event ? ` · ${e.event}` : ''}
+                    {e.count > 1 ? ` · ×${e.count}` : ''}
+                  </span>
+                  <span className="bb-sig__d">
+                    → {e.job}
+                    {e.error ? ` · ${e.error}` : ''}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section>
+          <SectionHead title="Co si pamatuje" />
+          {[pamet.agent, pamet.tim].map((m) => (
+            <div key={m.title} style={{ marginBottom: 12 }}>
+              <p className="bb-vel__sub" style={{ margin: '0 0 6px' }}>
+                {m.title} · {m.usage.used}/{m.usage.limit} znaků
+              </p>
+              {m.entries.length === 0 ? (
+                <Empty>Zatím prázdné. Agent sem zapisuje nástrojem pamet, co se naučil a co platí napořád.</Empty>
+              ) : (
+                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>
+                  {m.entries.map((e, i) => (
+                    <li key={i}>{e}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))}
+        </section>
+
+        <section>
           <SectionHead title="Co agent nesmí" />
           <Empty>
-            Nic z toho neopouští brain. Úlohy čtou repo a zapisují zpátky do něj, takže každá
-            změna je v gitu a jde vrátit. Cokoli, co by šlo ke klientovi, končí jako draft
-            v <code>workspace/drafty/</code>, nikdy jako odeslaná zpráva.
+            Nic z toho neopouští brain bez kliknutí. Úlohy čtou repo a zapisují zpátky do něj,
+            každý běh se commitne pod svým jménem a jde vrátit. Zprávy klientům i změny vlastních
+            pravidel čekají tady na schválení. Naplánovaný běh si nesmí plánovat další běhy.
           </Empty>
         </section>
       </div>

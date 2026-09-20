@@ -241,6 +241,13 @@ router.post('/query', async (req, res) => {
       sessionId: resumeId || undefined,
       skipPermissions: true,
       onProgress: progress || undefined,
+      beyond: {
+        source: source === 'telegram' || source === 'voice' ? 'telegram' : source,
+        actor: tgUser && tgUser !== '-' ? `tg:${tgUser}` : source,
+        label: slug || null,
+        origin: meta?.telegramChatId != null ? { telegramChatId: String(meta.telegramChatId) } : null,
+        allowSchedule: true,
+      },
     });
 
     if (progress) {

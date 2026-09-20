@@ -12,9 +12,12 @@ import { getBrainIndex, invalidateBrainIndex, daysSince } from '../services/brai
 import { inbox, signalsForClient } from '../services/brain-signals.js';
 import { getCalls, isConfigured as callsConfigured } from '../services/beyond-calls.js';
 import { getPeople, personForUser } from '../services/beyond-people.js';
-import { JOBS } from '../services/beyond-jobs.js';
-import { getJobState, listRuns, setJobEnabled } from '../services/beyond-runs.js';
-import { runJob, schedulerStatus, setPaused } from '../services/beyond-scheduler.js';
+import { listRuns, setJobEnabled } from '../services/beyond-runs.js';
+import { describeJobs, runJob, schedulerStatus, setPaused } from '../services/beyond-scheduler.js';
+import { listEvents, listRoutes } from '../services/beyond-events.js';
+import * as mozek from '../services/beyond-mozek.js';
+import { createTask, removeTask, setScheduleOverride, updateTask } from '../services/beyond-tasks.js';
+import { snapshot as memorySnapshot } from '../services/beyond-memory.js';
 import {
   countPending,
   editProposal,
@@ -311,28 +314,80 @@ router.get('/agent', (_req, res) => {
   try {
     res.json({
       scheduler: schedulerStatus(),
-      jobs: JOBS.map((j) => {
-        const state = getJobState(j.name);
-        return {
-          name: j.name,
-          title: j.title,
-          description: j.description,
-          cadence: j.everyMs
-            ? `každých ${Math.round(j.everyMs / 60000)} min`
-            : j.dailyAt
-              ? `denně ${String(j.dailyAt.hour).padStart(2, '0')}:${String(j.dailyAt.minute).padStart(2, '0')}`
-              : j.weeklyAt
-                ? `týdně, ${['ne', 'po', 'út', 'st', 'čt', 'pá', 'so'][j.weeklyAt.weekday]} ${String(j.weeklyAt.hour).padStart(2, '0')}:${String(j.weeklyAt.minute).padStart(2, '0')}`
-                : 'ručně',
-          enabled: state.enabled,
-          lastRunAt: state.lastRunAt,
-        };
-      }),
+      jobs: describeJobs(),
       runs: listRuns({ limit: 30 }),
+      events: listEvents({ limit: 20 }),
+      routes: listRoutes(),
+      mozek: { pending: mozek.countPending() },
+      pamet: { agent: memorySnapshot('agent'), tim: memorySnapshot('tim') },
     });
   } catch (err) {
     console.error('[velin] /agent failed', err);
     res.status(500).json({ error: err?.message || 'agent selhal' });
+  }
+});
+
+/* ---- custom tasks and schedules --------------------------------- */
+
+router.post('/agent/tasks', async (req, res) => {
+  try {
+    const task = await createTask({ ...req.body, createdBy: req.user?.username || 'velin' });
+    res.json({ ok: true, task });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'nešlo založit' });
+  }
+});
+
+router.patch('/agent/tasks/:name', async (req, res) => {
+  try {
+    const task = await updateTask(req.params.name, req.body || {}, { by: req.user?.username || 'velin' });
+    res.json({ ok: true, task });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'nešlo upravit' });
+  }
+});
+
+router.delete('/agent/tasks/:name', async (req, res) => {
+  try {
+    await removeTask(req.params.name, { by: req.user?.username || 'velin' });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'nešlo zrušit' });
+  }
+});
+
+/** Override (or reset with null) the schedule of a built-in job. */
+router.patch('/agent/schedule/:job', async (req, res) => {
+  try {
+    const schedule = await setScheduleOverride(req.params.job, req.body?.schedule ?? null, { by: req.user?.username || 'velin' });
+    res.json({ ok: true, job: req.params.job, schedule });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'nešlo změnit' });
+  }
+});
+
+/* ---- proposals to change the brain's rules ----------------------- */
+
+router.get('/agent/mozek', (req, res) => {
+  const status = typeof req.query.status === 'string' ? req.query.status : 'pending';
+  res.json({ items: mozek.listProposals({ status }) });
+});
+
+router.post('/agent/mozek/:id/schvalit', async (req, res) => {
+  try {
+    const r = await mozek.approve(Number(req.params.id), req.user?.username || 'velin');
+    console.log(`[velin] ${req.user?.username} schválil návrh do mozku #${req.params.id}`);
+    res.json(r);
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'nešlo schválit' });
+  }
+});
+
+router.post('/agent/mozek/:id/zahodit', (req, res) => {
+  try {
+    res.json(mozek.reject(Number(req.params.id), req.user?.username || 'velin'));
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'nešlo zahodit' });
   }
 });
 

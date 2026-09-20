@@ -43,12 +43,29 @@ CREATE TABLE IF NOT EXISTS beyond_job_state (
 );
 `;
 
+/** Columns added after the first deploy; SQLite has no IF NOT EXISTS for these. */
+const MIGRATIONS = [
+  'ALTER TABLE beyond_job_state ADD COLUMN last_status TEXT',
+  'ALTER TABLE beyond_job_state ADD COLUMN last_error TEXT',
+  'ALTER TABLE beyond_job_state ADD COLUMN failure_streak INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE beyond_job_state ADD COLUMN incident_key TEXT',
+  'ALTER TABLE beyond_job_state ADD COLUMN incident_at TEXT',
+  'ALTER TABLE beyond_runs ADD COLUMN context TEXT',
+];
+
 let ready = false;
 
 function db() {
   const conn = getConnection();
   if (!ready) {
     conn.exec(SCHEMA);
+    for (const sql of MIGRATIONS) {
+      try {
+        conn.exec(sql);
+      } catch {
+        /* column already there */
+      }
+    }
     ready = true;
   }
   return conn;
@@ -92,15 +109,15 @@ async function brainDiff(sinceHead) {
 }
 
 /** Open a run. Returns a handle the caller finishes or fails. */
-export async function startRun({ job, triggerKind, triggerDetail = null }) {
+export async function startRun({ job, triggerKind, triggerDetail = null, context = null }) {
   const startedAt = new Date().toISOString();
   const headBefore = await brainHead();
   const info = db()
     .prepare(
-      `INSERT INTO beyond_runs (job, trigger_kind, trigger_detail, status, started_at)
-       VALUES (?, ?, ?, 'running', ?)`,
+      `INSERT INTO beyond_runs (job, trigger_kind, trigger_detail, status, started_at, context)
+       VALUES (?, ?, ?, 'running', ?, ?)`,
     )
-    .run(job, triggerKind, triggerDetail, startedAt);
+    .run(job, triggerKind, triggerDetail, startedAt, context ? JSON.stringify(context).slice(0, 4000) : null);
   const id = Number(info.lastInsertRowid);
   const t0 = Date.now();
 
@@ -158,7 +175,24 @@ export function listRuns({ limit = 40, job = null } = {}) {
     summary: r.summary,
     changed: r.changed,
     error: r.error,
+    context: r.context ? safeJson(r.context) : null,
   }));
+}
+
+function safeJson(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+/** Summary text of the last successful run, for jobs that want continuity. */
+export function lastOkSummary(job) {
+  const row = db()
+    .prepare(`SELECT summary, started_at FROM beyond_runs WHERE job=? AND status='ok' AND summary IS NOT NULL ORDER BY started_at DESC LIMIT 1`)
+    .get(job);
+  return row ? { summary: row.summary, at: row.started_at } : null;
 }
 
 /** A job is on unless someone turned it off. */
@@ -193,7 +227,41 @@ export function getJobState(job) {
     enabled: row ? Boolean(row.enabled) : true,
     lastRunAt: row?.last_run_at || null,
     lastCursor: row?.last_cursor || null,
+    lastStatus: row?.last_status || null,
+    lastError: row?.last_error || null,
+    failureStreak: row?.failure_streak || 0,
+    incidentKey: row?.incident_key || null,
+    incidentAt: row?.incident_at || null,
   };
+}
+
+/**
+ * How the last run ended. Status is one of ok, skipped, error,
+ * delivery_failed, blocked_config. Errors count up a streak so the same
+ * failure is not reported six times a night; a success resets it.
+ */
+export function recordOutcome(job, { status, error = null }) {
+  const failed = status === 'error' || status === 'delivery_failed' || status === 'blocked_config';
+  db()
+    .prepare(
+      `INSERT INTO beyond_job_state (job, last_status, last_error, failure_streak)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(job) DO UPDATE SET
+         last_status=excluded.last_status,
+         last_error=excluded.last_error,
+         failure_streak=CASE WHEN ? THEN beyond_job_state.failure_streak + 1 ELSE 0 END`,
+    )
+    .run(job, status, error ? String(error).slice(0, 1000) : null, failed ? 1 : 0, failed ? 1 : 0);
+  return getJobState(job);
+}
+
+export function markIncident(job, key) {
+  db()
+    .prepare(
+      `INSERT INTO beyond_job_state (job, incident_key, incident_at) VALUES (?, ?, ?)
+       ON CONFLICT(job) DO UPDATE SET incident_key=excluded.incident_key, incident_at=excluded.incident_at`,
+    )
+    .run(job, key, new Date().toISOString());
 }
 
 /**
