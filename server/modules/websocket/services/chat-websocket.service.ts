@@ -122,6 +122,12 @@ export function handleChatConnection(
         throw new Error('Message type is required');
       }
 
+      // Liveness probe from the browser; the answer is all it wants.
+      if (messageType === 'ping') {
+        writer.send({ type: 'pong', t: (data as { t?: number }).t ?? Date.now() });
+        return;
+      }
+
       if (messageType === 'claude-command') {
         await dependencies.queryClaudeSDK(data.command ?? '', data.options, writer);
         return;

@@ -39,6 +39,13 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   const [isConnected, setIsConnected] = useState(false);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const subscribersRef = useRef<Set<(data: any) => void>>(new Set());
+  // Messages written while the socket was down. A prompt typed right after
+  // the tab comes back must not vanish because the socket had not caught up
+  // yet; it waits here and goes out the moment the socket opens.
+  const pendingRef = useRef<any[]>([]);
+  const attemptRef = useRef(0);
+  const lastSeenRef = useRef(Date.now());
+  const heartbeatRef = useRef<NodeJS.Timeout | null>(null);
   const { token } = useAuth();
 
   useEffect(() => {
@@ -57,6 +64,8 @@ const useWebSocketProviderState = (): WebSocketContextType => {
 
   const connect = useCallback(() => {
     if (unmountedRef.current) return; // Prevent connection if unmounted
+    const current = wsRef.current;
+    if (current && (current.readyState === WebSocket.CONNECTING || current.readyState === WebSocket.OPEN)) return;
     try {
       // Construct WebSocket URL
       const wsUrl = buildWebSocketUrl(token);
@@ -64,10 +73,18 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       if (!wsUrl) return console.warn('No authentication token found for WebSocket connection');
       
       const websocket = new WebSocket(wsUrl);
+      wsRef.current = websocket;
 
       websocket.onopen = () => {
         setIsConnected(true);
         wsRef.current = websocket;
+        attemptRef.current = 0;
+        lastSeenRef.current = Date.now();
+        // Whatever was typed while the socket was down goes out now, in order.
+        const queued = pendingRef.current.splice(0);
+        for (const m of queued) {
+          try { websocket.send(JSON.stringify(m)); } catch (e) { console.error('WS flush failed:', e); }
+        }
         if (hasConnectedRef.current) {
           // This is a reconnect — signal so components can catch up on missed
           // messages. Goes to the direct subscribers too, like any message.
@@ -81,8 +98,10 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       };
 
       websocket.onmessage = (event) => {
+        lastSeenRef.current = Date.now();
         try {
           const data = JSON.parse(event.data);
+          if (data && data.type === 'pong') return;
           // Notify direct subscribers synchronously FIRST so they see every
           // message even when React would batch the latestMessage state
           // updates and drop intermediate ones.
@@ -97,13 +116,15 @@ const useWebSocketProviderState = (): WebSocketContextType => {
 
       websocket.onclose = () => {
         setIsConnected(false);
-        wsRef.current = null;
-        
-        // Attempt to reconnect after 3 seconds
+        if (wsRef.current === websocket) wsRef.current = null;
+        // Reconnect quickly, then back off: half a second first, eight at most.
+        const delay = Math.min(8000, 500 * 2 ** Math.min(attemptRef.current, 4));
+        attemptRef.current += 1;
+        if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = setTimeout(() => {
           if (unmountedRef.current) return; // Prevent reconnection if unmounted
           connect();
-        }, 3000);
+        }, delay);
       };
 
       websocket.onerror = (error) => {
@@ -119,10 +140,56 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     const socket = wsRef.current;
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify(message));
-    } else {
-      console.warn('WebSocket not connected');
+      return;
     }
-  }, []);
+    // Not open: keep the message and get a socket now rather than on the
+    // next scheduled retry. A liveness probe is not worth keeping.
+    if (message && message.type === 'ping') return;
+    pendingRef.current.push(message);
+    if (!socket || socket.readyState === WebSocket.CLOSED) {
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      connect();
+    }
+  }, [connect]);
+
+  // A socket can die without a close event (a laptop lid, a background tab,
+  // a network switch); the browser keeps believing it is open and every
+  // message goes into the void. So: ping every 25 s, and if nothing at all
+  // came back for 40 s, drop the socket and reconnect. Coming back to the
+  // tab or back online reconnects at once when the socket is not open.
+  useEffect(() => {
+    const beat = () => {
+      const socket = wsRef.current;
+      if (!socket || socket.readyState !== WebSocket.OPEN) return;
+      if (Date.now() - lastSeenRef.current > 40_000) {
+        try { socket.close(); } catch { /* already gone */ }
+        return;
+      }
+      try { socket.send(JSON.stringify({ type: 'ping', t: Date.now() })); } catch { /* close will follow */ }
+    };
+    heartbeatRef.current = setInterval(beat, 25_000);
+    const wake = () => {
+      if (document.visibilityState === 'hidden') return;
+      const socket = wsRef.current;
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        // Probe right away so a dead socket is found in seconds, not at the
+        // next beat.
+        try { socket.send(JSON.stringify({ type: 'ping', t: Date.now() })); } catch { /* close will follow */ }
+        return;
+      }
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      connect();
+    };
+    document.addEventListener('visibilitychange', wake);
+    window.addEventListener('focus', wake);
+    window.addEventListener('online', wake);
+    return () => {
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+      document.removeEventListener('visibilitychange', wake);
+      window.removeEventListener('focus', wake);
+      window.removeEventListener('online', wake);
+    };
+  }, [connect]);
 
   const subscribeMessages = useCallback((handler: (data: any) => void) => {
     subscribersRef.current.add(handler);

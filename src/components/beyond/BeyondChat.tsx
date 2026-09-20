@@ -326,7 +326,20 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
         if (!data) return;
         streamBubbleIdRef.current = null;
         setStreamingId(null);
-        setMessages(rebuildHistory(data.messages || []));
+        setMessages((prev) => {
+          const next = rebuildHistory(data.messages || []);
+          // The transcript on disk can lag behind the screen: a prompt sent a
+          // moment ago, and whatever streamed after it, may not be written
+          // yet. Never let a reload erase them; keep them after the transcript.
+          let lastUser = -1;
+          for (let i = prev.length - 1; i >= 0; i -= 1) if (prev[i].role === 'user') { lastUser = i; break; }
+          if (lastUser >= 0) {
+            const sent = (prev[lastUser] as { text: string }).text.trim();
+            const onDisk = next.some((m) => m.role === 'user' && m.kind === 'text' && m.text.trim() === sent);
+            if (!onDisk) return [...next, ...prev.slice(lastUser)];
+          }
+          return next;
+        });
       })
       .catch(() => { /* silent — a later turn or manual refresh recovers */ });
   }, []);
