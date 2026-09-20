@@ -33,6 +33,8 @@ import { isDueAt, scheduleFromLegacy } from './beyond-schedule.js';
 import { listTasks, scheduleOverride } from './beyond-tasks.js';
 import { render as renderTemplate } from './beyond-events.js';
 import { countPending as mozekPending } from './beyond-mozek.js';
+import { notionConfigured, pullNotion, pullRegistry, pullWhatsApp } from './beyond-raw.js';
+import { isConfigured as wahaConfigured } from './beyond-waha.js';
 
 /** Give a scheduled run room; these prompts read a lot of files. */
 const JOB_TIMEOUT_MS = 12 * 60 * 1000;
@@ -148,6 +150,65 @@ function summarizeFanOut(results) {
   }
   return { text: lines.join('\n'), failed: failed.length, total: results.length };
 }
+
+/* ------------------------------------------------------------------ */
+/* 0. the raw layer: fetch, no model                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * These replace the n8n workflows Registr klientů, Notion Raw Puller and
+ * WhatsApp Raw Puller. Same files, same shapes. They run before the sync so
+ * the morning starts from fresh data, and they can be fired for one client
+ * by an event (`context.slug`).
+ */
+const pullRegistryJob = {
+  name: 'registr-klientu',
+  title: 'Registr klientů z Notionu',
+  description: 'Přepíše Notion Clients 1:1 do clients/_registr.json, ze kterého čtou všechny pully i skilly.',
+  dailyAt: { hour: 5, minute: 50 },
+  async hasWork() {
+    return notionConfigured() ? 'denní registr' : null;
+  },
+  async run({ log }) {
+    const out = await pullRegistry();
+    const active = out.klienti.filter((k) => k.stav === 'Aktivní').length;
+    log(`${out.pocet} klientů, ${active} aktivních`);
+    invalidateBrainIndex();
+    return { summary: `${out.pocet} klientů v registru, ${active} aktivních: ${out.klienti.filter((k) => k.stav === 'Aktivní').map((k) => k.slug).join(', ')}` };
+  },
+};
+
+const pullNotionJob = {
+  name: 'notion-raw',
+  title: 'Notion do raw',
+  description: 'Dashboard, cally a úkoly každého aktivního klienta do raw/notion/*.json.',
+  dailyAt: { hour: 6, minute: 0 },
+  async hasWork() {
+    return notionConfigured() ? 'denní pull' : null;
+  },
+  async run({ log, context } = {}) {
+    const out = await pullNotion({ log, only: context?.slug || null });
+    if (out.note) return { skipped: out.note };
+    invalidateBrainIndex();
+    return { summary: out.done.join('\n') };
+  },
+};
+
+const pullWhatsAppJob = {
+  name: 'wa-raw',
+  title: 'WhatsApp do raw',
+  description: 'Zprávy každé klientské skupiny přes WAHA do raw/whatsapp.json, hlasovky přepsané whisperem.',
+  dailyAt: { hour: 6, minute: 7 },
+  async hasWork() {
+    return wahaConfigured() ? 'denní pull' : null;
+  },
+  async run({ log, context } = {}) {
+    const out = await pullWhatsApp({ log, only: context?.slug || null });
+    if (out.note) return { skipped: out.note };
+    invalidateBrainIndex();
+    return { summary: out.done.join('\n') };
+  },
+};
 
 /* ------------------------------------------------------------------ */
 /* 1. a call happened → put it in the brain                            */
@@ -1113,7 +1174,11 @@ function runnableFromTask(task) {
 
 export const JOBS = [
   // Order matters only for which one a tick picks first when several are due;
-  // the ones that produce work for a person come before the housekeeping.
+  // the ones that produce work for a person come before the housekeeping,
+  // and the raw pulls before the sync that reads them.
+  pullRegistryJob,
+  pullNotionJob,
+  pullWhatsAppJob,
   processCall,
   callReminder,
   waCheck,

@@ -191,6 +191,9 @@ s důvodem, ať obrazovka Agent neukazuje fantoma.
 
 | Úloha | Kdy | Co dělá |
 |---|---|---|
+| `registr-klientu` | denně 05:50 | Notion Clients 1:1 do `clients/_registr.json` (bez modelu) |
+| `notion-raw` | denně 06:00 | Dashboard, cally a úkoly každého aktivního klienta do `raw/notion/*.json` (bez modelu) |
+| `wa-raw` | denně 06:07 | Zprávy klientských skupin přes WAHA do `raw/whatsapp.json`, hlasovky jednou přepsané whisperem a přenášené dál (bez modelu) |
 | `zpracuj-call` | každých 10 min, nebo událost `fathom` | Když v `raw/fathom/` přibude přepis novější než poslední zápis v `cally.md`, přepíše ho do zápisu, vytáhne sliby na obě strany a čísla z check-inu, a připraví klientovi shrnutí do fronty |
 | `wa-check` | jen událost `waha` | Po dávce zpráv od klienta načte živé vlákno přes WAHA, doplní `whatsapp.md`, případně připraví návrh odpovědi |
 | `sync-klientu` | denně 06:20 | Skill `sync-client all`, promítne noční raw vrstvu do kurátorských souborů |
@@ -388,6 +391,24 @@ OpenAI Whisper. Allow list `BEYOND_AGENT_ALLOWED_TG_USERS` platí i tady.
 jeho text. Jeden zmatený klient tak neshodí ostatní a návrhy vlajek pro
 Tima se sbírají na konec souhrnu. Helper `forEachClient` v `beyond-jobs.js`.
 
+#### Raw vrstva v appce
+
+`server/services/beyond-raw.js` nahrazuje n8n workflow Registr klientů,
+Notion Raw Puller a WhatsApp Raw Puller. Soubory i tvary jsou stejné, skill
+`sync-client` nepozná rozdíl. Potřebuje `BEYOND_NOTION_TOKEN` (integrace
+s přístupem k Clients 1:1 a dashboardům) a WAHA klíč. Bez tokenu úlohy
+přeskočí a n8n může běžet dál; jakmile token je, n8n pully vypnout, jinak
+se oba commitují střídavě.
+
+Co v n8n zůstává i potom: Fathom Calls (přepis do `second-brain/_raw` a do
+`cally.md`, plus přeposlání události `/fathom`), IG stories, týdenní
+check-in. Ty se přesunou, až bude důvod.
+
+WhatsApp a nula zpráv: WAHA na engine NOWEB zná jen zprávy, které přišly od
+spárování. Skupina, ve které od té doby nikdo nepsal, vrátí nula, a to není
+chyba pullu. Plná historie jde stáhnout jen s `WHATSAPP_NOWEB_STORE_FULLSYNC=True`
+na straně WAHA a novým spárováním.
+
 #### Agentní endpoint
 
 `POST /api/beyond-agent/query` řeší několik věcí, které stojí za zapamatování:
@@ -425,6 +446,8 @@ záleží:
 | `BEYOND_TG_CHAT_ID`, `BEYOND_TG_ERROR_CHAT_ID` | kam chodí briefy a připomínky, kam chyby |
 | `BEYOND_EVENT_SECRET_*`, `BEYOND_EVENT_SECRET` | secrety cest v `system/udalosti.json` |
 | `BEYOND_REVIEW_MODEL` | model pro večerní `uceni-review`, výchozí sonnet |
+| `BEYOND_NOTION_TOKEN` | raw pully z Notionu (registr, dashboardy, cally, úkoly) |
+| `BEYOND_TG_POLLING` | `1` = Telegram bot v appce místo n8n |
 | `BEYOND_AGENT_IDLE_RESET_MS` | reset session po nečinnosti, `0` vypne |
 | `BEYOND_AGENT_IDEMPOTENCY_MS` | okno pro deduplikaci, `0` vypne |
 | `BEYOND_N8N_HEALTH` | zelená tečka stavu n8n |

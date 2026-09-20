@@ -63,6 +63,27 @@ export function configSource() {
   return config()?.source || null;
 }
 
+/** Base URL and key for callers that read from WAHA (the raw pull). */
+export function wahaConfig() {
+  return config();
+}
+
+/** GET against the WAHA REST API. Throws with a readable reason. */
+export async function wahaGet(pathname, { timeoutMs = 60_000 } = {}) {
+  const c = config();
+  if (!c) throw new Error('WAHA není nastavená');
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${c.baseUrl}${pathname}`, { headers: { 'X-Api-Key': c.apiKey }, signal: ctrl.signal });
+    const body = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(`WAHA ${res.status}: ${body?.message || body?.error || pathname}`);
+    return body;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Send one message. Resolves with the provider's id on success and throws with
  * a readable reason otherwise; the caller records either outcome against the
