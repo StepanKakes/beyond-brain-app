@@ -451,13 +451,54 @@ async function writeupAndNotion(call, log) {
     }).catch((err) => log(`úkol se nezaložil: ${err?.message || err}`));
   }
 
+  if (/<!--\s*notion:[^>]+-->/.test(text)) return `${notes[0]} · v Notionu už je`;
+  const reg = (await readRegistry()).find((k) => k.slug === call.slug) || {};
+
+  // No API token: the agent does Notion itself through the Notion connector
+  // (MCP), the way the skill always did by hand. Same row, same tasks.
   if (!notionReady()) {
-    notes.push('Notion přeskočen (chybí BEYOND_NOTION_TOKEN)');
+    const week = client?.programWeek ? `W${String(client.programWeek).padStart(2, '0')}` : null;
+    const r = await runAgent(
+      [
+        `Zápis z callu klienta \`${call.slug}\` (${call.dateIso}) je hotový v \`${rel}\`. Dej ho do Notionu přes Notion MCP.`,
+        '',
+        '1. Coaching Calls klienta:' + (reg.callsDbId ? ` databáze \`${reg.callsDbId}\` (notion-fetch).` : ' najdi přes notion-search „Coaching Calls " + jméno.'),
+        `   Najdi řádek s datem ${call.dateIso} (typicky Status „🆕 Z Fathomu"). Když existuje, uprav ho; když ne, založ nový.`,
+        `   Properties: Téma hovoru = tema z hlavičky souboru, Datum = ${call.dateIso}, Status = „✅ Zpracováno",`,
+        '   Typ = typ z hlavičky (přesně jedna z hodnot databáze), Délka (min) = delka z hlavičky,',
+        reg.dashboardId ? `   Klient = relace na stránku \`${reg.dashboardId}\`.` : '   Klient = relace na Dashboard klienta, když ho dohledáš.',
+        '   Obsah stránky = celý zápis ze souboru bez YAML hlavičky, v Notion markdownu (checkboxy, nadpisy, číslovaný seznam).',
+        '   U existujícího řádku starý obsah nahraď. Na konec dej odkaz „Záznam hovoru (Fathom)" z hlavičky.',
+        '',
+        '2. Úkoly klienta:' + (reg.tasksDbId ? ` databáze \`${reg.tasksDbId}\`.` : ' najdi přes notion-search „Úkoly " + jméno.'),
+        '   Pro každý checkbox v sekci „Tvoje úkoly z dnešní schůzky" založ řádek: Název = text úkolu,',
+        `   Project Status = „Nezahájeno", Typ - Hodnota = „Úkol"${week ? `, Týden = „${week}"` : ''}${reg.dashboardId ? `, Klient = relace na \`${reg.dashboardId}\`` : ''}.`,
+        '   Když řádek se stejným názvem už existuje, nezakládej ho znovu. Nic dalšího v Notionu neměň.',
+        '',
+        'Neměň schéma databází a nehádej názvy hodnot. Když Notion MCP není k dispozici, řekni to a nic nedělej.',
+        '',
+        'Úplně na konec odpovědi dej jeden řádek JSON, nic za ním:',
+        '{"pageUrl": "<url stránky v Coaching Calls nebo prázdné>", "tasksCreated": <číslo>, "tasksSkipped": <číslo>, "problem": "<prázdné, nebo co nešlo>"}',
+      ].join('\n'),
+      { timeoutMs: 10 * 60 * 1000 },
+    );
+    const rep = parseReport(r.text);
+    let j = null;
+    try {
+      const line = String(r.text || '').trim().split('\n').reverse().find((l) => l.trim().startsWith('{'));
+      j = line ? JSON.parse(line.trim()) : null;
+    } catch {
+      j = null;
+    }
+    if (j?.pageUrl) {
+      await fs.writeFile(abs, `${text.trimEnd()}\n\n<!-- notion:${j.pageUrl} -->\n`, 'utf8');
+      notes.push(`Notion přes konektor: stránka ${j.pageUrl}, úkoly klienta ${j.tasksCreated ?? '?'} nových${j.tasksSkipped ? `, ${j.tasksSkipped} už byly` : ''}`);
+    } else {
+      notes.push(`Notion přes konektor neproběhl: ${j?.problem || rep.shrnuti || 'bez odpovědi'}`);
+    }
     return notes.join(' · ');
   }
-  if (/<!--\s*notion:[^>]+-->/.test(text)) return `${notes[0]} · v Notionu už je`;
 
-  const reg = (await readRegistry()).find((k) => k.slug === call.slug) || {};
   const page = await upsertCallPage({
     callsDbId: reg.callsDbId,
     dashboardId: reg.dashboardId || null,
