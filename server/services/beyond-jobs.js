@@ -35,6 +35,7 @@ import { render as renderTemplate } from './beyond-events.js';
 import { countPending as mozekPending } from './beyond-mozek.js';
 import { notionConfigured, pullNotion, pullRegistry, pullWhatsApp } from './beyond-raw.js';
 import { isConfigured as wahaConfigured } from './beyond-waha.js';
+import { createTask as createUkol, findByPrepRef } from './beyond-ukoly.js';
 
 /** Give a scheduled run room; these prompts read a lot of files. */
 const JOB_TIMEOUT_MS = 12 * 60 * 1000;
@@ -824,6 +825,36 @@ const draftOurWork = {
       );
       const text = String(result.text || '').replace(/\s+/g, ' ').trim();
       results.push(`${d.client.name}: ${truncate(text, 180)}`);
+
+      // The draft is only useful if someone opens it. Put it on the list as
+      // a task with the file attached, once per draft.
+      const rel = `workspace/drafty/${today}-${d.client.slug}-${d.topic}.md`;
+      try {
+        const abs = path.join(resolveBrainPath(), rel);
+        const written = await fs.readFile(abs, 'utf8').catch(() => null);
+        if (written && !findByPrepRef('podklad', rel)) {
+          const missing = /CHYBÍ PODKLAD|chybí podklad/i.test(written);
+          await createUkol({
+            text: missing ? `Sehnat podklad: ${d.text}` : `Projít a poslat: ${d.text}`,
+            priority: d.ageDays >= 7 ? 1 : 2,
+            client: d.client.slug,
+            owner: process.env.BEYOND_DEFAULT_OWNER || getPeople()[0]?.key || 'tim',
+            createdBy: 'agent',
+            due: today,
+            note: `dlužíme ${d.ageDays} dní`,
+            prep: {
+              kind: 'podklad',
+              title: missing ? 'Brain hledal podklad a nenašel ho' : 'Brain rozepsal draft',
+              body: written.replace(/^#.*$/m, '').replace(/\s+/g, ' ').trim().slice(0, 280),
+              ref: rel,
+              actions: [{ label: 'Otevřít', action: 'open-file', path: rel, primary: true }],
+            },
+          });
+          log(`${d.client.name}: úkol s draftem založen`);
+        }
+      } catch (err) {
+        log(`${d.client.name}: úkol se nezaložil (${err?.message || err})`);
+      }
     }
 
     if (debts.length > 3) {

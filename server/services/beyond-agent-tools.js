@@ -23,6 +23,8 @@ import { describeSchedule } from './beyond-schedule.js';
 import { search as searchHistory, readSession, recentSessions } from './beyond-history.js';
 import * as memory from './beyond-memory.js';
 import * as mozek from './beyond-mozek.js';
+import * as ukoly from './beyond-ukoly.js';
+import { getPeople } from './beyond-people.js';
 
 function text(payload) {
   return { content: [{ type: 'text', text: typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2) }] };
@@ -263,8 +265,54 @@ export function buildBeyondToolsServer(ctx = {}) {
     },
   );
 
-  return createSdkMcpServer({ name: 'beyond', version: '1.0.0', tools: [schedule, history, pamet, skillManage] });
+  const tasks = tool(
+    'ukoly',
+    [
+      'Úkoly lidí (Velín, workspace/ukoly.json). Akce: list, create, update, done.',
+      'create: text, priority 1 až 4 (1 nejvyšší), owner (klíč osoby: tim, stepan), client (slug), due (YYYY-MM-DD), note (proč).',
+      'Zakládej úkol, když z dat plyne, že má někdo něco udělat, a řekni v note proč. Ne pro sebe: co máš udělat ty, udělej.',
+      'update: id + libovolné z polí, done: id. Vlastník podle toho, kdo klienta vede; když nevíš, nech výchozí.',
+    ].join(' '),
+    {
+      action: z.enum(['list', 'create', 'update', 'done']),
+      id: z.string().optional(),
+      text: z.string().optional(),
+      priority: z.number().int().min(1).max(4).optional(),
+      owner: z.string().optional(),
+      client: z.string().optional(),
+      due: z.string().optional(),
+      note: z.string().optional(),
+      state: z.enum(['none', 'work', 'done']).optional(),
+    },
+    async (args) => {
+      try {
+        if (args.action === 'list') {
+          return text(ukoly.listTasks().filter((t) => t.state !== 'done').map((t) => ({ id: t.id, text: t.text, priority: t.priority, state: t.state, owner: t.owner, client: t.client, due: t.due, createdBy: t.createdBy })));
+        }
+        if (args.action === 'create') {
+          const t = await ukoly.createTask({
+            text: args.text,
+            priority: args.priority ?? 3,
+            owner: args.owner || process.env.BEYOND_DEFAULT_OWNER || getPeople()[0]?.key || 'tim',
+            client: args.client || null,
+            due: args.due || null,
+            note: args.note || null,
+            createdBy: actor === 'chat' || actor === 'telegram' ? 'agent' : actor,
+          });
+          return text({ ok: true, id: t.id, text: t.text, owner: t.owner, priority: t.priority });
+        }
+        if (!args.id) return fail('id chybí');
+        if (args.action === 'done') return text({ ok: true, task: await ukoly.updateTask(args.id, { state: 'done' }, { by: actor }) });
+        const t = await ukoly.updateTask(args.id, { text: args.text, priority: args.priority, owner: args.owner, client: args.client, due: args.due, note: args.note, state: args.state }, { by: actor });
+        return text({ ok: true, task: t });
+      } catch (err) {
+        return fail(err?.message || String(err));
+      }
+    },
+  );
+
+  return createSdkMcpServer({ name: 'beyond', version: '1.0.0', tools: [schedule, history, pamet, skillManage, tasks] });
 }
 
 /** Tool names as the SDK exposes them, for allow lists. */
-export const BEYOND_TOOL_NAMES = ['mcp__beyond__beyond_schedule', 'mcp__beyond__hledej_historii', 'mcp__beyond__pamet', 'mcp__beyond__skill_manage'];
+export const BEYOND_TOOL_NAMES = ['mcp__beyond__beyond_schedule', 'mcp__beyond__hledej_historii', 'mcp__beyond__pamet', 'mcp__beyond__skill_manage', 'mcp__beyond__ukoly'];

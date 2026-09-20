@@ -162,6 +162,43 @@ export type CallsPage = {
   unmatched: number;
 };
 
+export type PrepAction = { label: string; action: string; primary?: boolean; path?: string };
+export type Prep = {
+  kind: 'zprava' | 'navrh' | 'podklad';
+  title: string;
+  body: string;
+  ref: number | string;
+  canSend?: boolean;
+  actions: PrepAction[];
+};
+
+export type Task = {
+  id: string;
+  text: string;
+  priority: 1 | 2 | 3 | 4;
+  state: 'none' | 'work' | 'done';
+  client: { slug: string; name: string } | null;
+  owner: string;
+  createdBy: string;
+  due: string | null;
+  dueLabel: string | null;
+  dueKind: '' | 'today' | 'over';
+  note: string | null;
+  prep: Prep | null;
+  createdAt: string;
+  doneAt: string | null;
+  virtual: boolean;
+};
+
+export type Ukoly = {
+  me: string;
+  people: { key: string; displayName: string; avatar: string }[];
+  clients: { slug: string; name: string }[];
+  tasks: Task[];
+};
+
+export type QuickParse = { priority: number; due: string | null; client: string | null; clientName: string | null; owner: string; text: string };
+
 async function get<T>(pathname: string): Promise<T> {
   const res = await authenticatedFetch(`/api/beyond/velin${pathname}`);
   if (!res.ok) {
@@ -181,6 +218,31 @@ export const fetchVelin = () => get<Velin>('/');
 export const fetchBoard = () => get<{ builtAt: string; clients: BoardClient[] }>('/board');
 export const fetchClient = (slug: string) => get<ClientDetail>(`/client/${encodeURIComponent(slug)}`);
 export const fetchCalls = (days = 14) => get<CallsPage>(`/calls?days=${days}`);
+
+export const fetchUkoly = () => get<Ukoly>('/ukoly');
+
+async function send<T>(pathname: string, method: string, body?: unknown): Promise<T> {
+  const res = await authenticatedFetch(`/api/beyond/velin${pathname}`, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const data = (await res.json().catch(() => ({}))) as T & { error?: string };
+  if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+  return data;
+}
+
+export const parseQuick = (quick: string) => send<QuickParse>('/ukoly/parse', 'POST', { quick });
+export const createQuick = (quick: string) => send<{ ok: boolean; task: Task }>('/ukoly', 'POST', { quick });
+export const patchTask = (id: string, patch: Partial<Pick<Task, 'state' | 'priority' | 'text' | 'owner' | 'due'>>) =>
+  send<{ ok: boolean }>(`/ukoly/${encodeURIComponent(id)}`, 'PATCH', patch);
+export const deleteTask = (id: string) => send<{ ok: boolean }>(`/ukoly/${encodeURIComponent(id)}`, 'DELETE');
+export const prepAct = (path: string, body?: unknown) => send<{ ok: boolean; error?: string }>(path, 'POST', body);
+export const editProposal = (id: number, body: string) => send<{ ok: boolean }>(`/navrhy/${id}`, 'PATCH', { body });
+export const fetchMozekItem = async (id: number) => {
+  const r = await get<{ items: { id: number; before: string | null; after: string }[] }>('/agent/mozek');
+  return r.items.find((m) => m.id === id) || null;
+};
 
 export async function refreshIndex(): Promise<void> {
   await authenticatedFetch('/api/beyond/velin/refresh', { method: 'POST' });

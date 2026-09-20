@@ -18,6 +18,10 @@ import { listEvents, listRoutes } from '../services/beyond-events.js';
 import * as mozek from '../services/beyond-mozek.js';
 import { createTask, removeTask, setScheduleOverride, updateTask } from '../services/beyond-tasks.js';
 import { snapshot as memorySnapshot } from '../services/beyond-memory.js';
+import * as ukoly from '../services/beyond-ukoly.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { resolveBrainPath } from '../utils/brain-path.js';
 import {
   countPending,
   editProposal,
@@ -238,6 +242,206 @@ router.post('/refresh', async (_req, res) => {
     res.json({ ok: true, builtAt: index.builtAt, clients: index.clients.length });
   } catch (err) {
     res.status(500).json({ ok: false, error: err?.message || 'refresh selhal' });
+  }
+});
+
+/* ------------------------------------------------------------------ */
+/* tasks: one list for the morning                                      */
+/* ------------------------------------------------------------------ */
+
+const DEFAULT_OWNER = () => process.env.BEYOND_DEFAULT_OWNER || getPeople()[0]?.key || 'tim';
+
+function dueKind(due, today) {
+  if (!due) return '';
+  if (due < today) return 'over';
+  if (due === today) return 'today';
+  return '';
+}
+
+function dueLabel(due, today) {
+  if (!due) return null;
+  if (due === today) return 'dnes';
+  const d = new Date(`${due}T12:00:00`);
+  const t = new Date(`${today}T12:00:00`);
+  const diff = Math.round((d - t) / 86_400_000);
+  if (diff === 1) return 'zítra';
+  if (diff === -1) return 'včera';
+  if (diff > 1 && diff < 7) return ['neděle', 'pondělí', 'úterý', 'středa', 'čtvrtek', 'pátek', 'sobota'][d.getDay()];
+  return `${d.getDate()}. ${d.getMonth() + 1}.`;
+}
+
+/**
+ * The task list as the velín shows it: the stored tasks, plus every prepared
+ * message and every proposed brain change folded in as a task with a prep.
+ * Nothing is duplicated into the file; a sent message simply stops appearing.
+ */
+function composeTasks(index) {
+  const today = new Date().toISOString().slice(0, 10);
+  const nameOf = (slug) => index.clients.find((c) => c.slug === slug)?.name || null;
+  const shapeClient = (slug) => (slug ? { slug, name: nameOf(slug) || slug } : null);
+
+  const stored = ukoly.listTasks().map((t) => ({
+    id: t.id,
+    text: t.text,
+    priority: t.priority,
+    state: t.state,
+    client: shapeClient(t.client),
+    owner: t.owner,
+    createdBy: t.createdBy,
+    due: t.due,
+    dueLabel: dueLabel(t.due, today),
+    dueKind: dueKind(t.due, today),
+    note: t.note,
+    prep: t.prep,
+    createdAt: t.createdAt,
+    doneAt: t.doneAt,
+    virtual: false,
+  }));
+
+  const messages = listProposals({ status: 'pending' }).map((p) => ({
+    id: `navrh:${p.id}`,
+    text: `${p.kind === 'shrnuti-callu' ? 'Poslat shrnutí callu' : p.kind === 'pripomenuti' ? 'Připomenout se' : 'Ozvat se'}${p.clientName ? ` ${p.clientName}` : ''}`,
+    priority: p.kind === 'shrnuti-callu' ? 1 : 2,
+    state: ukoly.virtualState(`navrh:${p.id}`),
+    client: shapeClient(p.clientSlug),
+    owner: DEFAULT_OWNER(),
+    createdBy: 'agent',
+    due: today,
+    dueLabel: 'dnes',
+    dueKind: 'today',
+    note: p.reason,
+    prep: {
+      kind: 'zprava',
+      title: 'Brain připravil zprávu na WhatsApp',
+      body: p.body,
+      ref: p.id,
+      canSend: wahaConfigured(),
+      actions: [
+        { label: 'Odeslat', action: 'navrh-odeslat', primary: true },
+        { label: 'Upravit', action: 'navrh-upravit' },
+        { label: 'Zahodit', action: 'navrh-zahodit' },
+      ],
+    },
+    createdAt: p.createdAt,
+    doneAt: null,
+    virtual: true,
+  }));
+
+  const brain = mozek.listProposals({ status: 'pending' }).map((m) => ({
+    id: `mozek:${m.id}`,
+    text: `Schválit změnu: ${m.path.replace(/^\.claude\/skills\//, 'skill ').replace(/^system\//, '').replace(/\.md$/, '')}`,
+    priority: 3,
+    state: ukoly.virtualState(`mozek:${m.id}`),
+    client: null,
+    owner: DEFAULT_OWNER(),
+    createdBy: m.source && m.source !== 'agent' ? m.source : 'agent',
+    due: null,
+    dueLabel: null,
+    dueKind: '',
+    note: null,
+    prep: {
+      kind: 'navrh',
+      title: m.kind === 'skill' ? 'Brain navrhuje změnu skillu' : 'Brain navrhuje změnu pravidla',
+      body: m.reason || '',
+      ref: m.id,
+      actions: [
+        { label: 'Schválit', action: 'mozek-schvalit', primary: true },
+        { label: 'Ukázat změnu', action: 'mozek-diff' },
+        { label: 'Zahodit', action: 'mozek-zahodit' },
+      ],
+    },
+    createdAt: m.createdAt,
+    doneAt: null,
+    virtual: true,
+  }));
+
+  return [...stored, ...messages, ...brain];
+}
+
+router.get('/ukoly', async (req, res) => {
+  try {
+    const index = await getBrainIndex();
+    const me = personForUser(req.user);
+    res.json({
+      me: me ? me.key : DEFAULT_OWNER(),
+      people: getPeople().map((p) => ({ key: p.key, displayName: p.displayName, avatar: `/avatars/${p.key}.jpg` })),
+      clients: index.clients.filter((c) => c.isActive !== false).map((c) => ({ slug: c.slug, name: c.name })),
+      tasks: composeTasks(index),
+    });
+  } catch (err) {
+    console.error('[velin] /ukoly failed', err);
+    res.status(500).json({ error: err?.message || 'úkoly selhaly' });
+  }
+});
+
+/** Create from quick text (`{ quick: "p1 dnes zavolat Pavlovi" }`) or from fields. */
+router.post('/ukoly', async (req, res) => {
+  try {
+    const index = await getBrainIndex();
+    const me = personForUser(req.user)?.key || DEFAULT_OWNER();
+    const body = req.body || {};
+    let fields = body;
+    if (typeof body.quick === 'string') {
+      fields = ukoly.parseQuick(body.quick, {
+        me,
+        clients: index.clients.filter((c) => c.isActive !== false).map((c) => ({ slug: c.slug, name: c.name, first: c.name.split(' ')[0] })),
+      });
+    }
+    const task = await ukoly.createTask({ ...fields, createdBy: me });
+    res.json({ ok: true, task });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'nešlo založit' });
+  }
+});
+
+/** Just look at what quick add would make of a line. */
+router.post('/ukoly/parse', async (req, res) => {
+  try {
+    const index = await getBrainIndex();
+    const me = personForUser(req.user)?.key || DEFAULT_OWNER();
+    const parsed = ukoly.parseQuick(String(req.body?.quick || ''), {
+      me,
+      clients: index.clients.filter((c) => c.isActive !== false).map((c) => ({ slug: c.slug, name: c.name, first: c.name.split(' ')[0] })),
+    });
+    res.json({ ...parsed, clientName: parsed.client ? index.clients.find((c) => c.slug === parsed.client)?.name || null : null });
+  } catch (err) {
+    res.status(400).json({ error: err?.message || 'parse selhal' });
+  }
+});
+
+router.patch('/ukoly/:id', async (req, res) => {
+  try {
+    const by = req.user?.username || 'velin';
+    const id = req.params.id;
+    if (id.startsWith('navrh:') || id.startsWith('mozek:')) {
+      if (req.body?.state == null) return res.status(400).json({ ok: false, error: 'u připravené věci jde měnit jen stav' });
+      await ukoly.setVirtualState(id, req.body.state, { by });
+      return res.json({ ok: true, id, state: req.body.state });
+    }
+    const task = await ukoly.updateTask(id, req.body || {}, { by });
+    res.json({ ok: true, task });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'nešlo upravit' });
+  }
+});
+
+router.delete('/ukoly/:id', async (req, res) => {
+  try {
+    await ukoly.removeTask(req.params.id, { by: req.user?.username || 'velin' });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'nešlo smazat' });
+  }
+});
+
+/** A prepared file (a draft, a brief) the velín wants to show inline. */
+router.get('/soubor', (req, res) => {
+  const rel = String(req.query.path || '').replace(/\\/g, '/').replace(/^\/+/, '');
+  if (!rel || rel.includes('..') || !/^workspace\//.test(rel)) return res.status(400).json({ error: 'jen soubory z workspace/' });
+  try {
+    res.json({ path: rel, text: fs.readFileSync(path.join(resolveBrainPath(), rel), 'utf8') });
+  } catch {
+    res.status(404).json({ error: 'soubor neexistuje' });
   }
 });
 

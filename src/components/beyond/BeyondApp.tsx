@@ -265,7 +265,7 @@ export default function BeyondApp() {
           className="h-full w-full"
         >
           {view.kind === 'velin' ? (
-            <VelinPage onOpenClient={openClient} onOpenCalls={openCalls} />
+            <VelinPage onOpenClient={openClient} onOpenCalls={openCalls} onOpenChat={handleOpenUniversalChat} />
           ) : view.kind === 'board' ? (
             <ClientBoard onOpenClient={openClient} />
           ) : view.kind === 'client' ? (

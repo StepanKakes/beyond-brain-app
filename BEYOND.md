@@ -324,6 +324,28 @@ hlášení na Telegram (`BEYOND_TG_ERROR_CHAT_ID`, jinak všem), připomínka po
 šesti hodinách, úspěch sérii vynuluje. Chyba doručení a chyba běhu jsou
 dvě různé věci a v logu se liší.
 
+### Velín ráno: úkoly
+
+Domovská obrazovka je od 21. 9. 2026 jeden seznam úkolů, hovory a „pozor"
+vpravo, klienti pod tím (`velin/VelinPage.tsx`, styly `.bb-uk*`). Úkol má
+prioritu 1 až 4 (barva kroužku, Todoist), stav (nic, pracuje se, hotovo:
+levé kliknutí hotovo, pravé pracuje se), vlastníka (profilovka z Mission
+trackeru v `public/avatars/<key>.jpg`), kdo ho zadal (člověk nebo agent),
+klienta, termín a případně **přípravu**: co k němu brain nachystal.
+
+Úkoly žijí v brainu v `workspace/ukoly.json` (`server/services/beyond-ukoly.js`),
+takže je agent čte i zakládá stejně jako všechno ostatní (nástroj `ukoly`).
+Připravené zprávy (`beyond_proposals`) a návrhy do mozku (`beyond_mozek`) se
+do souboru nekopírují: `GET /api/beyond/velin/ukoly` je skládá za běhu jako
+úkoly s přípravou (`navrh:<id>`, `mozek:<id>`), jejich stav „pracuje se" je
+ve `stavy`. Odeslaná zpráva ze seznamu prostě zmizí. Úloha
+`napsat-co-dluzime` zakládá úkol s přípravou `podklad` (odkaz na draft).
+
+Rychlé zadání (`POST /ukoly` s `quick`) rozumí `p1` až `p4`, `dnes`,
+`zítra`, dnům v týdnu, datu `25.9.`, jménům klientů i ve skloněném tvaru
+(Pavlovi, Markovi) a `@štěpán`. Výchozí vlastník je `BEYOND_DEFAULT_OWNER`
+(jinak první v rosteru).
+
 ### Návrhy zpráv: jedno kliknutí, ale tvoje
 
 Tohle je jediná cesta, kterou něco opouští brain. Agent napíše zprávu, řekne

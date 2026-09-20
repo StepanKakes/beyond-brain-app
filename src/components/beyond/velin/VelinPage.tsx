@@ -1,253 +1,459 @@
-import { useCallback, useMemo, useState } from 'react';
-import { ChevronRight } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { fetchVelin, type Signal, type Velin } from './api';
-import { Empty, LiveCall, SectionHead, SeverityChip, formatTime, usePolled, vocative } from './bits';
-import Proposals from './Proposals';
+import {
+  createQuick,
+  deleteTask,
+  editProposal,
+  fetchBoard,
+  fetchMozekItem,
+  fetchUkoly,
+  fetchVelin,
+  parseQuick,
+  patchTask,
+  prepAct,
+  type BoardClient,
+  type QuickParse,
+  type Task,
+  type Ukoly,
+  type Velin,
+} from './api';
+import { Empty, LiveCall, ago, formatTime, usePolled } from './bits';
 
 /**
- * Beyond Brain — the velín.
+ * Beyond Brain — the morning screen.
  *
- * Deliberately one column, read top to bottom in priority order, rather than a
- * three-up grid where everything competes for the same glance. What needs a
- * person comes first; what is drifting comes second; what the agent owes itself
- * comes last and stays folded.
- *
- * Conditions that hold for most of the roster are lifted into a single band at
- * the top. Nine clients with a stale profile is one problem stated once, not
- * nine rows that bury the two real ones underneath.
+ * One list of what has to happen today, the calls and the warnings beside
+ * it, the clients underneath. A task carries a priority (the colour of its
+ * circle), a state (left click: done, right click: in progress), who owns it
+ * and who put it there. When the brain has already prepared something for a
+ * task (a message, a draft, a rule change) it sits under the task and goes
+ * out with one click.
  */
 
 type Props = {
   onOpenClient: (slug: string) => void;
   onOpenCalls: () => void;
+  onOpenChat: () => void;
 };
 
-function greeting(now = new Date()): string {
-  const h = now.getHours();
-  if (h < 10) return 'Dobré ráno';
-  if (h < 18) return 'Dobrý den';
-  return 'Dobrý večer';
+const DATE_FMT: Intl.DateTimeFormatOptions = { weekday: 'long', day: 'numeric', month: 'long' };
+const ORDER: Record<Task['state'], number> = { work: 0, none: 1, done: 2 };
+const DUE: Record<Task['dueKind'], number> = { over: 0, today: 1, '': 2 };
+
+function sortTasks(list: Task[]): Task[] {
+  return list.slice().sort((a, b) => ORDER[a.state] - ORDER[b.state] || a.priority - b.priority || DUE[a.dueKind] - DUE[b.dueKind]);
 }
 
-const DATE_FMT: Intl.DateTimeFormatOptions = { weekday: 'long', day: 'numeric', month: 'long' };
-
-export default function VelinPage({ onOpenClient, onOpenCalls }: Props) {
-  const load = useCallback(() => fetchVelin(), []);
-  const { data, error, loading } = usePolled<Velin>(load, 120_000);
-  const [showAgent, setShowAgent] = useState(false);
-
-  const today = useMemo(() => new Date().toLocaleDateString('cs-CZ', DATE_FMT), []);
-  const me = data?.me?.displayName;
-
-  if (loading && !data) {
-    return (
-      <div className="bb-vel">
-        <div className="bb-vel__in">
-          <p className="bb-vel__sub">Čtu brain…</p>
-        </div>
-      </div>
-    );
+function Avatar({ person, people, me }: { person: string; people: Ukoly['people']; me: string }) {
+  const p = people.find((x) => x.key === person);
+  const [broken, setBroken] = useState(false);
+  const name = p?.displayName || person;
+  if (p?.avatar && !broken) {
+    return <img className={`bb-uk__av${person === me ? ' bb-uk__av--me' : ''}`} src={p.avatar} alt={name} title={name} onError={() => setBroken(true)} />;
   }
+  return (
+    <span className={`bb-uk__av bb-uk__av--txt${person === me ? ' bb-uk__av--me' : ''}`} title={name}>
+      {name[0]}
+    </span>
+  );
+}
 
-  if (error && !data) {
-    return (
-      <div className="bb-vel">
-        <div className="bb-vel__in">
-          <h1 className="bb-vel__title">Velín</h1>
-          <Empty>
-            Nepovedlo se načíst stav: {error}. Dokud se to nespraví, tahle obrazovka nemůže říct nic
-            pravdivého, tak radši neříká nic.
-          </Empty>
-        </div>
-      </div>
-    );
-  }
+const CHECK = (
+  <svg viewBox="0 0 12 12" aria-hidden="true">
+    <path d="M2.6 6.4 L5.1 8.9 L9.6 3.6" />
+  </svg>
+);
 
-  if (!data) return null;
+function Prep({ task, onDone, onOpenFile }: { task: Task; onDone: () => void; onOpenFile: (path: string) => void }) {
+  const prep = task.prep;
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(prep?.body || '');
+  const [diff, setDiff] = useState<{ removed: string[]; added: string[] } | null>(null);
+  if (!prep) return null;
 
-  const { needsUs, risks, agent, systemic, calls, totals } = data;
-  const quiet = needsUs.length === 0 && risks.length === 0;
+  const run = async (action: string, path?: string) => {
+    setErr(null);
+    setBusy(action);
+    try {
+      const id = Number(prep.ref);
+      if (action === 'navrh-odeslat') await prepAct(`/navrhy/${id}/odeslat`);
+      else if (action === 'navrh-zahodit') await prepAct(`/navrhy/${id}/zahodit`);
+      else if (action === 'navrh-upravit') {
+        if (editing) {
+          await editProposal(id, draft);
+          setEditing(false);
+        } else setEditing(true);
+        setBusy(null);
+        return;
+      } else if (action === 'mozek-schvalit') await prepAct(`/agent/mozek/${id}/schvalit`);
+      else if (action === 'mozek-zahodit') await prepAct(`/agent/mozek/${id}/zahodit`);
+      else if (action === 'mozek-diff') {
+        if (diff) setDiff(null);
+        else {
+          const m = await fetchMozekItem(id);
+          if (m) {
+            const a = new Set((m.before || '').split('\n'));
+            const b = new Set(m.after.split('\n'));
+            setDiff({ removed: [...a].filter((l) => l.trim() && !b.has(l)), added: [...b].filter((l) => l.trim() && !a.has(l)) });
+          }
+        }
+        setBusy(null);
+        return;
+      } else if (action === 'open-file' && path) {
+        onOpenFile(path);
+        setBusy(null);
+        return;
+      }
+      onDone();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'nešlo');
+    } finally {
+      setBusy(null);
+    }
+  };
 
   return (
-    <div className="bb-vel">
-      <div className="bb-vel__in">
-        <header className="bb-vel__head">
-          <div>
-            <h1 className="bb-vel__title">
-              {greeting()}{me ? `, ${vocative(me)}` : ''}. <em>Co dnes hoří?</em>
-            </h1>
-            <p className="bb-vel__sub">
-              {today} · {totals.clients} aktivních klientů
-              {totals.finished > 0 && ` · ${totals.finished} doběhlo`}
-              {totals.critical > 0 && ` · ${totals.critical} v kritickém stavu`}
-            </p>
-          </div>
-        </header>
-
-        {calls.live.map((c) => (
-          <LiveCall key={c.uid} call={c} />
-        ))}
-
-        {/* Today, and what the calendar knows. */}
-        <section>
-          <SectionHead title="Dnes" count={calls.today.length ? `${calls.today.length} hovorů` : undefined} />
-          {!calls.configured ? (
-            <Empty>
-              Kalendář není napojený. Doplň <code>BEYOND_CALCOM_API_KEY</code> a uvidíš tu naplánované
-              hovory i to, kdo zrovna mluví.
-            </Empty>
-          ) : calls.error ? (
-            <Empty>Cal.com neodpovídá: {calls.error}</Empty>
-          ) : calls.today.length === 0 ? (
-            <Empty>
-              Dnes žádný hovor.
-              {calls.next && (
-                <>
-                  {' '}Nejbližší je {new Date(calls.next.startIso).toLocaleDateString('cs-CZ', DATE_FMT)} v{' '}
-                  {formatTime(calls.next.startIso)} ({calls.next.clientName || calls.next.title}).
-                </>
-              )}
-            </Empty>
-          ) : (
-            <div className="bb-band">
-              {calls.today.map((c) => (
-                <button
-                  key={c.uid}
-                  type="button"
-                  className="bb-band__row"
-                  style={{ background: 'transparent', border: 'none', borderBottom: '1px solid var(--bb-line2)', textAlign: 'left', width: '100%', cursor: c.clientSlug ? 'pointer' : 'default' }}
-                  onClick={() => c.clientSlug && onOpenClient(c.clientSlug)}
-                >
-                  <span className="bb-band__n">{formatTime(c.startIso)}</span>
-                  <span className="bb-band__t">{c.clientName || c.title}</span>
-                  <span className="bb-band__m">
-                    {c.host?.name || 'neznámý host'}
-                    {c.durationMin ? ` · ${c.durationMin} min` : ''}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* Written and waiting. First, because it is the cheapest thing on the
-            screen to finish: read it, click, done. */}
-        <Proposals compact />
-
-        {/* What a human has to move. */}
-        <section>
-          <SectionHead title="Vyžaduje tebe" count={needsUs.length} />
-          {needsUs.length === 0 ? (
-            <Empty>Nic nevisí na nás. Dobrá zpráva, tohle je sloupec, který má být prázdný.</Empty>
-          ) : (
-            <SignalList signals={needsUs} onOpenClient={onOpenClient} />
-          )}
-        </section>
-
-        {/* What is drifting on the client's side. */}
-        <section>
-          <SectionHead title="Riziko" count={risks.length} />
-          {risks.length === 0 ? (
-            <Empty>Žádný klient zrovna neuhýbá.</Empty>
-          ) : (
-            <SignalList signals={risks} onOpenClient={onOpenClient} />
-          )}
-        </section>
-
-        {/* Conditions that hold across the roster. Stated once. */}
-        {systemic.length > 0 && (
-          <section>
-            <SectionHead title="Stav systému" count={`${systemic.length} věcí`} />
-            <div className="bb-band">
-              {systemic.map((s) => (
-                <div key={s.type} className="bb-band__row">
-                  <span className="bb-band__n">
-                    {s.count}/{s.total}
-                  </span>
-                  <span className="bb-band__t">
-                    {s.title}
-                    {s.meaning && <span className="bb-band__m" style={{ display: 'block', marginTop: 2 }}>{s.meaning}</span>}
-                  </span>
-                  <SeverityChip severity={s.severity} />
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* The agent's own backlog, folded away. */}
-        {agent.length > 0 && (
-          <section>
-            <button
-              type="button"
-              className="bb-sec"
-              style={{ background: 'transparent', border: 'none', padding: 0, width: '100%', cursor: 'pointer' }}
-              onClick={() => setShowAgent((v) => !v)}
-              aria-expanded={showAgent}
-            >
-              <span className="bb-sec__h">Čeká na agenta</span>
-              <span className="bb-sec__n">
-                {agent.length} {showAgent ? '−' : '+'}
-              </span>
-            </button>
-            {showAgent && <SignalList signals={agent} onOpenClient={onOpenClient} />}
-          </section>
-        )}
-
-        {quiet && systemic.length === 0 && (
-          <Empty>Nic nehoří a nic nedrží. Zkontroluj, jestli se brain dnes ráno vůbec synchronizoval.</Empty>
-        )}
-
-        <p className="bb-vel__sub">
-          Index postaven {new Date(data.builtAt).toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' })}
-          {' · '}
+    <div className="bb-uk__prep">
+      <div className="bb-uk__ph">
+        <span className="bb-uk__dot" />
+        {prep.title}
+        {prep.kind === 'zprava' && prep.canSend === false && <small>WhatsApp není napojený, odeslat nepůjde</small>}
+      </div>
+      {editing ? (
+        <textarea className="bb-uk__edit" value={draft} onChange={(e) => setDraft(e.target.value)} rows={5} />
+      ) : (
+        <div className={`bb-uk__pb${prep.kind === 'navrh' ? ' bb-uk__pb--navrh' : ''}`}>{draft}</div>
+      )}
+      {diff && (
+        <pre className="bb-uk__diff">
+          {diff.removed.map((l) => `− ${l}`).concat(diff.added.map((l) => `+ ${l}`)).join('\n') || '(jen přesuny řádků)'}
+        </pre>
+      )}
+      <div className="bb-uk__pa">
+        {prep.actions.map((a) => (
           <button
+            key={a.action}
             type="button"
-            onClick={onOpenCalls}
-            style={{ background: 'none', border: 'none', padding: 0, color: 'var(--bb-ink2)', textDecoration: 'underline', cursor: 'pointer', font: 'inherit' }}
+            className={`bb-pill bb-pill--sm${a.primary ? ' bb-pill--primary' : ''}`}
+            disabled={busy != null || (a.action === 'navrh-odeslat' && prep.canSend === false)}
+            onClick={() => void run(a.action, a.path)}
           >
-            všechny hovory
+            {a.action === 'navrh-upravit' && editing ? 'Uložit text' : a.action === 'mozek-diff' && diff ? 'Skrýt změnu' : a.label}
           </button>
-        </p>
+        ))}
+        {err && <span className="bb-uk__err">{err}</span>}
       </div>
     </div>
   );
 }
 
-function SignalList({
-  signals,
-  onOpenClient,
-}: {
-  signals: Signal[];
-  onOpenClient: (slug: string) => void;
+function TaskRow({ task, people, me, onState, onRemove, onReload, onOpenFile }: {
+  task: Task;
+  people: Ukoly['people'];
+  me: string;
+  onState: (task: Task, next: Task['state']) => void;
+  onRemove: (task: Task) => void;
+  onReload: () => void;
+  onOpenFile: (path: string) => void;
 }) {
-  // The "what it means" line is a property of the signal type, not of the
-  // client, so two clients with the same problem would print it twice word for
-  // word. Say it on the first occurrence and let the rest stay scannable.
-  const explained = new Set<string>();
+  const [pop, setPop] = useState(false);
+  const by = task.createdBy === 'agent' || task.createdBy.includes('-') ? 'od brainu' : task.createdBy !== task.owner ? `zadal ${people.find((p) => p.key === task.createdBy)?.displayName || task.createdBy}` : null;
+  const fire = (next: Task['state']) => {
+    setPop(true);
+    setTimeout(() => setPop(false), 400);
+    onState(task, next);
+  };
+  return (
+    <div className={`bb-uk__row${task.state === 'work' ? ' bb-uk__row--work' : task.state === 'done' ? ' bb-uk__row--done' : ''}`}>
+      <button
+        type="button"
+        className={`bb-uk__chk bb-uk__chk--p${task.priority}${task.state !== 'none' ? ` bb-uk__chk--${task.state}` : ''}${pop ? ' bb-uk__chk--pop' : ''}`}
+        aria-label={task.state === 'done' ? 'Vrátit' : 'Hotovo (pravé tlačítko: pracuje se)'}
+        title={task.state === 'done' ? 'Vrátit' : 'Levým hotovo, pravým pracuje se'}
+        onClick={() => fire(task.state === 'done' ? 'none' : 'done')}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          fire(task.state === 'work' ? 'none' : 'work');
+        }}
+      >
+        {CHECK}
+      </button>
+      <div className="bb-uk__body">
+        <div className="bb-uk__t">{task.text}</div>
+        <div className="bb-uk__meta">
+          {task.client && <span className="bb-uk__cl">{task.client.name}</span>}
+          {task.note && <span>{task.note}</span>}
+          {by && <span className={by === 'od brainu' ? 'bb-uk__brain' : ''}>{by}</span>}
+          {!task.virtual && (
+            <button type="button" className="bb-uk__x" onClick={() => onRemove(task)} aria-label="Smazat úkol">
+              smazat
+            </button>
+          )}
+        </div>
+      </div>
+      <span className="bb-uk__end">
+        {task.dueLabel && <span className={`bb-uk__due${task.dueKind ? ` bb-uk__due--${task.dueKind}` : ''}`}>{task.dueLabel}</span>}
+        <Avatar person={task.owner} people={people} me={me} />
+      </span>
+      {task.state !== 'done' && task.prep && <Prep task={task} onDone={onReload} onOpenFile={onOpenFile} />}
+    </div>
+  );
+}
+
+function QuickAdd({ me, people, onAdded }: { me: string; people: Ukoly['people']; onAdded: () => void }) {
+  const [value, setValue] = useState('');
+  const [parsed, setParsed] = useState<QuickParse | null>(null);
+  const [busy, setBusy] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (timer.current) clearTimeout(timer.current);
+    if (!value.trim()) {
+      setParsed(null);
+      return;
+    }
+    timer.current = setTimeout(() => {
+      parseQuick(value).then(setParsed).catch(() => setParsed(null));
+    }, 180);
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, [value]);
+
+  const submit = async () => {
+    if (!value.trim() || busy) return;
+    setBusy(true);
+    try {
+      await createQuick(value);
+      setValue('');
+      setParsed(null);
+      onAdded();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const ownerName = (key: string) => people.find((p) => p.key === key)?.displayName || key;
+  return (
+    <div className="bb-uk__add">
+      <label className="bb-uk__field" htmlFor="bb-quick">
+        <span className="bb-uk__plus" aria-hidden="true">+</span>
+        <input
+          id="bb-quick"
+          type="text"
+          value={value}
+          placeholder="Přidej úkol, třeba: p1 dnes zavolat Pavlovi"
+          autoComplete="off"
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void submit();
+          }}
+        />
+      </label>
+      <div className="bb-uk__parsed">
+        {parsed ? (
+          <>
+            <span className={`bb-uk__tag bb-uk__tag--p${parsed.priority}`}>P{parsed.priority}</span>
+            {parsed.due && <span className="bb-uk__tag">{parsed.due}</span>}
+            {parsed.clientName && <span className="bb-uk__tag">{parsed.clientName}</span>}
+            <span className="bb-uk__tag">{ownerName(parsed.owner)}</span>
+            <span>{parsed.text || '…'}</span>
+          </>
+        ) : (
+          <span className="bb-uk__hint">
+            Levým hotovo, pravým pracuje se. Rozumí <code>p1</code> až <code>p4</code>, <code>dnes</code>, <code>zítra</code>, <code>pátek</code>, jménům klientů a <code>@{ownerName(me === 'tim' ? 'stepan' : 'tim').toLowerCase()}</code>
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function VelinPage({ onOpenClient, onOpenCalls, onOpenChat }: Props) {
+  const loadVelin = useCallback(() => fetchVelin(), []);
+  const loadUkoly = useCallback(() => fetchUkoly(), []);
+  const loadBoard = useCallback(() => fetchBoard(), []);
+  const velin = usePolled<Velin>(loadVelin, 120_000);
+  const ukoly = usePolled<Ukoly>(loadUkoly, 60_000);
+  const board = usePolled<{ builtAt: string; clients: BoardClient[] }>(loadBoard, 180_000);
+  const [filter, setFilter] = useState<'mine' | 'all' | 'ready'>('mine');
+  const [showDone, setShowDone] = useState(false);
+  const [local, setLocal] = useState<Task[] | null>(null);
+
+  const today = useMemo(() => new Date().toLocaleDateString('cs-CZ', DATE_FMT), []);
+  const tasks = local || ukoly.data?.tasks || [];
+  useEffect(() => {
+    setLocal(null);
+  }, [ukoly.data]);
+
+  const me = ukoly.data?.me || 'tim';
+  const people = ukoly.data?.people || [];
+
+  const setState = async (task: Task, next: Task['state']) => {
+    setLocal((cur) => (cur || tasks).map((t) => (t.id === task.id ? { ...t, state: next } : t)));
+    try {
+      await patchTask(task.id, { state: next });
+    } finally {
+      setTimeout(() => void ukoly.reload(), next === 'done' ? 450 : 250);
+    }
+  };
+  const remove = async (task: Task) => {
+    setLocal((cur) => (cur || tasks).filter((t) => t.id !== task.id));
+    await deleteTask(task.id).catch(() => {});
+    void ukoly.reload();
+  };
+  const openFile = (path: string) => window.dispatchEvent(new CustomEvent('beyond:open-file', { detail: { path } }));
+
+  const visible = sortTasks(
+    tasks.filter((t) => {
+      if (filter === 'mine') return t.owner === me;
+      if (filter === 'ready') return Boolean(t.prep) && t.state !== 'done';
+      return true;
+    }),
+  );
+  const work = visible.filter((t) => t.state === 'work');
+  const open = visible.filter((t) => t.state === 'none');
+  const done = visible.filter((t) => t.state === 'done');
+
+  const calls = velin.data?.calls;
+  const risks = (velin.data?.risks || []).slice(0, 4);
+  const clients = (board.data?.clients || []).filter((c) => c.isActive !== false);
+
+  const rowProps = { people, me, onState: setState, onRemove: remove, onReload: () => void ukoly.reload(), onOpenFile: openFile };
 
   return (
-    <div className="bb-sig">
-      {signals.map((s, i) => {
-        const showMeaning = !explained.has(s.type);
-        explained.add(s.type);
-        return (
-          <button
-            key={`${s.clientSlug}-${s.type}-${i}`}
-            type="button"
-            className="bb-sig__row"
-            onClick={() => s.clientSlug && onOpenClient(s.clientSlug)}
-          >
-            <SeverityChip severity={s.severity} />
-            <span className="bb-sig__who">{s.clientName}</span>
-            <span className="bb-sig__t">{s.title}</span>
-            <span className="bb-sig__d">{s.detail}</span>
-            {showMeaning && <span className="bb-sig__m">{s.meaning}</span>}
-            <ChevronRight className="bb-sig__go" size={15} strokeWidth={1.8} aria-hidden />
+    <div className="bb-vel">
+      <div className="bb-vel__in bb-uk">
+        <header className="bb-vel__head">
+          <h1 className="bb-vel__title">{today[0].toUpperCase() + today.slice(1)}</h1>
+          <button type="button" className="bb-pill" onClick={onOpenChat}>
+            Řekni agentovi
           </button>
-        );
-      })}
+        </header>
+
+        {calls?.live.map((c) => <LiveCall key={c.uid} call={c} />)}
+
+        <div className="bb-uk__grid">
+          <div>
+            <QuickAdd me={me} people={people} onAdded={() => void ukoly.reload()} />
+            <div className="bb-uk__filters">
+              {(['mine', 'all', 'ready'] as const).map((f) => (
+                <button key={f} type="button" className="bb-pill bb-pill--sm" aria-pressed={filter === f} onClick={() => setFilter(f)}>
+                  {f === 'mine' ? 'Moje' : f === 'all' ? 'Všichni' : 'Připravené brainem'}
+                </button>
+              ))}
+            </div>
+
+            {ukoly.error && !ukoly.data && <Empty>Úkoly se nenačetly: {ukoly.error}</Empty>}
+            {ukoly.loading && !ukoly.data && <p className="bb-vel__sub">Čtu úkoly…</p>}
+
+            {work.length > 0 && (
+              <div className="bb-uk__group">
+                <p className="bb-uk__gh"><b className="bb-uk__gh--work">Pracuje se</b><span>{work.length}</span></p>
+                <div className="bb-uk__box">
+                  {work.map((t) => <TaskRow key={t.id} task={t} {...rowProps} />)}
+                </div>
+              </div>
+            )}
+            {open.length > 0 && (
+              <div className="bb-uk__group">
+                <p className="bb-uk__gh"><b>{filter === 'all' ? 'Na řadě, všichni' : 'Na řadě'}</b><span>{open.length}</span></p>
+                {open.map((t) => <TaskRow key={t.id} task={t} {...rowProps} />)}
+              </div>
+            )}
+            {ukoly.data && work.length === 0 && open.length === 0 && (
+              <Empty>{filter === 'ready' ? 'Brain teď nic připraveného nemá.' : 'Nic na řadě. Napiš úkol nahoře, nebo počkej, co ráno přinese brain.'}</Empty>
+            )}
+            {done.length > 0 && (
+              <div className="bb-uk__group">
+                <p className="bb-uk__gh">
+                  <b>Hotovo</b><span>{done.length}</span>
+                  <button type="button" onClick={() => setShowDone((v) => !v)}>{showDone ? 'skrýt' : 'ukázat'}</button>
+                </p>
+                {showDone && done.map((t) => <TaskRow key={t.id} task={t} {...rowProps} />)}
+              </div>
+            )}
+          </div>
+
+          <aside className="bb-uk__rail">
+            <div>
+              <p className="bb-uk__h">Hovory dnes {calls?.today.length ? <span>{calls.today.length}</span> : null}</p>
+              {!calls ? null : !calls.configured ? (
+                <Empty>Kalendář není napojený.</Empty>
+              ) : calls.error ? (
+                <Empty>Cal.com neodpovídá: {calls.error}</Empty>
+              ) : calls.today.length === 0 ? (
+                <Empty>
+                  Dnes žádný hovor.
+                  {calls.next && <> Nejbližší {new Date(calls.next.startIso).toLocaleDateString('cs-CZ', { weekday: 'short', day: 'numeric', month: 'numeric' })} v {formatTime(calls.next.startIso)}.</>}
+                </Empty>
+              ) : (
+                calls.today.map((c) => (
+                  <div key={c.uid} className="bb-uk__call">
+                    <span className="bb-uk__tm">{formatTime(c.startIso)}</span>
+                    <div>
+                      <button type="button" className="bb-uk__nm" onClick={() => c.clientSlug && onOpenClient(c.clientSlug)}>
+                        {c.clientName || c.title}
+                      </button>
+                      <div className="bb-uk__w">
+                        {c.host?.name || 'neznámý host'}
+                        {c.durationMin ? ` · ${c.durationMin} min` : ''}
+                        {c.meetingUrl && <> · <a href={c.meetingUrl} target="_blank" rel="noreferrer">připojit</a></>}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+              {calls?.configured && !calls.error && (
+                <button type="button" className="bb-uk__more" onClick={onOpenCalls}>všechny hovory</button>
+              )}
+            </div>
+            <div>
+              <p className="bb-uk__h">Pozor</p>
+              {risks.length === 0 ? (
+                <Empty>Nic nehoří.</Empty>
+              ) : (
+                <div className="bb-uk__watch">
+                  {risks.map((s) => (
+                    <button key={`${s.clientSlug}-${s.type}`} type="button" className={`bb-uk__wi${s.severity === 'critical' ? ' bb-uk__wi--crit' : ''}`} onClick={() => s.clientSlug && onOpenClient(s.clientSlug)}>
+                      <i />
+                      <div>
+                        {s.clientName ? `${s.clientName}: ` : ''}{s.title}
+                        <small>{s.detail}</small>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </aside>
+        </div>
+
+        <section className="bb-uk__clients">
+          <p className="bb-uk__h">Klienti <span>{clients.length}</span><em>týden · tento týden · další hovor</em></p>
+          {clients.map((c) => {
+            const pct = c.programWeek && c.totalWeeks ? Math.min(100, Math.round((c.programWeek / c.totalWeeks) * 100)) : 0;
+            const bar = c.worst === 'critical' ? 'crit' : c.worst === 'watch' ? 'warn' : c.programWeek && c.totalWeeks && c.programWeek >= c.totalWeeks ? 'warn' : '';
+            const top = c.signals[0];
+            return (
+              <button key={c.slug} type="button" className="bb-uk__cl" onClick={() => onOpenClient(c.slug)}>
+                <div className="bb-uk__cn">{c.name}<small>{c.lastInboundIso ? `psal ${ago(c.lastInboundIso)}` : c.waBroken ? 'WhatsApp bez zpráv' : 'bez kontaktu'}</small></div>
+                <div>
+                  <div className="bb-uk__wk"><span>{c.programWeek ? `W${c.programWeek}` : '—'}</span><span>{c.totalWeeks ? `z ${c.totalWeeks}` : ''}</span></div>
+                  <div className="bb-uk__bar"><i className={bar} style={{ width: `${pct}%` }} /></div>
+                </div>
+                <div className="bb-uk__focus">
+                  {top ? top.title : 'Bez signálu'}
+                  <small>{top ? top.detail : `dlužíme ${c.openOurs}, dluží ${c.openTheirs}`}</small>
+                </div>
+                <div className="bb-uk__nx">{c.nextCall ? `${new Date(c.nextCall.startIso).toLocaleDateString('cs-CZ', { weekday: 'short', day: 'numeric', month: 'numeric' })} ${formatTime(c.nextCall.startIso)}` : 'hovor nedomluven'}</div>
+              </button>
+            );
+          })}
+        </section>
+      </div>
     </div>
   );
 }
