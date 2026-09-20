@@ -64,6 +64,39 @@ const CHECK = (
   </svg>
 );
 
+/**
+ * WhatsApp's own markup: *bold*, _italic_, ~strike~, ```mono```, lines that
+ * start with "- " or "• " as bullets. Rendered the way the client will see it,
+ * because that is what the click approves.
+ */
+function waHtml(text: string): string {
+  const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] as string);
+  const inline = (t: string) =>
+    esc(t)
+      .replace(/```([^`]+)```/g, '<code>$1</code>')
+      .replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s.,!?:;)]|$)/g, '$1<b>$2</b>')
+      .replace(/(^|[\s(])_([^_\n]+)_(?=[\s.,!?:;)]|$)/g, '$1<i>$2</i>')
+      .replace(/(^|[\s(])~([^~\n]+)~(?=[\s.,!?:;)]|$)/g, '$1<s>$2</s>');
+  const lines = text.replace(/\r/g, '').split('\n');
+  const out: string[] = [];
+  let list: string[] = [];
+  const flush = () => {
+    if (list.length) out.push(`<ul>${list.map((l) => `<li>${l}</li>`).join('')}</ul>`);
+    list = [];
+  };
+  for (const raw of lines) {
+    const m = /^\s*(?:[-•*]\s+)(.*)$/.exec(raw);
+    if (m) {
+      list.push(inline(m[1]));
+      continue;
+    }
+    flush();
+    out.push(raw.trim() === '' ? '<br>' : `<p>${inline(raw)}</p>`);
+  }
+  flush();
+  return out.join('');
+}
+
 function Prep({ task, onDone, onOpenFile }: { task: Task; onDone: () => void; onOpenFile: (path: string) => void }) {
   const prep = task.prep;
   const [busy, setBusy] = useState<string | null>(null);
@@ -71,7 +104,10 @@ function Prep({ task, onDone, onOpenFile }: { task: Task; onDone: () => void; on
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(prep?.body || '');
   const [diff, setDiff] = useState<{ removed: string[]; added: string[] } | null>(null);
+  const [expanded, setExpanded] = useState(false);
   if (!prep) return null;
+  const isMessage = prep.kind === 'zprava';
+  const long = (prep.body || '').length > 160 || (prep.body || '').includes('\n');
 
   const run = async (action: string, path?: string) => {
     setErr(null);
@@ -114,17 +150,30 @@ function Prep({ task, onDone, onOpenFile }: { task: Task; onDone: () => void; on
     }
   };
 
+  const rows = Math.min(24, Math.max(8, draft.split('\n').length + 2));
   return (
-    <div className="bb-uk__prep">
+    <div className={`bb-uk__prep${editing || expanded ? ' bb-uk__prep--open' : ''}`}>
       <div className="bb-uk__ph">
         <span className="bb-uk__dot" />
         {prep.title}
-        {prep.kind === 'zprava' && prep.canSend === false && <small>WhatsApp není napojený, odeslat nepůjde</small>}
+        {isMessage && prep.canSend === false && <small>WhatsApp není napojený, odeslat nepůjde</small>}
+        {!editing && long && (
+          <button type="button" className="bb-uk__expand" onClick={() => setExpanded((v) => !v)}>
+            {expanded ? 'sbalit' : isMessage ? 'celá zpráva' : 'celý text'}
+          </button>
+        )}
       </div>
       {editing ? (
-        <textarea className="bb-uk__edit" value={draft} onChange={(e) => setDraft(e.target.value)} rows={5} />
+        <>
+          <textarea className="bb-uk__edit" value={draft} onChange={(e) => setDraft(e.target.value)} rows={rows} spellCheck />
+          <div className="bb-uk__wa bb-uk__wa--preview" aria-label="Náhled jako na WhatsAppu" dangerouslySetInnerHTML={{ __html: waHtml(draft) }} />
+        </>
+      ) : expanded && isMessage ? (
+        <div className="bb-uk__wa" dangerouslySetInnerHTML={{ __html: waHtml(draft) }} />
+      ) : expanded ? (
+        <div className="bb-uk__pb bb-uk__pb--full">{draft}</div>
       ) : (
-        <div className={`bb-uk__pb${prep.kind === 'navrh' ? ' bb-uk__pb--navrh' : ''}`}>{draft}</div>
+        <button type="button" className={`bb-uk__pb${prep.kind === 'navrh' ? ' bb-uk__pb--navrh' : ''}`} onClick={() => long && setExpanded(true)}>{draft}</button>
       )}
       {diff && (
         <pre className="bb-uk__diff">

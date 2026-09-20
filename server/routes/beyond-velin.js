@@ -304,7 +304,7 @@ function composeTasks(index) {
 
   const messages = listProposals({ status: 'pending' }).map((p) => ({
     id: `navrh:${p.id}`,
-    text: `${p.kind === 'shrnuti-callu' ? 'Poslat shrnutí callu' : p.kind === 'pripomenuti' ? 'Připomenout se' : 'Ozvat se'}${p.clientName ? ` ${p.clientName}` : ''}`,
+    text: p.kind === 'shrnuti-callu' ? 'Poslat shrnutí callu' : p.kind === 'pripomenuti' ? 'Připomenout se' : 'Ozvat se',
     priority: p.kind === 'shrnuti-callu' ? 1 : 2,
     state: ukoly.virtualState(`navrh:${p.id}`),
     client: shapeClient(p.clientSlug),
@@ -324,6 +324,7 @@ function composeTasks(index) {
         { label: 'Odeslat', action: 'navrh-odeslat', primary: true },
         { label: 'Upravit', action: 'navrh-upravit' },
         { label: 'Zahodit', action: 'navrh-zahodit' },
+        ...(p.clientSlug ? [{ label: 'Zápis callu', action: 'open-file', path: `clients/aktivni/${p.clientSlug}/cally.md` }] : []),
       ],
     },
     createdAt: p.createdAt,
