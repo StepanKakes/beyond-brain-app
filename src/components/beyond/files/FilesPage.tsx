@@ -31,6 +31,11 @@ export default function FilesPage({ path, onOpen }: { path: string | null; onOpe
   const [pane, setPane] = useState<Pane>(path ? 'file' : 'tree');
   const [mode, setMode] = useState<'local' | 'all'>('local');
   const [depth, setDepth] = useState(1);
+  // Raw material (transcripts, voice notes, pulled dumps) is half the files
+  // and every distilled note cites dozens of them, so with it the graph is a
+  // fan of citations and the notes themselves are invisible. Off by default,
+  // the way one filters a vault's attachments folder in Obsidian.
+  const [withRaw, setWithRaw] = useState(false);
 
   // Load once, and again when the sidebar pulled a fresh brain.
   useEffect(() => {
@@ -67,6 +72,13 @@ export default function FilesPage({ path, onOpen }: { path: string | null; onOpe
     return allFiles.filter((p) => { const f = fold(p); return words.every((w) => f.includes(w)); }).slice(0, 80);
   }, [allFiles, query]);
 
+  const shownGraph = useMemo(() => {
+    if (!graph) return null;
+    if (withRaw || (path && isRaw(path))) return graph;
+    const keep = new Set(graph.nodes.filter((n) => !isRaw(n.path)).map((n) => n.path));
+    return { nodes: graph.nodes.filter((n) => keep.has(n.path)), edges: graph.edges.filter((e) => keep.has(e.from) && keep.has(e.to)) };
+  }, [graph, withRaw, path]);
+
   const links = useMemo(() => {
     if (!graph || !path) return { out: [] as string[], in: [] as string[] };
     const out = graph.edges.filter((e) => e.from === path).map((e) => e.to);
@@ -75,12 +87,12 @@ export default function FilesPage({ path, onOpen }: { path: string | null; onOpe
   }, [graph, path]);
 
   const stats = useMemo(() => {
-    if (!graph) return null;
+    if (!shownGraph) return null;
     const linked = new Set<string>();
-    for (const e of graph.edges) { linked.add(e.from); linked.add(e.to); }
-    const notes = graph.nodes.filter((n) => n.path.endsWith('.md'));
-    return { notes: notes.length, links: graph.edges.length, orphans: notes.filter((n) => !linked.has(n.path)).length };
-  }, [graph]);
+    for (const e of shownGraph.edges) { linked.add(e.from); linked.add(e.to); }
+    const notes = shownGraph.nodes.filter((n) => n.path.endsWith('.md'));
+    return { notes: notes.length, links: shownGraph.edges.length, orphans: notes.filter((n) => !linked.has(n.path)).length };
+  }, [shownGraph]);
 
   const toggle = useCallback((dir: string) => {
     setOpen((prev) => {
@@ -141,11 +153,16 @@ export default function FilesPage({ path, onOpen }: { path: string | null; onOpe
                   <p className="bb-vel__sub">{stats.notes} poznámek, {stats.links} odkazů, {stats.orphans} bez jediného odkazu</p>
                 )}
               </div>
-              <Legend />
+              <div className="bb-fx__ovtools">
+                <Legend />
+                <button type="button" className="bb-pill bb-pill--sm" aria-pressed={withRaw} onClick={() => setWithRaw((v) => !v)} title="Přepisy, hlasovky a stažená data">
+                  {withRaw ? 'Se surovinami' : 'Bez surovin'}
+                </button>
+              </div>
             </div>
-            {graph && graph.nodes.length > 0 ? (
+            {shownGraph && shownGraph.nodes.length > 0 ? (
               <div className="bb-fx__big">
-                <FileGraph graph={graph} focus={null} mode="all" onSelect={select} />
+                <FileGraph graph={shownGraph} focus={null} mode="all" onSelect={select} />
               </div>
             ) : (
               <p className="bb-fx__empty">{graph ? 'Žádné poznámky.' : 'Kreslím graf…'}</p>
@@ -167,10 +184,13 @@ export default function FilesPage({ path, onOpen }: { path: string | null; onOpe
                     {depth === 1 ? '1 krok' : '2 kroky'}
                   </button>
                 )}
+                <button type="button" className="bb-pill bb-pill--sm" aria-pressed={withRaw} onClick={() => setWithRaw((v) => !v)} title="Přepisy, hlasovky a stažená data">
+                  Suroviny
+                </button>
               </div>
             </div>
             <div className="bb-fx__small">
-              <FileGraph graph={graph} focus={path} mode={mode} depth={depth} onSelect={select} />
+              <FileGraph graph={shownGraph || graph} focus={path} mode={mode} depth={depth} onSelect={select} />
             </div>
             <LinkList title="Odkazuje na" items={links.out} onOpen={select} />
             <LinkList title="Odkazují sem" items={links.in} onOpen={select} />
@@ -181,6 +201,11 @@ export default function FilesPage({ path, onOpen }: { path: string | null; onOpe
       </aside>
     </div>
   );
+}
+
+/** Transcripts, voice notes and pulled dumps: sources, not notes. */
+function isRaw(p: string): boolean {
+  return /(^|\/)(_raw|raw)\//.test(p);
 }
 
 function Legend() {
