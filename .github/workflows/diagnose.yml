@@ -1,0 +1,91 @@
+name: Diagnose
+
+# Read-only look at the box, run by hand from the Actions tab. Nobody has to
+# sit at the Windows machine to see why a chat did not answer: prints the
+# service, the tail of its log, the last chat messages the app recorded and
+# the newest Claude transcripts. Changes nothing.
+
+on:
+  workflow_dispatch:
+    inputs:
+      hours:
+        description: How many hours back to look
+        default: '3'
+
+jobs:
+  diagnose:
+    runs-on: [self-hosted, windows, beyond-brain]
+    timeout-minutes: 10
+    steps:
+      - name: Look
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $app = if ($env:BEYOND_APP_DIR) { $env:BEYOND_APP_DIR } else { 'C:\Users\Vlast\beyond\beyond-brain-app' }
+          $svc = if ($env:BEYOND_SERVICE_NAME) { $env:BEYOND_SERVICE_NAME } else { 'BeyondBrainApp' }
+          $hours = [double]'${{ github.event.inputs.hours }}'
+          $since = (Get-Date).AddHours(-$hours)
+          Set-Location $app
+
+          Write-Host "=== service"
+          Get-CimInstance Win32_Service -Filter "Name='$svc'" | Format-List Name, State, StartName, PathName, ProcessId
+          Write-Host "=== health"
+          try { (Invoke-WebRequest -Uri http://127.0.0.1:3001/health -UseBasicParsing -TimeoutSec 5).Content } catch { Write-Host "no answer: $_" }
+          Write-Host "=== commit"
+          git log -1 --format='%h %cd %s'
+
+          Write-Host "=== log files"
+          $logs = @()
+          if (Get-Command nssm -ErrorAction SilentlyContinue) {
+            foreach ($k in 'AppStdout', 'AppStderr') {
+              $p = (nssm get $svc $k 2>$null)
+              if ($p) { Write-Host "$k = $p"; $logs += $p }
+            }
+          }
+          $logs += Get-ChildItem -Path $app, "$app\logs", "$env:USERPROFILE\.cloudcli", "$env:ProgramData\$svc" -Filter *.log -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
+          $logs = $logs | Select-Object -Unique
+          foreach ($l in $logs) {
+            if (Test-Path $l) {
+              Write-Host "--- $l ($( (Get-Item $l).LastWriteTime ))"
+              Get-Content $l -Tail 200 -ErrorAction SilentlyContinue | Select-String -Pattern 'beyond|stream|error|Error|restart|shutdown|listening|session' | Select-Object -Last 120
+            }
+          }
+
+          Write-Host "=== app history (last 40 chat messages)"
+          $script = @'
+const path = require('path');
+const fs = require('fs');
+require('dotenv').config({ path: path.join(process.cwd(), '.env') });
+const Database = require('better-sqlite3');
+const candidates = [process.env.DATABASE_PATH, path.join(require('os').homedir(), '.cloudcli', 'auth.db'), path.join(process.cwd(), 'server', 'database', 'auth.db')].filter(Boolean);
+const dbPath = candidates.find((p) => fs.existsSync(p));
+if (!dbPath) { console.log('no db in', candidates); process.exit(0); }
+console.log('db', dbPath);
+const db = new Database(dbPath, { readonly: true });
+for (const r of db.prepare("SELECT session_id, role, ts, substr(replace(content, char(10), ' '), 1, 110) AS c FROM beyond_messages ORDER BY id DESC LIMIT 40").all().reverse()) {
+  console.log(r.ts, r.session_id.slice(0, 8), r.role.padEnd(9), r.c);
+}
+console.log('--- runs');
+try {
+  for (const r of db.prepare("SELECT job, status, started_at, finished_at, substr(coalesce(error, summary, ''), 1, 90) AS s FROM beyond_runs ORDER BY id DESC LIMIT 8").all()) console.log(r.started_at, r.job.padEnd(18), r.status.padEnd(8), r.s);
+} catch (e) { console.log('runs:', e.message); }
+'@
+          Set-Content -Path "$env:TEMP\bb-diag.cjs" -Value $script -Encoding UTF8
+          node "$env:TEMP\bb-diag.cjs"
+
+          Write-Host "=== claude transcripts touched in the last $hours h"
+          $files = Get-ChildItem -Path "$env:USERPROFILE\.claude\projects" -Recurse -Filter *.jsonl -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -gt $since } | Sort-Object LastWriteTime
+          foreach ($f in $files) {
+            Write-Host "--- $($f.Name) $($f.LastWriteTime) $([math]::Round($f.Length / 1024)) kB"
+            Get-Content $f.FullName -Tail 12 | ForEach-Object {
+              try {
+                $j = $_ | ConvertFrom-Json
+                $role = if ($j.message.role) { $j.message.role } else { $j.type }
+                $txt = ''
+                if ($j.message.content -is [string]) { $txt = $j.message.content }
+                elseif ($j.message.content) { $txt = ($j.message.content | ForEach-Object { if ($_.type -eq 'text') { $_.text } elseif ($_.type -eq 'tool_use') { "[tool $($_.name)]" } elseif ($_.type -eq 'tool_result') { '[tool_result]' } }) -join ' ' }
+                if ($txt.Length -gt 110) { $txt = $txt.Substring(0, 110) }
+                Write-Host ("  {0} {1,-9} {2}" -f $j.timestamp, $role, ($txt -replace "`n", ' '))
+              } catch { Write-Host "  ?" }
+            }
+          }
