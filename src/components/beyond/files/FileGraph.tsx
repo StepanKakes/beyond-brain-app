@@ -10,7 +10,9 @@ import { basename } from './api';
  * which top-level folder the note lives in, size says how many notes point at
  * it, and the selected note sits in the middle with its neighbourhood lit up.
  * Plain canvas, a small force simulation, no library: drag a node, drag the
- * background to pan, wheel to zoom, click a node to open it.
+ * background or scroll to pan, pinch or Ctrl + wheel to zoom, click a node to
+ * open it. The picture fits itself to the frame while it settles, and stays
+ * where the person put it once they touch it.
  */
 
 type SimNode = {
@@ -101,7 +103,10 @@ export default function FileGraph({
     hover: number;
     drag: { node: number; moved: boolean } | { pan: true; x: number; y: number; moved: boolean } | null;
     raf: number;
-  }>({ nodes: [], edges: [], byPath: new Map(), alpha: 1, scale: 1, tx: 0, ty: 0, hover: -1, drag: null, raf: 0 });
+    /** Fit the view to the graph until the person moves it themselves. */
+    autoFit: boolean;
+    size: { w: number; h: number };
+  }>({ nodes: [], edges: [], byPath: new Map(), alpha: 1, scale: 1, tx: 0, ty: 0, hover: -1, drag: null, raf: 0, autoFit: true, size: { w: 0, h: 0 } });
 
   const focusRef = useRef(focus);
   focusRef.current = focus;
@@ -155,10 +160,7 @@ export default function FileGraph({
     st.byPath = byPath;
     st.alpha = 1;
     st.hover = -1;
-    // Centre the focus and fit the rest.
-    st.tx = 0;
-    st.ty = 0;
-    st.scale = n > 200 ? 0.55 : n > 60 ? 0.8 : 1.1;
+    st.autoFit = true;
     const f = focusRef.current ? byPath.get(focusRef.current) : undefined;
     if (f != null) {
       nodes[f].x = 0;
@@ -181,6 +183,7 @@ export default function FileGraph({
       const dpr = window.devicePixelRatio || 1;
       w = rect.width;
       h = rect.height;
+      st.size = { w, h };
       canvas.width = Math.round(w * dpr);
       canvas.height = Math.round(h * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -192,11 +195,32 @@ export default function FileGraph({
     const css = () => getComputedStyle(canvas);
     const token = (name: string) => css().getPropertyValue(name).trim();
 
+    /** Scale and pan so every node is inside the frame with a margin. */
+    const fitView = () => {
+      const { nodes } = st;
+      if (!nodes.length || !w || !h) return;
+      let minX = Infinity; let maxX = -Infinity; let minY = Infinity; let maxY = -Infinity;
+      for (const nd of nodes) {
+        if (nd.x < minX) minX = nd.x;
+        if (nd.x > maxX) maxX = nd.x;
+        if (nd.y < minY) minY = nd.y;
+        if (nd.y > maxY) maxY = nd.y;
+      }
+      const gw = Math.max(1, maxX - minX);
+      const gh = Math.max(1, maxY - minY);
+      const scale = Math.min(3, Math.max(0.15, Math.min((w - 48) / gw, (h - 48) / gh)));
+      st.scale = scale;
+      st.tx = -((minX + maxX) / 2) * scale;
+      st.ty = -((minY + maxY) / 2) * scale;
+    };
+
     const step = () => {
       const { nodes, edges } = st;
-      if (st.alpha > 0.003) {
+      if (st.alpha > 0.002) {
         const k = st.alpha;
-        // Repulsion between every pair; the graph is a few hundred notes.
+        // Repulsion between every pair, with a floor on the distance so two
+        // notes on top of each other push apart instead of launching into
+        // orbit. The graph is a few hundred notes, so every pair is fine.
         for (let i = 0; i < nodes.length; i += 1) {
           const a = nodes[i];
           for (let j = i + 1; j < nodes.length; j += 1) {
@@ -204,8 +228,8 @@ export default function FileGraph({
             let dx = a.x - b.x;
             let dy = a.y - b.y;
             let d2 = dx * dx + dy * dy;
-            if (d2 < 1) { dx = Math.random() - 0.5; dy = Math.random() - 0.5; d2 = 1; }
-            const f = (900 * k) / d2;
+            if (d2 < 1) { dx = (Math.random() - 0.5) * 2; dy = (Math.random() - 0.5) * 2; d2 = dx * dx + dy * dy; }
+            const f = (1400 * k) / Math.max(d2, 400);
             const fx = dx * f;
             const fy = dy * f;
             a.vx += fx; a.vy += fy;
@@ -219,22 +243,26 @@ export default function FileGraph({
           const dx = b.x - a.x;
           const dy = b.y - a.y;
           const d = Math.sqrt(dx * dx + dy * dy) || 1;
-          const want = 46 + a.r + b.r;
-          const f = ((d - want) / d) * 0.06 * k;
+          const want = 40 + a.r + b.r;
+          const f = ((d - want) / d) * 0.05 * k;
           a.vx += dx * f; a.vy += dy * f;
           b.vx -= dx * f; b.vy -= dy * f;
         }
-        // Gravity to the middle, damping, integrate.
+        // Gravity to the middle, damping, a speed limit, integrate.
+        const maxV = 4 + 20 * k;
         for (const nd of nodes) {
           if (nd.pinned) { nd.vx = 0; nd.vy = 0; continue; }
-          nd.vx -= nd.x * 0.004 * k;
-          nd.vy -= nd.y * 0.004 * k;
-          nd.vx *= 0.82;
-          nd.vy *= 0.82;
+          nd.vx -= nd.x * 0.02 * k;
+          nd.vy -= nd.y * 0.02 * k;
+          nd.vx *= 0.6;
+          nd.vy *= 0.6;
+          const sp = Math.sqrt(nd.vx * nd.vx + nd.vy * nd.vy);
+          if (sp > maxV) { nd.vx = (nd.vx / sp) * maxV; nd.vy = (nd.vy / sp) * maxV; }
           nd.x += nd.vx;
           nd.y += nd.vy;
         }
-        st.alpha *= 0.985;
+        st.alpha *= 0.99;
+        if (st.autoFit) fitView();
       }
       draw();
       st.raf = requestAnimationFrame(step);
@@ -276,7 +304,13 @@ export default function FileGraph({
       }
       ctx.globalAlpha = 1;
 
-      const showAllLabels = st.scale > 1.35 || nodes.length <= 40;
+      const showAllLabels = st.scale > 1.3 || nodes.length <= 40;
+      // Hubs get a name at any zoom, so the big picture reads without hovering.
+      let hubDeg = Infinity;
+      if (!showAllLabels && nodes.length > 40) {
+        const degs = nodes.map((n) => n.deg).sort((a, b) => b - a);
+        hubDeg = Math.max(2, degs[Math.min(degs.length - 1, 14)] || 2);
+      }
       for (let i = 0; i < nodes.length; i += 1) {
         const nd = nodes[i];
         const colour = token(GROUP_TOKEN[nd.group] || '--bb-ink3') || ink3;
@@ -293,7 +327,7 @@ export default function FileGraph({
           ctx.arc(nd.x, nd.y, nd.r + 3 / st.scale, 0, Math.PI * 2);
           ctx.stroke();
         }
-        if (showAllLabels || lit.has(i)) {
+        if (showAllLabels || lit.has(i) || nd.deg >= hubDeg) {
           ctx.font = `${Math.max(9, 11 / st.scale)}px ${token('--bb-font') || 'system-ui'}`;
           ctx.fillStyle = lit.has(i) || !dim ? ink : ink3;
           ctx.textAlign = 'center';
@@ -327,6 +361,7 @@ export default function FileGraph({
     };
 
     const onDown = (ev: MouseEvent) => {
+      st.autoFit = false;
       const i = hit(ev);
       if (i >= 0) {
         st.drag = { node: i, moved: false };
@@ -374,7 +409,15 @@ export default function FileGraph({
     const onLeave = () => { st.hover = -1; st.drag = null; };
     const onWheel = (ev: WheelEvent) => {
       ev.preventDefault();
-      const factor = Math.exp(-ev.deltaY * 0.0015);
+      st.autoFit = false;
+      // A trackpad scroll pans, like a map; pinch (which browsers report with
+      // ctrlKey) or Ctrl + wheel zooms.
+      if (!ev.ctrlKey && !ev.metaKey) {
+        st.tx -= ev.deltaX;
+        st.ty -= ev.deltaY;
+        return;
+      }
+      const factor = Math.exp(-ev.deltaY * 0.01);
       const next = Math.min(4, Math.max(0.2, st.scale * factor));
       const rect = canvas.getBoundingClientRect();
       const mx = ev.clientX - rect.left - w / 2;
@@ -385,6 +428,8 @@ export default function FileGraph({
       st.scale = next;
     };
 
+    const onDouble = () => { st.autoFit = true; fitView(); };
+    canvas.addEventListener('dblclick', onDouble);
     canvas.addEventListener('mousedown', onDown);
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
@@ -394,6 +439,7 @@ export default function FileGraph({
     return () => {
       cancelAnimationFrame(st.raf);
       ro.disconnect();
+      canvas.removeEventListener('dblclick', onDouble);
       canvas.removeEventListener('mousedown', onDown);
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
@@ -402,5 +448,10 @@ export default function FileGraph({
     };
   }, []);
 
-  return <canvas ref={canvasRef} className="bb-fx__canvas" aria-label="Graf odkazů mezi soubory" />;
+  return (
+    <div className="bb-fx__gwrap">
+      <canvas ref={canvasRef} className="bb-fx__canvas" aria-label="Graf odkazů mezi soubory" />
+      <p className="bb-fx__hint">Posun prstem nebo tažením, zoom pinch nebo Ctrl + kolečko, dvojklik srovná</p>
+    </div>
+  );
 }
