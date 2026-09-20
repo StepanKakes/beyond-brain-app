@@ -38,6 +38,7 @@ import { brainIsDirty, commitBrain, pullBrain } from './beyond-git.js';
 import { describeSchedule } from './beyond-schedule.js';
 import { broadcast as tgBroadcast, sendTo as tgSendTo } from './beyond-telegram.js';
 import { pruneHistory } from './beyond-history.js';
+import { invalidateBrainIndex } from './brain-index.js';
 
 /** How often to look at the clock. Jobs decide their own cadence. */
 const TICK_MS = 60_000;
@@ -52,6 +53,9 @@ let timer = null;
 let running = null; // name of the job currently in flight, or null
 let paused = false;
 let lastPrune = 0;
+let lastPull = 0;
+/** n8n and other machines commit to origin; without this the box only saw them before a run. */
+const PULL_EVERY_MS = 5 * 60 * 1000;
 
 function log(...args) {
   console.log('[scheduler]', ...args);
@@ -179,6 +183,18 @@ async function runEvent(ev) {
 
 async function tick() {
   if (paused || running) return;
+
+  // Keep the working copy current even when no job has work, so the velín
+  // and the timeline show what n8n or a colleague committed minutes ago.
+  if (Date.now() - lastPull > PULL_EVERY_MS) {
+    lastPull = Date.now();
+    const pulled = await pullBrain();
+    if (pulled.note) log(pulled.note);
+    if (pulled.changed) {
+      invalidateBrainIndex();
+      log('brain se posunul na originu, index přestavěn');
+    }
+  }
 
   // The doorbell first.
   const ev = takeDueEvent();

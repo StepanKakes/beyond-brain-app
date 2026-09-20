@@ -37,10 +37,14 @@ async function git(args, { cwd = resolveBrainPath() } = {}) {
  * throws; a failed pull is a note in the run log, not a dead run.
  */
 export async function pullBrain() {
+  const before = (await git(['rev-parse', 'HEAD'])).stdout;
   const r = await git(['pull', '--rebase', '--autostash', '--quiet']);
-  if (r.ok) return { ok: true, note: null };
+  if (r.ok) {
+    const after = (await git(['rev-parse', 'HEAD'])).stdout;
+    return { ok: true, note: null, changed: Boolean(before && after && before !== after) };
+  }
   await git(['rebase', '--abort']);
-  return { ok: false, note: `git pull selhal: ${r.stderr.slice(0, 200)}` };
+  return { ok: false, note: `git pull selhal: ${r.stderr.slice(0, 200)}`, changed: false };
 }
 
 /** Is there anything to commit? */

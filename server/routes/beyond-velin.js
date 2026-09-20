@@ -19,6 +19,7 @@ import * as mozek from '../services/beyond-mozek.js';
 import { createTask, removeTask, setScheduleOverride, updateTask } from '../services/beyond-tasks.js';
 import { snapshot as memorySnapshot } from '../services/beyond-memory.js';
 import * as ukoly from '../services/beyond-ukoly.js';
+import { pullBrain } from '../services/beyond-git.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { resolveBrainPath } from '../utils/brain-path.js';
@@ -237,6 +238,8 @@ router.get('/calls', async (req, res) => {
 /** Force a rebuild after a sync. Cheap: the whole parse is milliseconds. */
 router.post('/refresh', async (_req, res) => {
   try {
+    const pulled = await pullBrain();
+    if (pulled.note) console.warn('[velin] refresh:', pulled.note);
     invalidateBrainIndex();
     const index = await getBrainIndex({ force: true });
     res.json({ ok: true, builtAt: index.builtAt, clients: index.clients.length });
