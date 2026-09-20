@@ -236,7 +236,10 @@ function callbackHtml({ ok, connectorId, error }) {
 <body><div class="card"><h1>${heading}</h1><p>${detail}</p></div>
 <script>
 try { if (window.opener) window.opener.postMessage(${payload}, '*'); } catch (e) {}
-setTimeout(function(){ try { window.close(); } catch (e) {} }, ${ok ? 800 : 2500});
+setTimeout(function(){
+  if (window.opener) { try { window.close(); } catch (e) {} }
+  else { location.replace('/'); }
+}, ${ok ? 800 : 2500});
 </script></body></html>`;
 }
 

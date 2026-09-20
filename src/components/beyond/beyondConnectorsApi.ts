@@ -182,15 +182,28 @@ export function applyToCurrentChat(timeoutMs = 10000): Promise<ApplyResult> {
  * and resolve when our callback posts back. Resolves `{ ok, error? }`.
  */
 export async function connectOAuth(id: string): Promise<{ ok: boolean; error?: string }> {
-  const { authorizationUrl } = await startOAuth(id);
+  // The window has to open inside the click, before any await: once the
+  // gesture is over, Safari and most blockers refuse it and the button
+  // looks dead. So open it empty first and point it at the login when the
+  // server has the address. If it is blocked anyway, the page itself goes
+  // to the login and the callback brings it back.
   const popup = window.open(
-    authorizationUrl,
+    'about:blank',
     'beyond-mcp-oauth',
     'width=520,height=720,menubar=no,toolbar=no,location=yes',
   );
-  if (!popup) {
-    return { ok: false, error: 'Vyskakovací okno bylo zablokováno prohlížečem.' };
+  let authorizationUrl: string;
+  try {
+    ({ authorizationUrl } = await startOAuth(id));
+  } catch (e) {
+    try { popup?.close(); } catch { /* already gone */ }
+    throw e;
   }
+  if (!popup) {
+    window.location.assign(authorizationUrl);
+    return { ok: false, error: 'Otevírám přihlášení v tomto okně.' };
+  }
+  popup.location.replace(authorizationUrl);
 
   return new Promise((resolve) => {
     let settled = false;
