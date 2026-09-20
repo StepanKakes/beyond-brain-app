@@ -413,11 +413,14 @@ async function writeupAndNotion(call, log) {
   const ours = ourPromisesFromWriteup(body);
   const notes = [`${call.name}: zápis ${rel} (${clientTasks.length} úkolů klienta, ${ours.length} slibů našich)`];
 
-  // What we promised becomes our tasks, once.
+  // What we promised becomes our tasks, once. Only for a recent call: a
+  // promise from three weeks ago is either kept already or moot, and either
+  // way it is noise on the list.
   const index = await getBrainIndex();
   const client = index.clients.find((c) => c.slug === call.slug);
+  const recent = Date.now() - Date.parse(call.dateIso) < 7 * 24 * 60 * 60 * 1000;
   const existing = listUkoly().filter((t) => t.state !== 'done' && t.client === call.slug).map((t) => t.text.toLowerCase());
-  for (const promise of ours) {
+  for (const promise of recent ? ours : []) {
     if (existing.includes(promise.toLowerCase())) continue;
     await createUkol({
       text: promise,
