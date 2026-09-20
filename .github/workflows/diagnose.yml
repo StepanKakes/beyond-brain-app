@@ -52,26 +52,7 @@ jobs:
           }
 
           Write-Host "=== app history (last 40 chat messages)"
-          $script = @'
-const path = require('path');
-const fs = require('fs');
-require('dotenv').config({ path: path.join(process.cwd(), '.env') });
-const Database = require('better-sqlite3');
-const candidates = [process.env.DATABASE_PATH, path.join(require('os').homedir(), '.cloudcli', 'auth.db'), path.join(process.cwd(), 'server', 'database', 'auth.db')].filter(Boolean);
-const dbPath = candidates.find((p) => fs.existsSync(p));
-if (!dbPath) { console.log('no db in', candidates); process.exit(0); }
-console.log('db', dbPath);
-const db = new Database(dbPath, { readonly: true });
-for (const r of db.prepare("SELECT session_id, role, ts, substr(replace(content, char(10), ' '), 1, 110) AS c FROM beyond_messages ORDER BY id DESC LIMIT 40").all().reverse()) {
-  console.log(r.ts, r.session_id.slice(0, 8), r.role.padEnd(9), r.c);
-}
-console.log('--- runs');
-try {
-  for (const r of db.prepare("SELECT job, status, started_at, finished_at, substr(coalesce(error, summary, ''), 1, 90) AS s FROM beyond_runs ORDER BY id DESC LIMIT 8").all()) console.log(r.started_at, r.job.padEnd(18), r.status.padEnd(8), r.s);
-} catch (e) { console.log('runs:', e.message); }
-'@
-          Set-Content -Path "$env:TEMP\bb-diag.cjs" -Value $script -Encoding UTF8
-          node "$env:TEMP\bb-diag.cjs"
+          node scripts\diagnose.cjs
 
           Write-Host "=== claude transcripts touched in the last $hours h"
           $files = Get-ChildItem -Path "$env:USERPROFILE\.claude\projects" -Recurse -Filter *.jsonl -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -gt $since } | Sort-Object LastWriteTime
