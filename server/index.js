@@ -74,6 +74,7 @@ import beyondVelinRoutes from './routes/beyond-velin.js';
 import { startScheduler } from './services/beyond-scheduler.js';
 import beyondEventsRoutes from './routes/beyond-events.js';
 import { startTelegramBot } from './services/beyond-telegram-bot.js';
+import { applyToEnv as applyBeyondSettings } from './services/beyond-settings.js';
 // Beyond Brain — MCP connectors (add/manage/OAuth). Two routers: protected CRUD
 // + the unauthenticated OAuth callback target.
 import beyondMcpRoutes, { oauthCallbackRouter as beyondMcpOauthCallbackRouter } from './routes/beyond-mcp.js';
@@ -1531,6 +1532,8 @@ async function startServer() {
             // brain repo and the SDK, both of which live in this process, so
             // they run here; n8n keeps the jobs that only fetch.
             // Disable with BEYOND_SCHEDULER=0.
+            // Settings saved in the app win over .env, for everything below.
+            try { applyBeyondSettings(); } catch (err) { console.error('[settings] načtení selhalo', err?.message || err); }
             startScheduler();
             // Telegram bot by long polling, opt-in (BEYOND_TG_POLLING=1);
             // exclusive with the n8n webhook, see beyond-telegram-bot.js.

@@ -21,6 +21,10 @@ import { snapshot as memorySnapshot } from '../services/beyond-memory.js';
 import * as ukoly from '../services/beyond-ukoly.js';
 import { pullBrain } from '../services/beyond-git.js';
 import { todayIso, tz } from '../services/beyond-time.js';
+import { describe as describeSettings, save as saveSettings } from '../services/beyond-settings.js';
+import { invalidateWahaConfig } from '../services/beyond-waha.js';
+import { invalidatePeopleCache } from '../services/beyond-people.js';
+import { startTelegramBot } from '../services/beyond-telegram-bot.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { resolveBrainPath } from '../utils/brain-path.js';
@@ -633,6 +637,27 @@ router.post('/agent/pause', (req, res) => {
   const paused = setPaused(Boolean(req.body?.paused));
   console.log(`[velin] ${req.user?.username} ${paused ? 'pozastavil' : 'pustil'} agenta`);
   res.json({ ok: true, paused });
+});
+
+/* ---- settings from the app, not from the box ---------------------- */
+
+router.get('/nastaveni', (_req, res) => {
+  res.json({ items: describeSettings() });
+});
+
+router.put('/nastaveni', async (req, res) => {
+  try {
+    const changed = saveSettings(req.body?.values || {}, { by: req.user?.username || 'velin' });
+    invalidateWahaConfig();
+    invalidatePeopleCache();
+    if (changed.includes('BEYOND_TG_POLLING') && process.env.BEYOND_TG_POLLING === '1') {
+      startTelegramBot().catch((err) => console.error('[tg-bot] start po uložení selhal', err?.message || err));
+    }
+    console.log(`[velin] ${req.user?.username} uložil nastavení: ${changed.join(', ')}`);
+    res.json({ ok: true, changed, items: describeSettings() });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'uložení selhalo' });
+  }
 });
 
 /** Whether the calendar is wired up at all, for the settings surface. */

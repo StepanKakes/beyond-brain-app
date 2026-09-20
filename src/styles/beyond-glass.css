@@ -727,3 +727,17 @@ html.dark .bb-uk__wa, .dark .bb-uk__wa { background: #005C4B; color: #E9EDEF; }
 .bb-uk__nx { font-size: 13px; color: var(--bb-ink2); }
 @media (max-width: 760px) { .bb-uk__cl { grid-template-columns: 1fr 1fr; } .bb-uk__focus { grid-column: 1 / -1; } }
 @media (prefers-reduced-motion: reduce) { .bb-uk__chk--pop, .bb-uk__chk--pop::after { animation: none; } }
+
+/* ------------------------------------------------------- agent: nastavení --- */
+.bb-set__group { margin: 14px 0 6px; }
+.bb-set__g { font-size: 12.5px; font-weight: 600; color: var(--bb-ink2); margin: 0 0 6px; }
+.bb-set__row { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 4px 14px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--bb-line2); }
+.bb-set__l { font-size: 13.5px; color: var(--bb-ink); display: flex; flex-direction: column; }
+.bb-set__l small { font-size: 11.5px; color: var(--bb-ink3); }
+.bb-set__in { font: inherit; font-size: 13.5px; color: var(--bb-ink); background: var(--bb-raise); border: 1px solid var(--bb-line); border-radius: 9px; padding: 7px 10px; width: 100%; }
+.bb-set__in:focus { outline: 0; border-color: var(--bb-p3); box-shadow: 0 0 0 3px var(--bb-p3-soft); }
+.bb-set__in::placeholder { color: var(--bb-ink3); }
+.bb-set__h { grid-column: 2; font-size: 12px; color: var(--bb-ink3); }
+.bb-set__acts { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.bb-set__msg { font-size: 13px; color: var(--bb-ink2); }
+@media (max-width: 640px) { .bb-set__row { grid-template-columns: 1fr; } .bb-set__h { grid-column: 1; } }

@@ -61,6 +61,101 @@ type MozekItem = {
 
 type Memory = { title: string; entries: string[]; usage: { used: number; limit: number; pct: number } };
 
+type SettingItem = {
+  group: string;
+  key: string;
+  label: string;
+  hint?: string;
+  placeholder?: string;
+  secret?: boolean;
+  restart?: boolean;
+  set: boolean;
+  source: 'app' | 'env' | null;
+  display: string;
+  updatedAt: string | null;
+  updatedBy: string | null;
+};
+
+/**
+ * Keys and switches the server needs, editable here so nobody has to open
+ * the box and edit .env. A value saved here wins over .env.
+ */
+function SettingsSection() {
+  const load = useCallback(async () => {
+    const res = await authenticatedFetch('/api/beyond/velin/nastaveni');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return ((await res.json()) as { items: SettingItem[] }).items;
+  }, []);
+  const { data, reload } = usePolled<SettingItem[]>(load, 120_000);
+  const [edits, setEdits] = useState<Record<string, string>>({});
+  const [msg, setMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const items = data || [];
+  const groups = [...new Set(items.map((i) => i.group))];
+
+  const saveAll = async () => {
+    if (!Object.keys(edits).length) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await authenticatedFetch('/api/beyond/velin/nastaveni', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: edits }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; changed?: string[] };
+      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+      const needsRestart = items.filter((i) => body.changed?.includes(i.key) && i.restart).map((i) => i.label);
+      setMsg(`Uloženo: ${(body.changed || []).length}. ${needsRestart.length ? `Restart služby potřebuje: ${needsRestart.join(', ')}.` : 'Platí hned.'}`);
+      setEdits({});
+      void reload();
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : 'uložení selhalo');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section>
+      <SectionHead title="Napojení a klíče" count={items.filter((i) => i.set).length ? `${items.filter((i) => i.set).length} nastaveno` : undefined} />
+      <Empty>
+        Co je tady, platí místo <code>.env</code> na stroji. Tajné hodnoty se zobrazují zkrácené, prázdné pole znamená nenastaveno.
+        Vymazat = uložit prázdné.
+      </Empty>
+      {groups.map((g) => (
+        <div key={g} className="bb-set__group">
+          <p className="bb-set__g">{g}</p>
+          {items.filter((i) => i.group === g).map((i) => (
+            <label key={i.key} className="bb-set__row">
+              <span className="bb-set__l">
+                {i.label}
+                {i.source === 'env' && <small>z .env</small>}
+                {i.source === 'app' && i.updatedBy && <small>{i.updatedBy}</small>}
+              </span>
+              <input
+                className="bb-set__in"
+                type={i.secret ? 'password' : 'text'}
+                autoComplete="off"
+                placeholder={i.set ? i.display : i.placeholder || ''}
+                value={edits[i.key] ?? ''}
+                onChange={(e) => setEdits((cur) => ({ ...cur, [i.key]: e.target.value }))}
+              />
+              {i.hint && <span className="bb-set__h">{i.hint}</span>}
+            </label>
+          ))}
+        </div>
+      ))}
+      <div className="bb-set__acts">
+        <button type="button" className="bb-pill bb-pill--primary" disabled={busy || !Object.keys(edits).length} onClick={() => void saveAll()}>
+          Uložit
+        </button>
+        {msg && <span className="bb-set__msg">{msg}</span>}
+      </div>
+    </section>
+  );
+}
+
 type Run = {
   id: number;
   job: string;
@@ -432,6 +527,8 @@ export default function AgentPage() {
             </div>
           ))}
         </section>
+
+        <SettingsSection />
 
         <section>
           <SectionHead title="Co agent nesmí" />

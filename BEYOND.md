@@ -471,6 +471,16 @@ Pro design iterace bez auth a WS: `/__preview/welcome`, `/__preview/chat`,
 
 ---
 
+## Nastavení z appky
+
+Obrazovka Agent má sekci „Napojení a klíče": každý klíč z tabulky níže jde
+zadat tam a hodnota uložená v appce (`beyond_settings` v SQLite,
+`server/services/beyond-settings.js`) přebíjí `.env`. Při startu i po uložení
+se kopíruje do `process.env`, takže zbytek kódu čte pořád jen env. Tajné
+hodnoty se do prohlížeče vrací zkrácené. Dvě věci chtějí restart služby:
+`BEYOND_TG_POLLING` (bot se sice po uložení spustí, ale vypnutí platí až po
+restartu) a `BEYOND_SCHEDULER`.
+
 ## Env
 
 Kompletní seznam je v [`.env.example`](.env.example), tohle jsou ty, na kterých
