@@ -259,7 +259,7 @@ async function findUnwrittenCalls() {
           zapis = null;
         }
         const needsWriteup = !zapis && recent;
-        const needsNotion = Boolean(zapis) && !/<!--\s*notion:[^>]+-->/.test(zapis);
+        const needsNotion = Boolean(zapis) && recent && !/<!--\s*notion:[^>]+-->/.test(zapis);
         if (needsWriteup || needsNotion) {
           out.push({ slug: c.slug, name: c.name, dateIso: block.dateIso, transcript: block.transcript, auto: true, recordingId: block.recordingId, onlyWriteup: true });
         }
@@ -472,7 +472,8 @@ async function writeupAndNotion(call, log) {
         `Zápis z callu klienta \`${call.slug}\` (${call.dateIso}) je hotový v \`${rel}\`. Dej ho do Notionu přes Notion MCP.`,
         '',
         '1. Coaching Calls klienta:' + (reg.callsDbId ? ` databáze \`${reg.callsDbId}\` (notion-fetch).` : ' najdi přes notion-search „Coaching Calls " + jméno.'),
-        `   Najdi řádek s datem ${call.dateIso} (typicky Status „🆕 Z Fathomu"). Když existuje, uprav ho; když ne, založ nový.`,
+        `   Najdi řádek s datem ${call.dateIso}. Když má Status „✅ Zpracováno", je to Timův ruční zápis: NESAHEJ na něj, přeskoč krok 1`,
+        '   i krok 2 a do JSON dej jeho URL a problem "uz zpracovano rucne". Když má Status „🆕 Z Fathomu" nebo jiný, uprav ho; když neexistuje, založ nový.',
         `   Properties: Téma hovoru = tema z hlavičky souboru, Datum = ${call.dateIso}, Status = „✅ Zpracováno",`,
         '   Typ = typ z hlavičky (přesně jedna z hodnot databáze), Délka (min) = delka z hlavičky,',
         reg.dashboardId ? `   Klient = relace na stránku \`${reg.dashboardId}\`.` : '   Klient = relace na Dashboard klienta, když ho dohledáš.',
