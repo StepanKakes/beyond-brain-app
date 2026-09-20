@@ -22,12 +22,13 @@ import path from 'node:path';
 
 import { runSdkOneShot } from '../claude-sdk.js';
 import { getBrainIndex, invalidateBrainIndex } from './brain-index.js';
-import { inbox } from './brain-signals.js';
+import { inbox, signalsForClient } from './brain-signals.js';
 import { getCalls } from './beyond-calls.js';
 import { getPeople } from './beyond-people.js';
 import { resolveBrainPath } from '../utils/brain-path.js';
 import { getJobState, markJobRan, ranToday } from './beyond-runs.js';
 import { countPending, createProposal, sentRecently, slugsWithPending } from './beyond-proposals.js';
+import { broadcast as tgBroadcast, unconfiguredReason as tgReason } from './beyond-telegram.js';
 
 /** Give a scheduled run room; these prompts read a lot of files. */
 const JOB_TIMEOUT_MS = 12 * 60 * 1000;
@@ -110,6 +111,44 @@ const processCall = {
       );
       done.push(`${call.name}: ${String(result.text || '').replace(/\s+/g, ' ').slice(0, 200)}`);
       invalidateBrainIndex();
+
+      // The record is written, but the client has heard nothing. A recap sent
+      // the same day is what makes the next week start from an agreement
+      // rather than from "co jsme si to říkali".
+      const client = (await getBrainIndex()).clients.find((c) => c.slug === call.slug);
+      if (client?.waGroupId) {
+        const recap = await runAgent(
+          [
+            `Napiš shrnutí callu z ${call.dateIso} pro klienta ${client.name},`,
+            'jako WhatsApp zprávu do jeho skupiny.',
+            '',
+            `Vycházej z toho, co je teď zapsané v \`clients/aktivni/${call.slug}/cally.md\``,
+            `a v \`clients/aktivni/${call.slug}/_action-items.md\`.`,
+            '',
+            'Struktura: dvě až tři věty o tom, na čem jsme se shodli, pak co je',
+            'na něm a do kdy. Co dlužíme my, zmiň taky, ať to není jednostranné.',
+            '',
+            'Drž Beyond hlas (`system/beyond-hlas.md`). Žádné emoji, žádné pomlčky,',
+            'tykání, bez vaty. Vejdi se do sedmi řádků.',
+            '',
+            'Odpověz POUZE textem zprávy. Co napíšeš, to se pošle.',
+          ].join('\n'),
+        );
+        const body = String(recap.text || '').trim();
+        if (body.length > 15) {
+          const created = createProposal({
+            kind: 'shrnuti-callu',
+            clientSlug: client.slug,
+            clientName: client.name,
+            channel: 'whatsapp',
+            target: client.waGroupId,
+            title: `Shrnutí callu ${call.dateIso}`,
+            body,
+            reason: 'Call je zapsaný, klient zatím nedostal shrnutí ani úkoly.',
+          });
+          if (!created.skipped) log(`${client.name}: shrnutí připraveno k odeslání`);
+        }
+      }
     }
     return { summary: done.join('\n') };
   },
@@ -196,7 +235,7 @@ const morningBrief = {
 
     const result = await runAgent(
       [
-        '[TG] Napiš ranní brief pro Tima a Štěpána.',
+        'Napiš ranní brief pro Tima a Štěpána.',
         '',
         'Tohle jsou spočítané signály z brainu, neověřuj je znovu a nic si nedomýšlej:',
         '',
@@ -209,10 +248,24 @@ const morningBrief = {
         'Když je toho málo, napiš málo. Když není nic, napiš jednu větu.',
         '',
         `Tentýž text ulož i do \`workspace/reporty/brief-${today}.md\`.`,
+        '',
+        'Odpověz POUZE textem briefu, ten se rozešle beze změny. Prostý text,',
+        'žádný markdown ani HTML: bez hvězdiček, bez značek, odstavce oddělené',
+        'prázdným řádkem.',
       ].join('\n'),
     );
 
-    return { summary: String(result.text || '').slice(0, 4000) };
+    // Deliver it ourselves rather than asking the model to. The brief is only
+    // useful if it arrives on a phone, and the text that was written is the
+    // text that should land.
+    const text = String(result.text || '').trim();
+    const delivery = await tgBroadcast(text);
+    const note = delivery.skipped
+      ? `Telegram nenastavený (${delivery.skipped}), brief je jen v brainu.`
+      : `Odesláno: ${delivery.sent.join(', ') || 'nikomu'}${delivery.failed?.length ? ` · selhalo: ${delivery.failed.join('; ')}` : ''}`;
+    log(note);
+
+    return { summary: `${note}\n\n${text.slice(0, 3500)}` };
   },
 };
 
@@ -475,12 +528,279 @@ async function proposalCandidates(index, calls) {
 }
 
 /* ------------------------------------------------------------------ */
+/* 7. draft the thing we owe, not a reminder that we owe it            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The velín can already say "dlužíme Kubovi feedback na 12 scriptů, 7 dní".
+ * Saying it again tomorrow does not move it. This tries to write the feedback
+ * itself into `workspace/drafty/`, so the open item becomes a review instead of
+ * a blank page.
+ *
+ * It will often fail honestly: the material a client sent usually lives in
+ * WhatsApp, a Google Doc or Notion, not in the brain. When the agent cannot
+ * find what it is supposed to react to, it writes down what is missing rather
+ * than inventing feedback, which would be the worst possible output here.
+ */
+const draftOurWork = {
+  name: 'napsat-co-dluzime',
+  title: 'Rozepsat, co dlužíme',
+  description:
+    'U otevřených slibů na naší straně zkusí rovnou napsat ten výstup do workspace/drafty. ' +
+    'Když nemá z čeho, řekne, co chybí.',
+  dailyAt: { hour: 7, minute: 10 },
+  async hasWork() {
+    const index = await getBrainIndex();
+    const calls = await getCalls({ clients: index.clients, people: getPeople() });
+    return ourOpenDebts(index, calls).length
+      ? `${ourOpenDebts(index, calls).length} otevřených slibů na nás`
+      : null;
+  },
+  async run({ log }) {
+    const index = await getBrainIndex({ force: true });
+    const calls = await getCalls({ clients: index.clients, people: getPeople() });
+    const debts = ourOpenDebts(index, calls);
+    if (!debts.length) return { skipped: 'nic nedlužíme' };
+
+    const today = new Date().toISOString().slice(0, 10);
+    const results = [];
+
+    for (const d of debts.slice(0, 3)) {
+      log(`rozepisuji ${d.client.name}: ${d.text.slice(0, 60)}`);
+      const result = await runAgent(
+        [
+          `Dlužíme klientovi ${d.client.name} tohle, už ${d.ageDays} dní:`,
+          '',
+          `„${d.text}"`,
+          '',
+          'Zkus to rovnou napsat, ať to Tim jen projede a pošle.',
+          '',
+          'Postup:',
+          `1. Najdi podklad. Hledej v \`clients/aktivni/${d.client.slug}/\` —`,
+          '   v `cally.md`, `whatsapp.md`, `feedback.md` a v `raw/`. Podklad může být',
+          '   i odkaz na Google Doc nebo Notion; pokud je to odkaz, zkus ho otevřít.',
+          '2. Když podklad najdeš, napiš ten výstup celý. Řiď se',
+          '   `knowledge/vzory-feedbacku/` a `system/beyond-hlas.md`.',
+          `   Ulož ho do \`workspace/drafty/${today}-${d.client.slug}-${d.topic}.md\`.`,
+          '3. Když podklad nenajdeš, NIC SI NEVYMÝŠLEJ. Místo toho napiš do',
+          `   \`workspace/drafty/${today}-${d.client.slug}-${d.topic}.md\` krátkou poznámku,`,
+          '   co přesně chybí a kde to nejspíš je.',
+          '',
+          'Na konci napiš jednou větou, jestli jsi výstup napsal, nebo chybí podklad.',
+        ].join('\n'),
+      );
+      const text = String(result.text || '').replace(/\s+/g, ' ').trim();
+      results.push(`${d.client.name}: ${truncate(text, 180)}`);
+    }
+
+    if (debts.length > 3) {
+      results.push(`(zbylo ${debts.length - 3} dalších, budou zítra)`);
+    }
+    return { summary: results.join('\n') };
+  },
+};
+
+/** Open promises on our side, oldest first, with a slug for the file name. */
+function ourOpenDebts(index, calls) {
+  const { rows } = inbox(index.clients, { upcomingCalls: calls.calls });
+  const out = [];
+  for (const row of rows) {
+    if (row.client.isActive === false) continue;
+    const debt = row.signals.find((s) => s.type === 'our-debt');
+    if (!debt?.items?.length) continue;
+    for (const item of debt.items) {
+      out.push({
+        client: row.client,
+        text: item.text,
+        ageDays: item.age,
+        topic: topicSlug(item.text),
+      });
+    }
+  }
+  return out.sort((a, b) => (b.ageDays || 0) - (a.ageDays || 0));
+}
+
+function topicSlug(text) {
+  return (
+    String(text)
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .split('-')
+      .slice(0, 4)
+      .join('-') || 'vystup'
+  );
+}
+
+function truncate(text, max) {
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+}
+
+/* ------------------------------------------------------------------ */
+/* 8. an hour before a call, on the phone                              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The brief is written the evening before, which is when it is useful to
+ * write and useless to read. This puts the three things that matter on a phone
+ * while there is still time to act on them.
+ */
+const callReminder = {
+  name: 'pripomenout-hovor',
+  title: 'Připomenout hovor hodinu předem',
+  description:
+    'Hodinu před každým hovorem pošle na Telegram, s kým je, co je otevřené a na co si dát pozor.',
+  everyMs: 10 * 60 * 1000,
+  async hasWork() {
+    const index = await getBrainIndex();
+    const calls = await getCalls({ clients: index.clients, people: getPeople() });
+    const soon = callsInWindow(calls.calls, 45, 75);
+    return soon.length ? `${soon.length} hovorů do hodiny` : null;
+  },
+  async run({ log }) {
+    const reason = tgReason();
+    if (reason) return { skipped: `Telegram nenastavený (${reason})` };
+
+    const index = await getBrainIndex();
+    const calls = await getCalls({ clients: index.clients, people: getPeople(), force: true });
+    const soon = callsInWindow(calls.calls, 45, 75);
+    if (!soon.length) return { skipped: 'žádný hovor do hodiny' };
+
+    // Remember which calls were announced so a ten-minute tick does not send
+    // the same reminder six times.
+    const state = getJobState('pripomenout-hovor');
+    const announced = new Set((state.lastCursor || '').split(',').filter(Boolean));
+    const fresh = soon.filter((c) => !announced.has(c.uid));
+    if (!fresh.length) return { skipped: 'už připomenuto' };
+
+    const sentFor = [];
+    for (const call of fresh) {
+      const client = call.clientSlug
+        ? index.clients.find((c) => c.slug === call.clientSlug)
+        : null;
+      const sig = client ? signalsForClient(client, { upcomingCalls: calls.calls }) : null;
+
+      const lines = [
+        `Za hodinu: ${call.clientName || call.title}`,
+        `${call.startIso.slice(11, 16)} · ${call.host?.name || 'neznámý host'}${call.durationMin ? ` · ${call.durationMin} min` : ''}`,
+      ];
+      if (client) {
+        const ours = client.promises?.ours?.length || 0;
+        const theirs = client.promises?.theirs?.length || 0;
+        if (ours || theirs) lines.push(`Otevřené: dlužíme ${ours}, dluží ${theirs}`);
+        const top = sig?.signals?.slice(0, 2) || [];
+        for (const s of top) lines.push(`- ${s.title}: ${s.detail}`);
+      } else {
+        lines.push('Není napojený na klienta v brainu.');
+      }
+      if (call.meetingUrl) lines.push(call.meetingUrl);
+
+      const delivery = await tgBroadcast(lines.join('\n'));
+      if (delivery.skipped) return { skipped: delivery.skipped };
+      announced.add(call.uid);
+      sentFor.push(call.clientName || call.title);
+      log(`připomenuto: ${call.clientName || call.title}`);
+    }
+
+    // Keep the cursor short; yesterday's uids are of no use.
+    markJobRan('pripomenout-hovor', [...announced].slice(-40).join(','));
+    return { summary: `Připomenuto: ${sentFor.join(', ')}` };
+  },
+};
+
+function callsInWindow(calls, fromMin, toMin) {
+  const now = Date.now();
+  return calls.filter((c) => {
+    const t = Date.parse(c.startIso);
+    if (!Number.isFinite(t)) return false;
+    const mins = (t - now) / 60_000;
+    return mins >= fromMin && mins <= toMin;
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* 9. a new client should not start with empty scaffolding             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Eight of ten clients had no `mereni.md` and seven had no `_action-items.md`,
+ * not because anyone decided against them but because nobody creates them. A
+ * client without numbers cannot be seen drifting, so this is the cheapest
+ * possible improvement to the whole system.
+ */
+const scaffoldClients = {
+  name: 'zalozit-soubory',
+  title: 'Doplnit chybějící soubory klientům',
+  description:
+    'Kde aktivnímu klientovi chybí mereni.md nebo _action-items.md, založí je podle vzoru.',
+  dailyAt: { hour: 7, minute: 30 },
+  async hasWork() {
+    const index = await getBrainIndex();
+    const missing = clientsMissingFiles(index);
+    return missing.length ? `${missing.length} klientů bez páteře` : null;
+  },
+  async run({ log }) {
+    const index = await getBrainIndex({ force: true });
+    const missing = clientsMissingFiles(index);
+    if (!missing.length) return { skipped: 'všichni mají základ' };
+
+    // One agent call per client rather than one for the batch. A single call
+    // covering three clients reads a dozen files before it writes anything, so
+    // a slow model turn shows no progress at all and a timeout loses the lot.
+    const done = [];
+    for (const m of missing) {
+      log(`zakládám ${m.client.slug}: ${m.missing.join(', ')}`);
+      const result = await runAgent(
+        [
+          `Klientovi \`${m.client.slug}\` chybí: ${m.missing.join(', ')}.`,
+          'Založ je podle vzoru klienta, který je má (`jakub-bolek` nebo `tobias-beranek`).',
+          '',
+          '`mereni.md`: hlavička s páteří metrik. Páteř odvoď z toho, co ten klient',
+          `reálně řeší (přečti \`clients/aktivni/${m.client.slug}/profil.md\`),`,
+          'neopisuj cizí. Do tabulky NEVYPLŇUJ žádná čísla, nech prázdno. Prázdno',
+          'znamená nevíme a to je pravda, protože je zatím neměříme.',
+          '',
+          '`_action-items.md`: sekce pro otevřené na naší straně a na straně klienta.',
+          'Naplň je tím, co je otevřené podle `cally.md` a `whatsapp.md`. Když nic',
+          'otevřeného není, nech sekce prázdné.',
+          '',
+          'Nic jiného u toho klienta neměň. Na konci napiš jednu větu.',
+        ].join('\n'),
+        { timeoutMs: 6 * 60 * 1000 },
+      );
+      done.push(`${m.client.name}: ${truncate(String(result.text || '').replace(/\s+/g, ' ').trim(), 160)}`);
+      invalidateBrainIndex();
+    }
+    return { summary: done.join('\n') };
+  },
+};
+
+function clientsMissingFiles(index) {
+  const out = [];
+  for (const c of index.clients) {
+    if (c.isActive === false) continue;
+    const missing = [];
+    if (!c.has.mereni) missing.push('mereni.md');
+    if (!c.has.actionItems) missing.push('_action-items.md');
+    if (missing.length) out.push({ client: c, missing });
+  }
+  return out;
+}
+
+/* ------------------------------------------------------------------ */
 
 export const JOBS = [
+  // Order matters only for which one a tick picks first when several are due;
+  // the ones that produce work for a person come before the housekeeping.
   processCall,
+  callReminder,
   syncClients,
   prepareProposals,
   morningBrief,
+  draftOurWork,
+  scaffoldClients,
   prepareCalls,
   roadmapCheck,
   tidyProfiles,

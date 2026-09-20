@@ -11,7 +11,10 @@
  * login onto the person the brain and the calendar talk about.
  *
  * Overridable with `BEYOND_PEOPLE` as JSON, for when a third person joins:
- *   [{"key":"tim","displayName":"Tim","aliases":["tim"],"calcomEmail":"…"}]
+ *   [{"key":"tim","displayName":"Tim","aliases":["tim"],"calcomEmail":"…","tgChatId":"…"}]
+ *
+ * `tgChatId` is where that person's Telegram deliveries go (morning brief,
+ * pre-call reminder). Optional; `BEYOND_TG_CHAT_ID` is the shared fallback.
  */
 
 const DEFAULT_PEOPLE = [
@@ -22,6 +25,7 @@ const DEFAULT_PEOPLE = [
     usernames: ['tim'],
     calcomEmail: 'tim@creationwithtim.com',
     calcomUsername: 'creationwithtim',
+    tgChatId: null,
   },
   {
     key: 'stepan',
@@ -30,6 +34,7 @@ const DEFAULT_PEOPLE = [
     usernames: ['stepan', 'stepankakes'],
     calcomEmail: 'stepan.kakes1@gmail.com',
     calcomUsername: null,
+    tgChatId: null,
   },
 ];
 
@@ -49,6 +54,7 @@ export function getPeople() {
           usernames: Array.isArray(p.usernames) ? p.usernames.map((u) => String(u).toLowerCase()) : [],
           calcomEmail: p.calcomEmail || null,
           calcomUsername: p.calcomUsername || null,
+          tgChatId: p.tgChatId != null && String(p.tgChatId).trim() ? String(p.tgChatId).trim() : null,
         }));
         return cached;
       }

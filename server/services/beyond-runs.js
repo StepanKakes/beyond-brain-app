@@ -196,6 +196,29 @@ export function getJobState(job) {
   };
 }
 
+/**
+ * Close out runs that were in flight when the process died.
+ *
+ * The service restarts on every deploy, so a job caught mid-run leaves a row
+ * that says "běží" for ever. The Agent screen would show a phantom job and the
+ * operator would wait for something that is never coming back.
+ */
+export function reapOrphanedRuns() {
+  const info = db()
+    .prepare(
+      `UPDATE beyond_runs
+          SET status='error',
+              finished_at=?,
+              error='Služba se restartovala během běhu, výsledek není známý'
+        WHERE status='running'`,
+    )
+    .run(new Date().toISOString());
+  if (info.changes) {
+    console.log(`[runs] ${info.changes} nedokončených běhů uzavřeno po restartu`);
+  }
+  return info.changes;
+}
+
 /** Did this job already run today (local time)? Used by the daily jobs. */
 export function ranToday(job) {
   const state = getJobState(job);

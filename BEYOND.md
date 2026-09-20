@@ -176,13 +176,20 @@ potřebuje brain repo a SDK session. Ty žijí tady, takže tu teď běží i ho
 
 `server/services/beyond-scheduler.js` je záměrně hloupý: jeden časovač, jedna
 úloha v jednu chvíli, každá si sama řekne, jestli je na řadě. Žádná fronta,
-žádná souběžnost. Je to jeden stroj a šest úloh.
+žádná souběžnost. Je to jeden stroj a deset úloh.
+
+Když se služba restartuje uprostřed běhu (což dělá každý deploy), záznam by
+zůstal navždy ve stavu „běží". Při startu se takové běhy uzavřou jako chyba
+s důvodem, ať obrazovka Agent neukazuje fantoma.
 
 | Úloha | Kdy | Co dělá |
 |---|---|---|
 | `zpracuj-call` | každých 10 min | Když v `raw/fathom/` přibude přepis novější než poslední zápis v `cally.md`, přepíše ho do zápisu, vytáhne sliby na obě strany a čísla z check-inu |
 | `sync-klientu` | denně 06:20 | Skill `sync-client all`, promítne noční raw vrstvu do kurátorských souborů |
 | `napsat-navrhy` | denně 06:35 | Kde klient klouže nebo se dlouho neozval, napíše návrh zprávy a nechá ho čekat na kliknutí |
+| `pripomenout-hovor` | každých 10 min | Hodinu před hovorem pošle na Telegram, s kým je, co je otevřené a na co si dát pozor |
+| `napsat-co-dluzime` | denně 07:10 | U slibů na naší straně zkusí rovnou napsat ten výstup do `workspace/drafty/`. Když nemá podklad, řekne, co chybí |
+| `zalozit-soubory` | denně 07:30 | Aktivnímu klientovi bez `mereni.md` nebo `_action-items.md` je založí podle vzoru |
 | `ranni-brief` | denně 06:40 | Spočítá signály, napíše krátký brief, uloží do `workspace/reporty/` a pošle na Telegram |
 | `pripravit-hovory` | denně 18:30 | Pro každý hovor do 36 hodin vygeneruje brief skillem `pre-call` do `workspace/briefy/` |
 | `roadmap-check` | pondělí 08:00 | Plán proti realitě u všech aktivních klientů |
@@ -229,6 +236,13 @@ Zábrany proti otravování:
 Klíč k WhatsAppu se bere z `BEYOND_WAHA_URL` a `BEYOND_WAHA_API_KEY`, a když
 nejsou, přečte se z WAHA MCP záznamu v `~/.claude.json`, který na stroji stejně
 už je. Bez klíče se návrhy pořád píšou a dají přečíst, jen nejdou odeslat.
+
+### Doručování na Telegram
+
+Brief a připomínka hovoru chodí přes `beyond-telegram.js` stejným způsobem jako
+WhatsApp: server pošle text, který vznikl, beze změny. Potřebuje
+`BEYOND_TG_BOT_TOKEN` a `BEYOND_TG_CHAT_ID`. Bez nich se brief pořád napíše do
+`workspace/reporty/`, jen nedorazí na telefon, a v logu běhu je napsané proč.
 
 ---
 

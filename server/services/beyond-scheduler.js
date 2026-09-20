@@ -8,14 +8,14 @@
  *
  * The design is deliberately dumb: one timer, one job at a time, every job
  * decides for itself whether it is due. No queue, no concurrency, no
- * distributed anything. There is one box and six jobs.
+ * distributed anything. There is one box and ten jobs.
  *
  * Safety comes from three places: a job that has nothing to do skips before
  * spending a model call, only one run is ever in flight, and every run is
  * written to the log with a git diff of what it touched.
  */
 import { JOBS, isDue, jobByName } from './beyond-jobs.js';
-import { isJobEnabled, markJobRan, startRun } from './beyond-runs.js';
+import { isJobEnabled, markJobRan, reapOrphanedRuns, startRun } from './beyond-runs.js';
 
 /** How often to look at the clock. Jobs decide their own cadence. */
 const TICK_MS = 60_000;
@@ -97,6 +97,17 @@ async function tick() {
 
 export function startScheduler() {
   if (timer) return;
+
+  // A deploy restarts the service; anything mid-run died with it. This happens
+  // before the enabled check on purpose — the Agent screen shows those rows
+  // whether the scheduler is running or not, and a phantom "běží" is confusing
+  // either way.
+  try {
+    reapOrphanedRuns();
+  } catch (err) {
+    log('úklid nedokončených běhů selhal', err?.message || err);
+  }
+
   if (process.env.BEYOND_SCHEDULER === '0') {
     log('vypnutý přes BEYOND_SCHEDULER=0');
     return;
