@@ -232,8 +232,8 @@ async function send<T>(pathname: string, method: string, body?: unknown): Promis
   return data;
 }
 
-export const parseQuick = (quick: string) => send<QuickParse>('/ukoly/parse', 'POST', { quick });
-export const createQuick = (quick: string) => send<{ ok: boolean; task: Task }>('/ukoly', 'POST', { quick });
+export const parseQuick = (quick: string, owner?: string) => send<QuickParse>('/ukoly/parse', 'POST', { quick, owner });
+export const createQuick = (quick: string, owner?: string) => send<{ ok: boolean; task: Task }>('/ukoly', 'POST', { quick, owner });
 export const patchTask = (id: string, patch: Partial<Pick<Task, 'state' | 'priority' | 'text' | 'owner' | 'due'>>) =>
   send<{ ok: boolean }>(`/ukoly/${encodeURIComponent(id)}`, 'PATCH', patch);
 export const deleteTask = (id: string) => send<{ ok: boolean }>(`/ukoly/${encodeURIComponent(id)}`, 'DELETE');

@@ -202,7 +202,7 @@ function TaskRow({ task, people, me, onState, onRemove, onReload, onOpenFile }: 
   );
 }
 
-function QuickAdd({ me, people, onAdded }: { me: string; people: Ukoly['people']; onAdded: () => void }) {
+function QuickAdd({ me, owner, people, onAdded }: { me: string; owner: string; people: Ukoly['people']; onAdded: () => void }) {
   const [value, setValue] = useState('');
   const [parsed, setParsed] = useState<QuickParse | null>(null);
   const [busy, setBusy] = useState(false);
@@ -215,18 +215,18 @@ function QuickAdd({ me, people, onAdded }: { me: string; people: Ukoly['people']
       return;
     }
     timer.current = setTimeout(() => {
-      parseQuick(value).then(setParsed).catch(() => setParsed(null));
+      parseQuick(value, owner).then(setParsed).catch(() => setParsed(null));
     }, 180);
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [value]);
+  }, [value, owner]);
 
   const submit = async () => {
     if (!value.trim() || busy) return;
     setBusy(true);
     try {
-      await createQuick(value);
+      await createQuick(value, owner);
       setValue('');
       setParsed(null);
       onAdded();
@@ -263,7 +263,7 @@ function QuickAdd({ me, people, onAdded }: { me: string; people: Ukoly['people']
           </>
         ) : (
           <span className="bb-uk__hint">
-            Levým hotovo, pravým pracuje se. Rozumí <code>p1</code> až <code>p4</code>, <code>dnes</code>, <code>zítra</code>, <code>pátek</code>, jménům klientů a <code>@{ownerName(me === 'tim' ? 'stepan' : 'tim').toLowerCase()}</code>
+            Levým hotovo, pravým pracuje se. Rozumí <code>p1</code> až <code>p4</code>, <code>dnes</code>, <code>zítra</code>, <code>pátek</code>, jménům klientů a <code>@{ownerName(people.find((p) => p.key !== owner)?.key || me).toLowerCase()}</code>
           </span>
         )}
       </div>
@@ -278,7 +278,8 @@ export default function VelinPage({ onOpenClient, onOpenCalls, onOpenChat }: Pro
   const velin = usePolled<Velin>(loadVelin, 120_000);
   const ukoly = usePolled<Ukoly>(loadUkoly, 60_000);
   const board = usePolled<{ builtAt: string; clients: BoardClient[] }>(loadBoard, 180_000);
-  const [filter, setFilter] = useState<'mine' | 'all' | 'ready'>('mine');
+  // Whose list: a person's key, everyone, or only what the brain prepared.
+  const [view, setView] = useState<string>('me');
   const [showDone, setShowDone] = useState(false);
   const [local, setLocal] = useState<Task[] | null>(null);
 
@@ -290,6 +291,7 @@ export default function VelinPage({ onOpenClient, onOpenCalls, onOpenChat }: Pro
 
   const me = ukoly.data?.me || 'tim';
   const people = ukoly.data?.people || [];
+  const viewedPerson = view === 'me' ? me : view === 'all' || view === 'ready' ? null : view;
 
   const setState = async (task: Task, next: Task['state']) => {
     setLocal((cur) => (cur || tasks).map((t) => (t.id === task.id ? { ...t, state: next } : t)));
@@ -308,8 +310,8 @@ export default function VelinPage({ onOpenClient, onOpenCalls, onOpenChat }: Pro
 
   const visible = sortTasks(
     tasks.filter((t) => {
-      if (filter === 'mine') return t.owner === me;
-      if (filter === 'ready') return Boolean(t.prep) && t.state !== 'done';
+      if (viewedPerson) return t.owner === viewedPerson;
+      if (view === 'ready') return Boolean(t.prep) && t.state !== 'done';
       return true;
     }),
   );
@@ -337,13 +339,19 @@ export default function VelinPage({ onOpenClient, onOpenCalls, onOpenChat }: Pro
 
         <div className="bb-uk__grid">
           <div>
-            <QuickAdd me={me} people={people} onAdded={() => void ukoly.reload()} />
+            <QuickAdd me={me} owner={viewedPerson || me} people={people} onAdded={() => void ukoly.reload()} />
             <div className="bb-uk__filters">
-              {(['mine', 'all', 'ready'] as const).map((f) => (
-                <button key={f} type="button" className="bb-pill bb-pill--sm" aria-pressed={filter === f} onClick={() => setFilter(f)}>
-                  {f === 'mine' ? 'Moje' : f === 'all' ? 'Všichni' : 'Připravené brainem'}
-                </button>
-              ))}
+              {people.map((p) => {
+                const key = p.key === me ? 'me' : p.key;
+                return (
+                  <button key={p.key} type="button" className="bb-pill bb-pill--sm bb-pill--person" aria-pressed={view === key} onClick={() => setView(key)}>
+                    <Avatar person={p.key} people={people} me="" />
+                    {p.key === me ? 'Já' : p.displayName}
+                  </button>
+                );
+              })}
+              <button type="button" className="bb-pill bb-pill--sm" aria-pressed={view === 'all'} onClick={() => setView('all')}>Všichni</button>
+              <button type="button" className="bb-pill bb-pill--sm" aria-pressed={view === 'ready'} onClick={() => setView('ready')}>Připravené brainem</button>
             </div>
 
             {ukoly.error && !ukoly.data && <Empty>Úkoly se nenačetly: {ukoly.error}</Empty>}
@@ -359,12 +367,12 @@ export default function VelinPage({ onOpenClient, onOpenCalls, onOpenChat }: Pro
             )}
             {open.length > 0 && (
               <div className="bb-uk__group">
-                <p className="bb-uk__gh"><b>{filter === 'all' ? 'Na řadě, všichni' : 'Na řadě'}</b><span>{open.length}</span></p>
+                <p className="bb-uk__gh"><b>{view === 'all' ? 'Na řadě, všichni' : viewedPerson && viewedPerson !== me ? `Na řadě u ${people.find((p) => p.key === viewedPerson)?.displayName || viewedPerson}` : 'Na řadě'}</b><span>{open.length}</span></p>
                 {open.map((t) => <TaskRow key={t.id} task={t} {...rowProps} />)}
               </div>
             )}
             {ukoly.data && work.length === 0 && open.length === 0 && (
-              <Empty>{filter === 'ready' ? 'Brain teď nic připraveného nemá.' : 'Nic na řadě. Napiš úkol nahoře, nebo počkej, co ráno přinese brain.'}</Empty>
+              <Empty>{view === 'ready' ? 'Brain teď nic připraveného nemá.' : 'Nic na řadě. Napiš úkol nahoře, nebo počkej, co ráno přinese brain.'}</Empty>
             )}
             {done.length > 0 && (
               <div className="bb-uk__group">

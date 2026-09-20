@@ -622,7 +622,9 @@ body { background: var(--bb-bg) !important; color: var(--bb-ink); font-family: v
 .bb-uk__tag--p4 { background: var(--bb-p4-soft); color: var(--bb-p4); }
 .bb-uk__hint { font-size: 12px; color: var(--bb-ink3); }
 .bb-uk__hint code { font-family: inherit; color: var(--bb-ink2); background: var(--bb-panel2); padding: 0 5px; border-radius: 5px; }
-.bb-uk__filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.bb-uk__filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; align-items: center; }
+.bb-pill--person { padding-left: 4px; gap: 6px; }
+.bb-pill--person .bb-uk__av { width: 20px; height: 20px; font-size: 10px; }
 
 .bb-uk__row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 7px 8px; margin: 0 -8px; border-radius: 9px; border-bottom: 1px solid var(--bb-line2); transition: background .18s ease; }
 .bb-uk__row:hover { background: var(--bb-panel2); }

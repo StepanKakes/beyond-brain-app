@@ -382,8 +382,11 @@ router.post('/ukoly', async (req, res) => {
     const body = req.body || {};
     let fields = body;
     if (typeof body.quick === 'string') {
+      // When you are looking at someone else's list, a task you add there is
+      // theirs unless the text says otherwise.
+      const known = getPeople().some((p) => p.key === body.owner);
       fields = ukoly.parseQuick(body.quick, {
-        me,
+        me: known ? body.owner : me,
         clients: index.clients.filter((c) => c.isActive !== false).map((c) => ({ slug: c.slug, name: c.name, first: c.name.split(' ')[0] })),
       });
     }
@@ -399,8 +402,9 @@ router.post('/ukoly/parse', async (req, res) => {
   try {
     const index = await getBrainIndex();
     const me = personForUser(req.user)?.key || DEFAULT_OWNER();
+    const known = getPeople().some((p) => p.key === req.body?.owner);
     const parsed = ukoly.parseQuick(String(req.body?.quick || ''), {
-      me,
+      me: known ? req.body.owner : me,
       clients: index.clients.filter((c) => c.isActive !== false).map((c) => ({ slug: c.slug, name: c.name, first: c.name.split(' ')[0] })),
     });
     res.json({ ...parsed, clientName: parsed.client ? index.clients.find((c) => c.slug === parsed.client)?.name || null : null });
