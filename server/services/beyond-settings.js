@@ -46,6 +46,9 @@ export const CATALOG = [
   { group: 'Události', key: 'BEYOND_EVENT_SECRET_CALCOM', label: 'Secret cesty calcom', hint: 'Secret webhooku v Cal.com.', secret: true },
   { group: 'Události', key: 'BEYOND_EVENT_SECRET_N8N', label: 'Secret cesty n8n a fathom', hint: 'Hlavička X-Beyond-Secret z n8n.', secret: true },
 
+  { group: 'Chat', key: 'BEYOND_TOKEN_BUDGET_TOTAL', label: 'Okno chatu (tokeny)', hint: 'Kolik tokenů smí chat nabrat, než se sám shrne. Výchozí 200000 drží odpovědi rychlé a levné; 1000000 pustí celé okno modelu. Platí pro nové chaty.', placeholder: '200000' },
+  { group: 'Chat', key: 'BEYOND_AUTO_COMPACT_THRESHOLD', label: 'Shrnout při (tokeny)', hint: 'Prázdné = 80 % okna.' },
+
   { group: 'Agent', key: 'BEYOND_SYNC_PARALLEL', label: 'Klientů najednou při syncu', hint: '1 až 4.', placeholder: '2' },
   { group: 'Agent', key: 'BEYOND_REVIEW_MODEL', label: 'Model večerní kontroly učení', placeholder: 'sonnet' },
   { group: 'Agent', key: 'BEYOND_SCHEDULER', label: 'Plánovač', hint: '0 vypne všechny úlohy (ale dashboardy běží).', placeholder: '1', restart: true },

@@ -51,16 +51,19 @@ const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEO
 
 const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
-// Beyond Brain treats sessions as a 200k-token window even though Opus 4.7's
-// raw context is 1M. The smaller cap keeps per-turn cache_creation cost
-// bounded and forces a summary every N turns of dense work instead of letting
-// the chat grow ever heavier. The UI chip and the SDK's auto-compact both
-// key off these constants. Override via env (e.g. set to 1000000 to opt out).
-const BEYOND_TOKEN_BUDGET_TOTAL =
-  parseInt(process.env.BEYOND_TOKEN_BUDGET_TOTAL, 10) || 200000;
-const BEYOND_AUTO_COMPACT_THRESHOLD =
-  parseInt(process.env.BEYOND_AUTO_COMPACT_THRESHOLD, 10) ||
-  Math.floor(BEYOND_TOKEN_BUDGET_TOTAL * 0.8);
+// Beyond Brain treats a chat as a 200k-token window by default even though
+// Opus's raw context is 1M. The smaller cap keeps the per-turn cache cost
+// bounded and makes long chats summarise themselves instead of growing ever
+// heavier and slower. The UI chip and the SDK's auto-compact both key off
+// these. Set from the Agent screen (tokenBudgetTotal(), e.g. 1000000
+// for the whole window); read at call time so a change applies to the next
+// chat without a restart.
+function tokenBudgetTotal() {
+  return parseInt(process.env.tokenBudgetTotal(), 10) || 200000;
+}
+function autoCompactThreshold() {
+  return parseInt(process.env.autoCompactThreshold(), 10) || Math.floor(tokenBudgetTotal() * 0.8);
+}
 
 // ---------------------------------------------------------------------------
 // Persistent streaming SDK sessions (Beyond Brain).
@@ -330,16 +333,15 @@ function mapCliOptionsToSDK(options = {}) {
   // `compact_boundary` system message and continues seamlessly.
   // `BEYOND_AUTO_COMPACT=0` opts out (e.g. for debugging).
   //
-  // We also override `autoCompactThreshold` to ~80% of BEYOND_TOKEN_BUDGET_TOTAL
+  // We also override `autoCompactThreshold` to ~80% of the token budget
   // (default 200k → compact at 160k) instead of letting the SDK pick a
-  // threshold based on the model's full context window (Opus 4.7 = 1M would
-  // compact at ~800k — way too late for our use case where we want the bot
-  // to stay snappy and the per-turn cache_creation cost predictable).
+  // threshold based on the model's full context window (1M would compact at
+  // ~800k, late for a chat that should stay snappy and predictable in cost).
   if (process.env.BEYOND_AUTO_COMPACT !== '0') {
     sdkOptions.settings = {
       ...(typeof sdkOptions.settings === 'object' && sdkOptions.settings ? sdkOptions.settings : {}),
       autoCompactEnabled: true,
-      autoCompactThreshold: BEYOND_AUTO_COMPACT_THRESHOLD,
+      autoCompactThreshold: autoCompactThreshold(),
     };
   }
 
@@ -471,8 +473,8 @@ function extractTokenBudget(resultMessage) {
 
   return {
     used: totalUsed,
-    total: BEYOND_TOKEN_BUDGET_TOTAL,
-    autoCompactThreshold: BEYOND_AUTO_COMPACT_THRESHOLD,
+    total: tokenBudgetTotal(),
+    autoCompactThreshold: autoCompactThreshold(),
     isAutoCompactEnabled: true,
   };
 }
@@ -1293,8 +1295,8 @@ async function handleBeyondStreamMessage(entry, message) {
             // Pin the displayed total to our Beyond budget rather than the
             // model's raw maxTokens — the UI chip needs the same denominator
             // as autoCompactThreshold so the percentage is meaningful.
-            total: BEYOND_TOKEN_BUDGET_TOTAL,
-            autoCompactThreshold: BEYOND_AUTO_COMPACT_THRESHOLD,
+            total: tokenBudgetTotal(),
+            autoCompactThreshold: autoCompactThreshold(),
             isAutoCompactEnabled: Boolean(usage.isAutoCompactEnabled),
           };
         }
@@ -1554,8 +1556,8 @@ async function queryClaudeSDKOneShot(command, options = {}, ws) {
             if (usage && typeof usage.totalTokens === 'number') {
               liveCtx = {
                 used: usage.totalTokens,
-                total: BEYOND_TOKEN_BUDGET_TOTAL,
-                autoCompactThreshold: BEYOND_AUTO_COMPACT_THRESHOLD,
+                total: tokenBudgetTotal(),
+                autoCompactThreshold: autoCompactThreshold(),
                 isAutoCompactEnabled: Boolean(usage.isAutoCompactEnabled),
               };
             }
