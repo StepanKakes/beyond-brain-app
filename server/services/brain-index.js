@@ -32,6 +32,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import { resolveBrainPath } from '../utils/brain-path.js';
+import { invalidateGraph } from './beyond-graph.js';
 
 const ACTIVE_DIR = ['clients', 'aktivni'];
 
@@ -722,4 +723,6 @@ export async function getBrainIndex({ force = false } = {}) {
 
 export function invalidateBrainIndex() {
   cache = { builtAt: 0, fingerprint: '', data: null };
+  // The file tree and link graph read the same files; they go stale together.
+  invalidateGraph();
 }

@@ -3,13 +3,12 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
   Search, Plus, Check, MessagesSquare, Trash2, Plug,
   PanelLeftClose, Settings, Sun, Moon,
-  Gauge, Users, CalendarDays, MessageSquare, Bot,
+  Gauge, Users, CalendarDays, MessageSquare, Bot, FolderTree,
 } from 'lucide-react';
 import { initialsFor } from './BeyondGlyph';
 import BeyondBrainMark from './BeyondBrainMark';
 import { useBeyondClients, type BeyondClient } from './useBeyondClients';
 import BeyondRepoStatus from './BeyondRepoStatus';
-import BeyondFileTree from './BeyondFileTree';
 import { useBeyondSessions, type BeyondSession } from './useBeyondSessions';
 import { persistSessionIndex, UNIVERSAL_SLUG } from './beyondSessionsApi';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -18,8 +17,10 @@ import { useTheme } from '../../contexts/ThemeContext';
  * Beyond Brain — v3 Sidebar (Liquid Glass).
  *
  * Head (brand + collapse) · repo status · new chat · search · scrolling body
- * (Domů, universal history, clients + their sessions, file tree) · pinned foot
- * (Konektory, user, theme, settings). Everything reads the --bb-* glass tokens.
+ * (the surfaces, a short list of recent chats, clients + their sessions) ·
+ * pinned foot (Konektory, user, theme, settings). Everything reads the --bb-*
+ * glass tokens. The chat history shows a handful like ChatGPT does and unfolds
+ * on request; the file tree has its own screen (Soubory).
  */
 
 type Client = { slug: string; name: string; week: string; selected?: boolean };
@@ -43,6 +44,7 @@ type Props = {
   onOpenBoard?: () => void;
   onOpenCalls?: () => void;
   onOpenAgent?: () => void;
+  onOpenFiles?: () => void;
   onOpenUniversalChat?: () => void;
   onSwitchUniversalSession?: (uuid: string) => void;
   /** Collapse the sidebar (rendered as a button in the head). */
@@ -58,6 +60,7 @@ export default function BeyondSidebarPreview({
   onOpenBoard,
   onOpenCalls,
   onOpenAgent,
+  onOpenFiles,
   onOpenUniversalChat,
   onSwitchUniversalSession,
   onCollapse,
@@ -65,10 +68,9 @@ export default function BeyondSidebarPreview({
   const { clients: apiClients, refresh: refreshClients } = useBeyondClients();
   const { isDarkMode, toggleDarkMode } = useTheme();
   const [query, setQuery] = useState('');
-  const [treeKey, setTreeKey] = useState(0);
 
   const handleSynced = () => {
-    setTreeKey((k) => k + 1);
+    window.dispatchEvent(new CustomEvent('beyond:brain-synced'));
     refreshClients?.();
   };
 
@@ -192,6 +194,19 @@ export default function BeyondSidebarPreview({
             <span className="bb-row__label">Agent</span>
           </button>
         )}
+        {onOpenFiles && (
+          <button
+            type="button"
+            className="bb-row"
+            aria-current={section === 'files' ? 'true' : undefined}
+            onClick={onOpenFiles}
+          >
+            <span className="bb-avatar" style={{ background: 'transparent', boxShadow: 'none' }}>
+              <FolderTree size={15} strokeWidth={1.8} style={{ color: 'var(--bb-ink2)' }} />
+            </span>
+            <span className="bb-row__label">Soubory</span>
+          </button>
+        )}
         {onOpenUniversalChat && (
           <button
             type="button"
@@ -206,7 +221,7 @@ export default function BeyondSidebarPreview({
           </button>
         )}
 
-        {onOpenUniversalChat && <UniversalSessions onSwitch={onSwitchUniversalSession} />}
+        {onOpenUniversalChat && <UniversalSessions onSwitch={onSwitchUniversalSession} query={query} />}
 
         <div className="bb-group__label">Klienti</div>
         <ul className="flex flex-col gap-0.5">
@@ -230,12 +245,6 @@ export default function BeyondSidebarPreview({
           )}
         </ul>
 
-        <BeyondFileTree
-          refreshKey={treeKey}
-          onFileClick={(filePath) => {
-            window.dispatchEvent(new CustomEvent('beyond:open-file', { detail: { path: filePath } }));
-          }}
-        />
       </nav>
 
       {/* Foot — pinned */}
@@ -328,9 +337,25 @@ function ClientSessions({ slug }: { slug: string }) {
   );
 }
 
-/** Inline list of past global ("+ Nový chat") sessions. */
-function UniversalSessions({ onSwitch }: { onSwitch?: (uuid: string) => void }) {
+const RECENT_COUNT = 6;
+
+/**
+ * Past global ("+ Nový chat") sessions. A handful of the most recent ones,
+ * the active one always among them; the rest unfold on request. Typing in
+ * the search box searches all of them instead.
+ */
+function UniversalSessions({ onSwitch, query }: { onSwitch?: (uuid: string) => void; query: string }) {
   const { sessions, activeUuid } = useBeyondSessions(UNIVERSAL_SLUG);
+  const [all, setAll] = useState(false);
+  const q = query.trim().toLowerCase();
+  const shown = useMemo(() => {
+    if (q) return sessions.filter((s) => s.title.toLowerCase().includes(q));
+    if (all || sessions.length <= RECENT_COUNT) return sessions;
+    const head = sessions.slice(0, RECENT_COUNT);
+    const active = sessions.find((s) => s.uuid === activeUuid);
+    if (active && !head.includes(active)) head.push(active);
+    return head;
+  }, [sessions, q, all, activeUuid]);
   if (sessions.length === 0) return null;
 
   const handleDelete = (s: BeyondSession) => {
@@ -341,9 +366,10 @@ function UniversalSessions({ onSwitch }: { onSwitch?: (uuid: string) => void }) 
     window.dispatchEvent(new CustomEvent('beyond:sessions-changed', { detail: { slug: UNIVERSAL_SLUG } }));
   };
 
+  const hidden = sessions.length - shown.length;
   return (
     <div className="bb-subrail">
-      {sessions.map((s) => (
+      {shown.map((s) => (
         <SessionRow
           key={s.uuid}
           session={s}
@@ -352,6 +378,16 @@ function UniversalSessions({ onSwitch }: { onSwitch?: (uuid: string) => void }) 
           onDelete={() => handleDelete(s)}
         />
       ))}
+      {q && shown.length === 0 && (
+        <p className="px-2 py-1 text-[11.5px]" style={{ color: 'var(--bb-ink3)' }}>Žádný chat.</p>
+      )}
+      {!q && sessions.length > RECENT_COUNT && (
+        <button type="button" className="bb-subrow" onClick={() => setAll((v) => !v)}>
+          <span className="bb-subrow__t" style={{ color: 'var(--bb-ink3)' }}>
+            {all ? 'Jen nedávné' : `Dalších ${hidden}`}
+          </span>
+        </button>
+      )}
     </div>
   );
 }

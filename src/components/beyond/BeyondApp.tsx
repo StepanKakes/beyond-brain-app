@@ -13,6 +13,7 @@ import ClientBoard from './velin/ClientBoard';
 import ClientDetail from './velin/ClientDetail';
 import CallsPage from './velin/CallsPage';
 import AgentPage from './velin/AgentPage';
+import FilesPage from './files/FilesPage';
 import { useBeyondClients, type BeyondClient } from './useBeyondClients';
 import { UNIVERSAL_SLUG } from './beyondSessionsApi';
 
@@ -52,6 +53,7 @@ type View =
   | { kind: 'client'; slug: string }
   | { kind: 'calls' }
   | { kind: 'agent' }
+  | { kind: 'files'; path: string | null }
   | { kind: 'chat' };
 
 function parseView(pathname: string): View {
@@ -60,6 +62,10 @@ function parseView(pathname: string): View {
   if (parts[0] === 'klienti') return { kind: 'board' };
   if (parts[0] === 'hovory') return { kind: 'calls' };
   if (parts[0] === 'agent') return { kind: 'agent' };
+  if (parts[0] === 'soubory') {
+    const rest = parts.slice(1).map((p) => decodeURIComponent(p)).join('/');
+    return { kind: 'files', path: rest || null };
+  }
   if (parts[0] === 'klient' && parts[1]) return { kind: 'client', slug: decodeURIComponent(parts[1]) };
   return { kind: 'chat' };
 }
@@ -242,6 +248,10 @@ export default function BeyondApp() {
   const openBoard = useCallback(() => navigate('/klienti'), [navigate]);
   const openCalls = useCallback(() => navigate('/hovory'), [navigate]);
   const openAgent = useCallback(() => navigate('/agent'), [navigate]);
+  const openFiles = useCallback(
+    (p?: string | null) => navigate(p ? `/soubory/${p.split('/').map(encodeURIComponent).join('/')}` : '/soubory'),
+    [navigate],
+  );
 
   return (
     <BeyondShell
@@ -252,6 +262,7 @@ export default function BeyondApp() {
       onOpenBoard={openBoard}
       onOpenCalls={openCalls}
       onOpenAgent={openAgent}
+      onOpenFiles={() => openFiles(null)}
       onOpenUniversalChat={handleOpenUniversalChat}
       onSwitchUniversalSession={handleSwitchUniversalSession}
     >
@@ -274,6 +285,8 @@ export default function BeyondApp() {
             <CallsPage onOpenClient={openClient} />
           ) : view.kind === 'agent' ? (
             <AgentPage />
+          ) : view.kind === 'files' ? (
+            <FilesPage path={view.path} onOpen={openFiles} />
           ) : activeClient ? (
             <BeyondChat
               client={activeClient}

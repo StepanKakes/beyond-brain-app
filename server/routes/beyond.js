@@ -23,6 +23,7 @@ import {
 import { getSupportedModels, runSdkOneShot } from '../claude-sdk.js';
 import { invalidateClientCache } from '../services/beyond-clients.js';
 import { brainPathExists, resolveBrainPath } from '../utils/brain-path.js';
+import { brainTree, brainGraph } from '../services/beyond-graph.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -503,6 +504,23 @@ router.get('/models', async (_req, res) => {
     res.json({ models });
   } catch (err) {
     res.status(500).json({ error: err.message || 'models failed', models: [] });
+  }
+});
+
+// The whole brain as a tree and as a graph of links, for the Soubory screen.
+router.get('/files/tree', async (_req, res) => {
+  try {
+    res.json({ roots: await brainTree() });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'tree failed' });
+  }
+});
+
+router.get('/files/graph', async (_req, res) => {
+  try {
+    res.json(await brainGraph());
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'graph failed' });
   }
 });
 
