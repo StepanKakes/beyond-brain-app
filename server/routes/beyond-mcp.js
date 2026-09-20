@@ -212,11 +212,39 @@ router.post('/connectors/:id/oauth/start', async (req, res) => {
       return res.status(400).json({ error: 'Lokální server nepoužívá OAuth.' });
     }
     const redirectUri = redirectUriFor(req);
-    const { authorizationUrl, state } = await beginAuthorization(connector, redirectUri);
-    res.json({ authorizationUrl, state });
+    const { authorizationUrl, state, manual, redirectUri: used } = await beginAuthorization(connector, redirectUri);
+    res.json({ authorizationUrl, state, manual: Boolean(manual), redirectUri: used });
   } catch (err) {
     console.error('[beyond-mcp] oauth start failed', err);
     res.status(500).json({ error: err?.message || 'Spuštění přihlášení selhalo.' });
+  }
+});
+
+// The loopback case: the browser ended on an address the box does not
+// serve, the person pasted it here, and the code in it finishes the flow.
+router.post('/connectors/:id/oauth/finish', async (req, res) => {
+  try {
+    const raw = String(req.body?.url || '').trim();
+    let parsed;
+    try {
+      parsed = new URL(raw);
+    } catch {
+      return res.status(400).json({ error: 'To není adresa. Zkopíruj celý řádek z adresního řádku okna.' });
+    }
+    const code = parsed.searchParams.get('code');
+    const state = parsed.searchParams.get('state');
+    const oauthError = parsed.searchParams.get('error');
+    if (oauthError) return res.status(400).json({ error: parsed.searchParams.get('error_description') || oauthError });
+    if (!code || !state) return res.status(400).json({ error: 'V adrese chybí code nebo state.' });
+    const pending = takePending(state);
+    if (!pending || pending.connectorId !== req.params.id) {
+      return res.status(400).json({ error: 'Přihlášení už vypršelo, klikni na Připojit znovu.' });
+    }
+    const connector = await completeAuthorization(pending, code);
+    res.json({ ok: true, connector });
+  } catch (err) {
+    console.error('[beyond-mcp] oauth finish failed', err);
+    res.status(500).json({ error: err?.message || 'Výměna tokenu selhala.' });
   }
 });
 

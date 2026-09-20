@@ -123,13 +123,26 @@ export async function testConnector(
   return json<{ status: ConnectorStatus; detail?: string }>(res);
 }
 
-async function startOAuth(id: string): Promise<{ authorizationUrl: string; state: string }> {
+type OAuthStart = { authorizationUrl: string; state: string; manual?: boolean; redirectUri?: string };
+
+async function startOAuth(id: string): Promise<OAuthStart> {
   const res = await authenticatedFetch(
     `${BASE}/connectors/${encodeURIComponent(id)}/oauth/start`,
     { method: 'POST' },
   );
-  return json<{ authorizationUrl: string; state: string }>(res);
+  return json<OAuthStart>(res);
 }
+
+/** Finish a loopback flow with the address the login window ended on. */
+export async function finishOAuth(id: string, url: string): Promise<{ ok: boolean }> {
+  const res = await authenticatedFetch(
+    `${BASE}/connectors/${encodeURIComponent(id)}/oauth/finish`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) },
+  );
+  return json<{ ok: boolean }>(res);
+}
+
+export type ConnectResult = { ok: boolean; error?: string; manual?: boolean; redirectUri?: string };
 
 export type ApplyResult = {
   ok: boolean;
@@ -181,7 +194,7 @@ export function applyToCurrentChat(timeoutMs = 10000): Promise<ApplyResult> {
  * Run the full browser OAuth flow: open the provider consent screen in a popup
  * and resolve when our callback posts back. Resolves `{ ok, error? }`.
  */
-export async function connectOAuth(id: string): Promise<{ ok: boolean; error?: string }> {
+export async function connectOAuth(id: string): Promise<ConnectResult> {
   // The window has to open inside the click, before any await: once the
   // gesture is over, Safari and most blockers refuse it and the button
   // looks dead. So open it empty first and point it at the login when the
@@ -192,12 +205,21 @@ export async function connectOAuth(id: string): Promise<{ ok: boolean; error?: s
     'beyond-mcp-oauth',
     'width=520,height=720,menubar=no,toolbar=no,location=yes',
   );
-  let authorizationUrl: string;
+  let start: OAuthStart;
   try {
-    ({ authorizationUrl } = await startOAuth(id));
+    start = await startOAuth(id);
   } catch (e) {
     try { popup?.close(); } catch { /* already gone */ }
     throw e;
+  }
+  const { authorizationUrl } = start;
+  if (start.manual) {
+    // The server could only register a loopback redirect, so the window will
+    // end on an address nobody serves. Leave it open for the person to copy
+    // the address from; the panel takes it from there.
+    if (popup) popup.location.replace(authorizationUrl);
+    else window.open(authorizationUrl, 'beyond-mcp-oauth');
+    return { ok: false, manual: true, redirectUri: start.redirectUri };
   }
   if (!popup) {
     window.location.assign(authorizationUrl);
@@ -205,9 +227,9 @@ export async function connectOAuth(id: string): Promise<{ ok: boolean; error?: s
   }
   popup.location.replace(authorizationUrl);
 
-  return new Promise((resolve) => {
+  return new Promise<ConnectResult>((resolve) => {
     let settled = false;
-    const finish = (result: { ok: boolean; error?: string }) => {
+    const finish = (result: ConnectResult) => {
       if (settled) return;
       settled = true;
       window.removeEventListener('message', onMessage);

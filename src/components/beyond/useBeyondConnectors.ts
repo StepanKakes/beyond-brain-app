@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   addConnector,
-  connectOAuth,
+  connectOAuth, finishOAuth,
   deleteConnector,
   fetchConnectors,
   fetchPresets,
@@ -90,6 +90,15 @@ export function useBeyondConnectors(enabled: boolean) {
     [refresh],
   );
 
+  const finish = useCallback(
+    async (id: string, url: string) => {
+      const result = await finishOAuth(id, url);
+      await refresh();
+      return result;
+    },
+    [refresh],
+  );
+
   return {
     connectors,
     presets,
@@ -101,5 +110,6 @@ export function useBeyondConnectors(enabled: boolean) {
     remove,
     test,
     connect,
+    finish,
   };
 }

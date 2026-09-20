@@ -60,8 +60,12 @@ function StatusPill({ connector }: { connector: Connector }) {
 }
 
 export default function BeyondConnectors({ onClose }: { onClose: () => void }) {
-  const { connectors, presets, loading, error, create, update, remove, test, connect } =
+  const { connectors, presets, loading, error, create, update, remove, test, connect, finish } =
     useBeyondConnectors(true);
+  // A connector whose login ended on a loopback address: the person pastes
+  // that address here to finish.
+  const [manualFor, setManualFor] = useState<{ id: string; redirectUri: string } | null>(null);
+  const [manualUrl, setManualUrl] = useState('');
 
   const [showForm, setShowForm] = useState(false);
   const [mode, setMode] = useState<'remote' | 'local'>('remote');
@@ -177,10 +181,29 @@ export default function BeyondConnectors({ onClose }: { onClose: () => void }) {
     withBusy(c.id, async () => {
       setNotice(`Otevírám přihlášení pro „${c.name}"…`);
       const res = await connect(c.id);
+      if (res.manual) {
+        setManualFor({ id: c.id, redirectUri: res.redirectUri || 'http://127.0.0.1:3001/callback' });
+        setManualUrl('');
+        setNotice(null);
+        return;
+      }
       if (!res.ok) {
         setNotice(res.error || 'Přihlášení selhalo.');
         return;
       }
+      setNotice(`„${c.name}" připojeno. Aktivuji v tomto chatu…`);
+      await applyLive(`„${c.name}" připojeno.`);
+    });
+
+  const handleFinish = (c: Connector) =>
+    withBusy(c.id, async () => {
+      const res = await finish(c.id, manualUrl.trim());
+      if (!res.ok) {
+        setNotice('Přihlášení se nepodařilo dokončit.');
+        return;
+      }
+      setManualFor(null);
+      setManualUrl('');
       setNotice(`„${c.name}" připojeno. Aktivuji v tomto chatu…`);
       await applyLive(`„${c.name}" připojeno.`);
     });
@@ -341,6 +364,7 @@ export default function BeyondConnectors({ onClose }: { onClose: () => void }) {
                     connector={c}
                     busy={busyId === c.id}
                     onConnect={() => handleConnect(c)}
+                    manual={manualFor?.id === c.id ? { redirectUri: manualFor.redirectUri, url: manualUrl, setUrl: setManualUrl, onFinish: () => handleFinish(c), onCancel: () => setManualFor(null) } : null}
                     onApply={() => handleApply(c)}
                     onTest={() => handleTest(c)}
                     onToggle={() => handleToggle(c)}
@@ -545,6 +569,7 @@ function ConnectorRow({
   connector: c,
   busy,
   onConnect,
+  manual,
   onApply,
   onTest,
   onToggle,
@@ -553,6 +578,7 @@ function ConnectorRow({
   connector: Connector;
   busy: boolean;
   onConnect: () => void;
+  manual: { redirectUri: string; url: string; setUrl: (v: string) => void; onFinish: () => void; onCancel: () => void } | null;
   onApply: () => void;
   onTest: () => void;
   onToggle: () => void;
@@ -589,6 +615,27 @@ function ConnectorRow({
         </div>
         {busy && <Loader2 className="mt-1 h-4 w-4 flex-shrink-0 animate-spin text-beyond-faint" strokeWidth={1.8} />}
       </div>
+
+      {manual && (
+        <div className="mt-3 flex flex-col gap-2 rounded-xl bg-beyond-ink/[0.04] px-3 py-3 pl-3 text-[12.5px] text-beyond-dim">
+          <p className="text-beyond-ink">
+            Tenhle server nedovolí přesměrování na naši adresu, jen na <span className="font-mono">{manual.redirectUri}</span>.
+            Přihlaš se v otevřeném okně; skončí na stránce, která nejde načíst. Zkopíruj celou adresu z jeho adresního řádku a vlož ji sem.
+          </p>
+          <input
+            id={`bb-oauth-finish-${c.id}`}
+            type="url"
+            value={manual.url}
+            onChange={(e) => manual.setUrl(e.target.value)}
+            placeholder={`${manual.redirectUri}?code=…&state=…`}
+            className="w-full rounded-lg border border-beyond-line bg-beyond-paper px-3 py-2 font-mono text-[12px] text-beyond-ink"
+          />
+          <div className="flex gap-1.5">
+            <RowAction onClick={manual.onFinish} disabled={busy || !manual.url.trim()} primary>Dokončit</RowAction>
+            <RowAction onClick={manual.onCancel} disabled={busy}>Zrušit</RowAction>
+          </div>
+        </div>
+      )}
 
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5 pl-11">
         {needsConnect && (

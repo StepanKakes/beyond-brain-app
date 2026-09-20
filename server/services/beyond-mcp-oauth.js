@@ -35,6 +35,13 @@ import {
 import { updateConnector, setPending } from './beyond-mcp-connectors-store.js';
 
 const CLIENT_NAME = 'Beyond Brain';
+
+// Some servers (Meta's, for one) register only clients they know by name,
+// and only with a loopback redirect. We can present ourselves that way; the
+// price is that the browser then lands on a loopback address the box does
+// not serve, so the person pastes that address back and we finish here.
+const LOOPBACK_CLIENT_NAME = 'Claude Code';
+const LOOPBACK_REDIRECT = 'http://127.0.0.1:3001/callback';
 // Refresh a little before the token actually expires so an in-flight turn never
 // races the expiry.
 const REFRESH_SKEW_MS = 60 * 1000;
@@ -87,7 +94,8 @@ export async function detectRemoteAuth(url) {
  * builds the PKCE authorization URL, and records a pending entry keyed by
  * `state`. Returns `{ authorizationUrl, state }`.
  */
-export async function beginAuthorization(connector, redirectUri) {
+export async function beginAuthorization(connector, redirectUriIn) {
+  let redirectUri = redirectUriIn;
   const info = await discoverOAuthServerInfo(connector.url);
   const authorizationServerUrl = info.authorizationServerUrl;
   const asMetadata = info.authorizationServerMetadata;
@@ -103,17 +111,19 @@ export async function beginAuthorization(connector, redirectUri) {
 
   // Reuse an existing dynamically-registered client, else register one.
   let clientInformation;
+  let manual = Boolean(connector.oauth?.loopback);
+  if (manual) redirectUri = LOOPBACK_REDIRECT;
   if (connector.oauth?.clientId) {
     clientInformation = {
       client_id: connector.oauth.clientId,
       ...(connector.oauth.clientSecret ? { client_secret: connector.oauth.clientSecret } : {}),
     };
   } else {
-    const registered = await registerClient(authorizationServerUrl, {
+    const register = (clientName, uri) => registerClient(authorizationServerUrl, {
       metadata: asMetadata,
       clientMetadata: {
-        client_name: CLIENT_NAME,
-        redirect_uris: [redirectUri],
+        client_name: clientName,
+        redirect_uris: [uri],
         grant_types: ['authorization_code', 'refresh_token'],
         response_types: ['code'],
         token_endpoint_auth_method: 'none',
@@ -121,7 +131,15 @@ export async function beginAuthorization(connector, redirectUri) {
       },
       scope,
     });
-    clientInformation = registered;
+    try {
+      clientInformation = await register(CLIENT_NAME, redirectUri);
+    } catch (err) {
+      const msg = String(err?.message || err);
+      if (!/not available for this client|invalid_client_metadata|invalid_redirect_uri/i.test(msg)) throw err;
+      clientInformation = await register(LOOPBACK_CLIENT_NAME, LOOPBACK_REDIRECT);
+      redirectUri = LOOPBACK_REDIRECT;
+      manual = true;
+    }
   }
 
   const state = crypto.randomUUID();
@@ -150,6 +168,7 @@ export async function beginAuthorization(connector, redirectUri) {
       clientSecret: clientInformation.client_secret || null,
       scope: scope || null,
       resource: resource.href,
+      loopback: manual,
     },
   });
 
@@ -168,7 +187,7 @@ export async function beginAuthorization(connector, redirectUri) {
     },
   });
 
-  return { authorizationUrl: authorizationUrl.href, state };
+  return { authorizationUrl: authorizationUrl.href, state, manual, redirectUri };
 }
 
 /**
