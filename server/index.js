@@ -29,6 +29,7 @@ import {
     getPendingApprovalsForSession,
     reconnectSessionWriter,
     isBeyondTurnActive,
+    countActiveBeyondTurns,
 } from './claude-sdk.js';
 import {
     spawnCursor,
@@ -71,7 +72,7 @@ import providerRoutes from './modules/providers/provider.routes.js';
 // Beyond Brain — client-focused endpoints (reads ~/Documents/GitHub/beyond-brain)
 import beyondRoutes from './routes/beyond.js';
 import beyondVelinRoutes from './routes/beyond-velin.js';
-import { startScheduler } from './services/beyond-scheduler.js';
+import { startScheduler, schedulerStatus } from './services/beyond-scheduler.js';
 import beyondEventsRoutes from './routes/beyond-events.js';
 import { startTelegramBot } from './services/beyond-telegram-bot.js';
 import { applyToEnv as applyBeyondSettings } from './services/beyond-settings.js';
@@ -162,12 +163,21 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// Public health check endpoint (no authentication required)
+// Public health check endpoint (no authentication required). `busy` tells the
+// deploy what is in flight (chat replies, a scheduled job) so it can wait for
+// a quiet moment before restarting the service instead of cutting work off.
 app.get('/health', (req, res) => {
+    let busy = { chats: 0, job: null };
+    try {
+        busy = { chats: countActiveBeyondTurns(), job: schedulerStatus().running };
+    } catch {
+        // health must answer even if the beyond layer is not up yet
+    }
     res.json({
         status: 'ok',
         timestamp: new Date().toISOString(),
-        installMode
+        installMode,
+        busy
     });
 });
 

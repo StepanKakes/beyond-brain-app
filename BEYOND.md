@@ -132,7 +132,7 @@ Rozdělené z `BeyondChat.tsx`, který měl 2 900 řádků.
 | `/api/beyond/mcp` | JWT | CRUD konektorů, test, start OAuth |
 | `/api/beyond-mcp-oauth` | žádná (callback) | návrat z OAuth |
 | `/api/beyond-agent` | sdílený secret | jednorázové dotazy pro n8n a Telegram |
-| `/health` | žádná | health check pro deploy |
+| `/health` | žádná | health check pro deploy, v `busy` co právě běží (chaty, úloha) |
 
 Cesta k brain repu má **jednoho vlastníka**: `server/utils/brain-path.js`.
 Prohlížeč si ji nikdy neodvozuje, ptá se na `GET /api/beyond/config`
@@ -185,9 +185,10 @@ přednost: tik nejdřív vyřídí, co čeká ve frontě, a teprve pak se dívá
 kalendář. Před každým během se brain pullne, aby viděl, co mezitím commitl
 n8n, a po běhu se commitne a pushne, co běh změnil, pod jménem úlohy.
 
-Když se služba restartuje uprostřed běhu (což dělá každý deploy), záznam by
-zůstal navždy ve stavu „běží". Při startu se takové běhy uzavřou jako chyba
-s důvodem, ať obrazovka Agent neukazuje fantoma.
+Deploy před restartem služby čeká, až nic neběží (viz [Deploy](#deploy)).
+Kdyby se služba přesto restartovala uprostřed běhu, záznam by zůstal navždy
+ve stavu „běží". Při startu se takové běhy uzavřou jako chyba s důvodem, ať
+obrazovka Agent neukazuje fantoma.
 
 | Úloha | Kdy | Co dělá |
 |---|---|---|
@@ -515,8 +516,11 @@ záleží:
 3. `npm run typecheck`
 4. `npm run lint`
 5. `npm run build:client` + `npm run build:server`
-6. `Restart-Service BeyondBrainApp`
-7. poll `/health`, dokud neodpoví (max ~60 s)
+6. čeká, až `/health` hlásí `busy: { chats: 0, job: null }`, tedy žádná
+   rozepsaná odpověď v chatu ani běžící úloha (max 10 minut, pak restart
+   i tak)
+7. `Restart-Service BeyondBrainApp`
+8. poll `/health`, dokud neodpoví (max ~60 s)
 
 Cokoli z 3 až 5 spadne, služba se nerestartuje a běží dál stará verze. Když
 služba nastartuje, ale `/health` neodpoví, run spadne — crash loop se nedá

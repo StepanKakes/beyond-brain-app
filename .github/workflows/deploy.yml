@@ -13,6 +13,8 @@ name: Deploy
 #   * The run only goes green once the restarted service answers /health, so a
 #     deploy that boots into a crash loop is reported as failed instead of
 #     silently leaving the box down.
+#   * The restart waits (up to ten minutes) for running chat replies and
+#     scheduled jobs to finish, so a deploy never cuts work in half.
 #   * `.env`, `dist/`, `dist-server/`, `node_modules/` are gitignored, so
 #     `git reset --hard` never touches secrets or local build output.
 #   * concurrency: two pushes in a row queue instead of racing each other.
@@ -93,7 +95,26 @@ jobs:
           npm run build:server
           if ($LASTEXITCODE -ne 0) { throw "build:server failed" }
 
-          # Only reached when the build fully succeeded.
+          # Only reached when the build fully succeeded. Before the restart,
+          # wait for a quiet moment: a restart in the middle of a chat reply or
+          # a scheduled job cuts that work off and the person sees it fail.
+          # /health reports what is in flight; wait up to ten minutes, then
+          # restart anyway so a stuck turn cannot block deploys for ever.
+          Write-Host "==> Waiting for the box to be idle"
+          foreach ($attempt in 1..60) {
+            $busy = $null
+            try {
+              $res = Invoke-WebRequest -Uri $health -UseBasicParsing -TimeoutSec 5
+              $busy = ($res.Content | ConvertFrom-Json).busy
+            } catch {
+              # The old version may not answer; nothing to wait for then.
+            }
+            if (-not $busy) { break }
+            if ($busy.chats -eq 0 -and -not $busy.job) { break }
+            Write-Host "    in flight: $($busy.chats) chat(s), job: $($busy.job) (attempt $attempt)"
+            Start-Sleep -Seconds 10
+          }
+
           Write-Host "==> Restart-Service $svc"
           Restart-Service $svc -Force
 

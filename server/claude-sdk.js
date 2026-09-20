@@ -815,6 +815,16 @@ function isBeyondTurnActive(sessionId, userId = null) {
   return Boolean(entry && !entry.ended && entry.pendingTurnResolves.length > 0);
 }
 
+/** How many chat turns are in flight right now, across all people. A deploy
+ *  asks this before restarting the service, so a restart never cuts a reply. */
+function countActiveBeyondTurns() {
+  let n = 0;
+  for (const entry of beyondStreamSessions.values()) {
+    if (!entry.ended && entry.pendingTurnResolves.length > 0) n += 1;
+  }
+  return n;
+}
+
 /** Re-attach a reconnected browser to its live streaming session, if any.
  *  Returns true when a Beyond stream entry was found and re-pointed. */
 function reattachBeyondStream(sessionId, newWs) {
@@ -2023,6 +2033,7 @@ export {
   getPendingApprovalsForSession,
   reconnectSessionWriter,
   isBeyondTurnActive,
+  countActiveBeyondTurns,
   runSdkOneShot,
   resolveSpawnCwd,
 };
