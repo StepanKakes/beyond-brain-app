@@ -967,17 +967,19 @@
   @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap');
 
   :root {
-    /* Beyond v2 surface tokens */
-    --beyond-bg: #ffffff;
-    --beyond-bg-paper: #fafafa;
-    --beyond-ink: #0a0a0a;
-    --beyond-dim: #737373;
-    --beyond-faint: #a3a3a3;
-    --beyond-line: #f0f0f0;
+    /* Beyond v2 surface tokens. They alias the glass tokens from
+       beyond-glass.css so the legacy `.text-beyond-*` utilities below flip
+       with `.dark` instead of painting light ink on a dark ground. */
+    --beyond-bg: var(--bb-bg, #ffffff);
+    --beyond-bg-paper: var(--bb-bg2, #fafafa);
+    --beyond-ink: var(--bb-ink, #0a0a0a);
+    --beyond-dim: var(--bb-ink2, #737373);
+    --beyond-faint: var(--bb-ink3, #a3a3a3);
+    --beyond-line: var(--bb-line, #f0f0f0);
 
-    /* Pill button surface — transparent gray that sits on either white or hero gradient */
-    --beyond-pill-bg: rgba(0, 0, 0, 0.05);
-    --beyond-pill-bg-hover: rgba(0, 0, 0, 0.08);
+    /* Pill button surface — a tint of the ink, so it sits on either ground */
+    --beyond-pill-bg: color-mix(in srgb, var(--bb-ink, #0a0a0a) 5%, transparent);
+    --beyond-pill-bg-hover: color-mix(in srgb, var(--bb-ink, #0a0a0a) 8%, transparent);
 
     /* Hero gradient stops */
     --beyond-hero-from: #cdd9e8;
@@ -1089,7 +1091,7 @@
   .bg-glass-strong,
   .bg-glass-subtle,
   .beyond-card {
-    background: #ffffff;
+    background: var(--bb-raise, #ffffff);
     border: 1px solid var(--beyond-line);
     box-shadow: none;
     backdrop-filter: none;
@@ -1129,7 +1131,7 @@
     width: 100%;
     height: 100%;
     border-radius: inherit;
-    background: linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.05) 50%, transparent 100%);
+    background: linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--bb-ink, #0a0a0a) 5%, transparent) 50%, transparent 100%);
     background-size: 200% 100%;
     animation: shimmer 1.8s linear infinite;
   }

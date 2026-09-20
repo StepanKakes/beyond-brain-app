@@ -104,7 +104,7 @@ function TreeRow({
         <button
           type="button"
           onClick={() => onFileClick?.(node.path)}
-          className="flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left transition-colors hover:bg-black/[0.04]"
+          className="flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left transition-colors hover:bg-beyond-ink/[0.04]"
           style={{ paddingLeft: 8 + depth * 12 }}
           title={`Otevřít náhled ${node.path}`}
         >
@@ -124,7 +124,7 @@ function TreeRow({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left transition-colors hover:bg-black/[0.025]"
+        className="flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left transition-colors hover:bg-beyond-ink/[0.025]"
         style={{ paddingLeft: 4 + depth * 12 }}
         title={node.path}
       >

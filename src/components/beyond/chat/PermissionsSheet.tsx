@@ -48,7 +48,7 @@ export default function PermissionsSheet({
               {entries.map((entry) => (
                 <li
                   key={entry}
-                  className="group flex items-center gap-2 rounded-[12px] px-3 py-2 hover:bg-black/[0.03]"
+                  className="group flex items-center gap-2 rounded-[12px] px-3 py-2 hover:bg-beyond-ink/[0.03]"
                 >
                   <code className="flex-1 truncate font-mono text-[12.5px] text-beyond-ink">
                     {entry}

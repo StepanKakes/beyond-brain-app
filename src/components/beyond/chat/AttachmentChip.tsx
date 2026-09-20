@@ -14,7 +14,7 @@ export default function AttachmentChip({
 
   if (attachment.kind === 'image') {
     return (
-      <div className="group relative flex items-center gap-2 rounded-xl bg-black/[0.04] py-1 pl-1 pr-2">
+      <div className="group relative flex items-center gap-2 rounded-xl bg-beyond-ink/[0.04] py-1 pl-1 pr-2">
         <img
           src={attachment.data}
           alt={attachment.name}
@@ -27,7 +27,7 @@ export default function AttachmentChip({
         <button
           type="button"
           onClick={onRemove}
-          className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-black/[0.08] hover:text-beyond-ink"
+          className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-beyond-ink/[0.08] hover:text-beyond-ink"
           aria-label="Odebrat"
         >
           <X className="h-[12px] w-[12px]" strokeWidth={2} />
@@ -37,7 +37,7 @@ export default function AttachmentChip({
   }
 
   return (
-    <div className="group relative flex items-center gap-2 rounded-xl bg-black/[0.04] px-2 py-1.5">
+    <div className="group relative flex items-center gap-2 rounded-xl bg-beyond-ink/[0.04] px-2 py-1.5">
       <FileIcon className="h-[14px] w-[14px] flex-shrink-0 text-beyond-faint" strokeWidth={1.8} />
       <div className="min-w-0">
         <p className="truncate text-[12px] font-medium text-beyond-ink">{attachment.name}</p>
@@ -46,7 +46,7 @@ export default function AttachmentChip({
       <button
         type="button"
         onClick={onRemove}
-        className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-black/[0.08] hover:text-beyond-ink"
+        className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-beyond-ink/[0.08] hover:text-beyond-ink"
         aria-label="Odebrat"
       >
         <X className="h-[12px] w-[12px]" strokeWidth={2} />

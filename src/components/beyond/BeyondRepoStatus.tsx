@@ -45,7 +45,7 @@ const TONE_DOT: Record<Tone, string> = {
   green: 'bg-emerald-500',
   amber: 'bg-amber-500',
   red: 'bg-red-500',
-  idle: 'bg-black/15',
+  idle: 'bg-beyond-ink/15',
 };
 
 export default function BeyondRepoStatus({
@@ -111,7 +111,7 @@ export default function BeyondRepoStatus({
 
   return (
     <div className="px-4 pt-5">
-      <div className="rounded-2xl border border-black/[0.04] bg-black/[0.015] px-3 py-2.5">
+      <div className="rounded-2xl border border-beyond-ink/[0.04] bg-beyond-ink/[0.015] px-3 py-2.5">
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
@@ -137,7 +137,7 @@ export default function BeyondRepoStatus({
             }}
             disabled={syncing || !status?.exists}
             title="Sync (fetch → pull / push podle stavu)"
-            className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-black/[0.05] hover:text-beyond-ink disabled:opacity-40"
+            className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-beyond-ink/[0.05] hover:text-beyond-ink disabled:opacity-40"
           >
             <RefreshCw
               className={`h-[14px] w-[14px] ${syncing ? 'animate-spin' : ''}`}
@@ -157,7 +157,7 @@ export default function BeyondRepoStatus({
         )}
 
         {showDetail && (
-          <div className="mt-2 space-y-1 border-t border-black/[0.04] pt-2 text-[11px] text-beyond-dim">
+          <div className="mt-2 space-y-1 border-t border-beyond-ink/[0.04] pt-2 text-[11px] text-beyond-dim">
             <div className="flex items-center gap-2">
               <ArrowUp className="h-[11px] w-[11px]" strokeWidth={1.8} />
               <span>{status?.ahead || 0} k pushnutí</span>

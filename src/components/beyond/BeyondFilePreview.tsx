@@ -213,7 +213,7 @@ export default function BeyondFilePreview({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <header className="flex flex-shrink-0 items-center gap-2.5 border-b border-black/[0.06] px-5 py-3.5">
+        <header className="flex flex-shrink-0 items-center gap-2.5 border-b border-beyond-ink/[0.06] px-5 py-3.5">
           <FileText className="h-[16px] w-[16px] flex-shrink-0 text-beyond-faint" strokeWidth={1.8} />
           <div className="min-w-0 flex-1">
             <p className="truncate text-[13px] font-medium text-beyond-ink">{fileName}</p>
@@ -226,7 +226,7 @@ export default function BeyondFilePreview({
               type="button"
               onClick={handleCopy}
               title={copied ? 'Zkopírováno' : 'Kopírovat obsah'}
-              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-black/[0.04] hover:text-beyond-dim"
+              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-beyond-ink/[0.04] hover:text-beyond-dim"
             >
               {copied ? (
                 <Check className="h-[15px] w-[15px] text-emerald-600" strokeWidth={2} />
@@ -240,7 +240,7 @@ export default function BeyondFilePreview({
               type="button"
               onClick={handleDownloadText}
               title="Stáhnout"
-              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-black/[0.04] hover:text-beyond-dim"
+              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-beyond-ink/[0.04] hover:text-beyond-dim"
             >
               <Download className="h-[15px] w-[15px]" strokeWidth={1.8} />
             </button>
@@ -250,7 +250,7 @@ export default function BeyondFilePreview({
               href={blobUrl}
               download={fileName}
               title="Stáhnout"
-              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-black/[0.04] hover:text-beyond-dim"
+              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-beyond-ink/[0.04] hover:text-beyond-dim"
             >
               <Download className="h-[15px] w-[15px]" strokeWidth={1.8} />
             </a>
@@ -260,7 +260,7 @@ export default function BeyondFilePreview({
               type="button"
               onClick={handleOpenAsPage}
               title="Zobrazit jako živou stránku"
-              className="inline-flex items-center gap-1 rounded-full bg-black/[0.04] px-3 py-1.5 text-[12px] font-medium text-beyond-ink transition-colors hover:bg-black/[0.08]"
+              className="inline-flex items-center gap-1 rounded-full bg-beyond-ink/[0.04] px-3 py-1.5 text-[12px] font-medium text-beyond-ink transition-colors hover:bg-beyond-ink/[0.08]"
             >
               <PanelRight className="h-[13px] w-[13px]" strokeWidth={1.9} />
               Jako stránku
@@ -270,7 +270,7 @@ export default function BeyondFilePreview({
             type="button"
             onClick={handleInsert}
             title="Vložit @cestu do chatu"
-            className="inline-flex items-center gap-1 rounded-full bg-black/[0.04] px-3 py-1.5 text-[12px] font-medium text-beyond-ink transition-colors hover:bg-black/[0.08]"
+            className="inline-flex items-center gap-1 rounded-full bg-beyond-ink/[0.04] px-3 py-1.5 text-[12px] font-medium text-beyond-ink transition-colors hover:bg-beyond-ink/[0.08]"
           >
             Vložit do chatu
             <ArrowUpRight className="h-[12px] w-[12px]" strokeWidth={2} />
@@ -279,7 +279,7 @@ export default function BeyondFilePreview({
             type="button"
             onClick={onClose}
             aria-label="Zavřít"
-            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-black/[0.04] hover:text-beyond-dim"
+            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-beyond-ink/[0.04] hover:text-beyond-dim"
           >
             <X className="h-[16px] w-[16px]" strokeWidth={1.8} />
           </button>
@@ -313,7 +313,7 @@ export default function BeyondFilePreview({
             <iframe
               src={blobUrl}
               title={fileName}
-              className="h-[calc(100vh-160px)] w-full rounded-[12px] border border-black/[0.06]"
+              className="h-[calc(100vh-160px)] w-full rounded-[12px] border border-beyond-ink/[0.06]"
             />
           )}
 
@@ -330,7 +330,7 @@ export default function BeyondFilePreview({
           {/* Archive / binary (zip, docx, …) — nothing to preview, offer download. */}
           {!loading && !error && kind === 'download' && blobUrl && (
             <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-[18px] bg-black/[0.04]">
+              <div className="flex h-16 w-16 items-center justify-center rounded-[18px] bg-beyond-ink/[0.04]">
                 <FileText className="h-7 w-7 text-beyond-faint" strokeWidth={1.5} />
               </div>
               <div>
@@ -353,7 +353,7 @@ export default function BeyondFilePreview({
           {/* Binary that slipped through the JSON path — still downloadable. */}
           {!loading && !error && payload?.binary && !isBlobKind && (
             <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-[18px] bg-black/[0.04]">
+              <div className="flex h-16 w-16 items-center justify-center rounded-[18px] bg-beyond-ink/[0.04]">
                 <FileText className="h-7 w-7 text-beyond-faint" strokeWidth={1.5} />
               </div>
               <div>
@@ -375,7 +375,7 @@ export default function BeyondFilePreview({
 
           {/* Markdown */}
           {payload && !payload.binary && kind === 'markdown' && (
-            <div className="beyond-prose text-[14.5px] leading-relaxed text-beyond-ink [&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1 [&_strong]:font-semibold [&_em]:italic [&_h1]:mb-3 [&_h1]:mt-5 [&_h1]:text-[20px] [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-[17px] [&_h2]:font-semibold [&_h3]:mb-1 [&_h3]:mt-3 [&_h3]:text-[15px] [&_h3]:font-semibold [&_hr]:my-4 [&_hr]:border-black/10 [&_blockquote]:my-3 [&_blockquote]:border-l-2 [&_blockquote]:border-black/10 [&_blockquote]:pl-3 [&_blockquote]:text-beyond-dim [&_table]:my-3 [&_table]:w-full [&_th]:border-b [&_th]:border-black/10 [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_th]:text-[12px] [&_th]:uppercase [&_th]:tracking-wide [&_th]:text-beyond-faint [&_td]:border-b [&_td]:border-black/[0.04] [&_td]:px-2 [&_td]:py-1.5">
+            <div className="beyond-prose text-[14.5px] leading-relaxed text-beyond-ink [&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1 [&_strong]:font-semibold [&_em]:italic [&_h1]:mb-3 [&_h1]:mt-5 [&_h1]:text-[20px] [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-[17px] [&_h2]:font-semibold [&_h3]:mb-1 [&_h3]:mt-3 [&_h3]:text-[15px] [&_h3]:font-semibold [&_hr]:my-4 [&_hr]:border-beyond-ink/10 [&_blockquote]:my-3 [&_blockquote]:border-l-2 [&_blockquote]:border-beyond-ink/10 [&_blockquote]:pl-3 [&_blockquote]:text-beyond-dim [&_table]:my-3 [&_table]:w-full [&_th]:border-b [&_th]:border-beyond-ink/10 [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_th]:text-[12px] [&_th]:uppercase [&_th]:tracking-wide [&_th]:text-beyond-faint [&_td]:border-b [&_td]:border-beyond-ink/[0.04] [&_td]:px-2 [&_td]:py-1.5">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{
@@ -384,7 +384,7 @@ export default function BeyondFilePreview({
                       {...rest}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-beyond-ink underline decoration-black/20 underline-offset-2 hover:decoration-black/50"
+                      className="text-beyond-ink underline decoration-beyond-ink/20 underline-offset-2 hover:decoration-beyond-ink/50"
                     />
                   ),
                   code: ({ className, children }) => {
@@ -416,7 +416,7 @@ export default function BeyondFilePreview({
 
         {/* Footer — meta */}
         {(sizeBytes != null || payload?.mtime) && (
-          <footer className="flex flex-shrink-0 items-center justify-between gap-2 border-t border-black/[0.06] px-5 py-2 text-[11px] text-beyond-faint">
+          <footer className="flex flex-shrink-0 items-center justify-between gap-2 border-t border-beyond-ink/[0.06] px-5 py-2 text-[11px] text-beyond-faint">
             <span>{sizeBytes != null ? `${Math.round(sizeBytes / 1024) || 1} kB` : ''}</span>
             {payload?.mtime && (
               <span title={payload.mtime}>

@@ -109,7 +109,7 @@ export default function BeyondHtmlCanvas({
   };
 
   const iconBtn =
-    'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-black/[0.04] hover:text-beyond-dim';
+    'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-beyond-ink/[0.04] hover:text-beyond-dim';
 
   return (
     <motion.div
@@ -129,14 +129,14 @@ export default function BeyondHtmlCanvas({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <header className="flex flex-shrink-0 items-center gap-2.5 border-b border-black/[0.06] px-5 py-3">
+        <header className="flex flex-shrink-0 items-center gap-2.5 border-b border-beyond-ink/[0.06] px-5 py-3">
           <div className="min-w-0 flex-1">
             <p className="truncate text-[13px] font-medium text-beyond-ink">{heading}</p>
             <p className="truncate text-[11px] text-beyond-faint">HTML stránka · živý náhled</p>
           </div>
 
           {/* Preview / Code segmented control */}
-          <div className="flex flex-shrink-0 items-center gap-0.5 rounded-full bg-black/[0.04] p-0.5">
+          <div className="flex flex-shrink-0 items-center gap-0.5 rounded-full bg-beyond-ink/[0.04] p-0.5">
             <button
               type="button"
               onClick={() => setTab('preview')}

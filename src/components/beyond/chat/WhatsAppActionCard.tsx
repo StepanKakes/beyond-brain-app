@@ -102,7 +102,7 @@ export default function WhatsAppActionCard({
           type="button"
           onClick={handleSend}
           disabled={!text.trim()}
-          className="rounded-full bg-emerald-500 px-4 py-1.5 text-[12px] font-medium text-white shadow-[0_2px_8px_-2px_rgba(16,185,129,0.4)] transition-all hover:bg-emerald-600 hover:shadow-[0_4px_12px_-2px_rgba(16,185,129,0.5)] disabled:bg-black/[0.08] disabled:text-black/30 disabled:shadow-none"
+          className="rounded-full bg-emerald-500 px-4 py-1.5 text-[12px] font-medium text-white shadow-[0_2px_8px_-2px_rgba(16,185,129,0.4)] transition-all hover:bg-emerald-600 hover:shadow-[0_4px_12px_-2px_rgba(16,185,129,0.5)] disabled:bg-beyond-ink/[0.08] disabled:text-beyond-ink/30 disabled:shadow-none"
         >
           Odeslat
         </button>

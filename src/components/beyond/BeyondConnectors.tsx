@@ -38,13 +38,13 @@ const STATUS_META: Record<
   needs_auth: { label: 'Vyžaduje přihlášení', className: 'bg-amber-50 text-amber-700' },
   authorizing: { label: 'Přihlašování…', className: 'bg-blue-50 text-blue-700' },
   error: { label: 'Chyba', className: 'bg-red-50 text-red-600' },
-  unknown: { label: 'Neověřeno', className: 'bg-black/[0.04] text-beyond-dim' },
+  unknown: { label: 'Neověřeno', className: 'bg-beyond-ink/[0.04] text-beyond-dim' },
 };
 
 function StatusPill({ connector }: { connector: Connector }) {
   if (!connector.enabled) {
     return (
-      <span className="inline-flex items-center rounded-full bg-black/[0.04] px-2 py-0.5 text-[11px] font-medium text-beyond-faint">
+      <span className="inline-flex items-center rounded-full bg-beyond-ink/[0.04] px-2 py-0.5 text-[11px] font-medium text-beyond-faint">
         Vypnuto
       </span>
     );
@@ -224,7 +224,7 @@ export default function BeyondConnectors({ onClose }: { onClose: () => void }) {
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <header className="flex flex-shrink-0 items-center gap-2.5 border-b border-black/[0.06] px-6 py-4">
+        <header className="flex flex-shrink-0 items-center gap-2.5 border-b border-beyond-ink/[0.06] px-6 py-4">
           <Plug className="h-[18px] w-[18px] flex-shrink-0 text-beyond-dim" strokeWidth={1.8} />
           <div className="min-w-0 flex-1">
             <h2 className="font-hero italic text-[1.35rem] leading-tight text-beyond-ink">
@@ -238,7 +238,7 @@ export default function BeyondConnectors({ onClose }: { onClose: () => void }) {
             type="button"
             onClick={onClose}
             aria-label="Zavřít"
-            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-black/[0.04] hover:text-beyond-dim"
+            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-beyond-ink/[0.04] hover:text-beyond-dim"
           >
             <X className="h-[16px] w-[16px]" strokeWidth={1.8} />
           </button>
@@ -247,7 +247,7 @@ export default function BeyondConnectors({ onClose }: { onClose: () => void }) {
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
           {notice && (
-            <div className="mb-4 rounded-xl bg-black/[0.03] px-3.5 py-2.5 text-[12.5px] text-beyond-dim">
+            <div className="mb-4 rounded-xl bg-beyond-ink/[0.03] px-3.5 py-2.5 text-[12.5px] text-beyond-dim">
               {notice}
             </div>
           )}
@@ -302,7 +302,7 @@ export default function BeyondConnectors({ onClose }: { onClose: () => void }) {
                     key={p.id}
                     type="button"
                     onClick={() => applyPreset(p)}
-                    className="group flex flex-col items-start gap-1 rounded-2xl border border-beyond-line px-3.5 py-3 text-left transition-colors hover:border-black/20 hover:bg-black/[0.02]"
+                    className="group flex flex-col items-start gap-1 rounded-2xl border border-beyond-line px-3.5 py-3 text-left transition-colors hover:border-beyond-ink/20 hover:bg-beyond-ink/[0.02]"
                   >
                     <span className="flex items-center gap-2 text-[13.5px] font-medium text-beyond-ink">
                       <Globe className="h-[14px] w-[14px] text-beyond-faint" strokeWidth={1.8} />
@@ -412,7 +412,7 @@ function AddForm(props: AddFormProps) {
   return (
     <div className="mb-6 rounded-2xl border border-beyond-line p-4">
       {/* Type toggle */}
-      <div className="mb-3 inline-flex rounded-full bg-black/[0.04] p-0.5">
+      <div className="mb-3 inline-flex rounded-full bg-beyond-ink/[0.04] p-0.5">
         <TypeTab active={mode === 'remote'} onClick={() => setMode('remote')} icon={<Globe className="h-[13px] w-[13px]" strokeWidth={1.8} />} label="Vzdálený" />
         <TypeTab active={mode === 'local'} onClick={() => setMode('local')} icon={<Terminal className="h-[13px] w-[13px]" strokeWidth={1.8} />} label="Lokální" />
       </div>
@@ -436,7 +436,7 @@ function AddForm(props: AddFormProps) {
             />
             <div className="flex items-center gap-2">
               <span className="text-[12px] text-beyond-faint">Přenos:</span>
-              <div className="inline-flex rounded-full bg-black/[0.04] p-0.5">
+              <div className="inline-flex rounded-full bg-beyond-ink/[0.04] p-0.5">
                 <TypeTab active={transport === 'http'} onClick={() => setTransport('http')} label="HTTP" />
                 <TypeTab active={transport === 'sse'} onClick={() => setTransport('sse')} label="SSE" />
               </div>
@@ -454,7 +454,7 @@ function AddForm(props: AddFormProps) {
               Pokročilé
             </button>
             {advanced && (
-              <div className="rounded-xl bg-black/[0.02] p-3">
+              <div className="rounded-xl bg-beyond-ink/[0.02] p-3">
                 <label className="mb-1 block text-[11.5px] text-beyond-faint">
                   Autorizační token (Bearer) — jen když server nepoužívá OAuth
                 </label>
@@ -503,7 +503,7 @@ function AddForm(props: AddFormProps) {
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-full px-4 py-2 text-[13px] text-beyond-dim transition-colors hover:bg-black/[0.04]"
+            className="rounded-full px-4 py-2 text-[13px] text-beyond-dim transition-colors hover:bg-beyond-ink/[0.04]"
           >
             Zrušit
           </button>
@@ -565,7 +565,7 @@ function ConnectorRow({
   return (
     <li className="rounded-2xl border border-beyond-line px-4 py-3">
       <div className="flex items-start gap-3">
-        <span className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-black/[0.04] text-beyond-dim">
+        <span className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-beyond-ink/[0.04] text-beyond-dim">
           {isRemote ? (
             <Globe className="h-[15px] w-[15px]" strokeWidth={1.8} />
           ) : (
@@ -646,7 +646,7 @@ function RowAction({
     ? 'bb-btn-primary'
     : danger
       ? 'text-red-500 hover:bg-red-50'
-      : 'bg-black/[0.04] text-beyond-dim hover:bg-black/[0.08]';
+      : 'bg-beyond-ink/[0.04] text-beyond-dim hover:bg-beyond-ink/[0.08]';
   return (
     <button type="button" onClick={onClick} disabled={disabled} className={`${base} ${tone}`}>
       {children}

@@ -66,7 +66,7 @@ export default function SessionsMenu({
                 return (
                   <div
                     key={s.uuid}
-                    className={`group flex items-start gap-2 px-3 py-2 transition-colors ${active ? 'bg-black/[0.03]' : 'hover:bg-black/[0.025]'}`}
+                    className={`group flex items-start gap-2 px-3 py-2 transition-colors ${active ? 'bg-beyond-ink/[0.03]' : 'hover:bg-beyond-ink/[0.025]'}`}
                   >
                     <button
                       type="button"

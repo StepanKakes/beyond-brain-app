@@ -47,7 +47,7 @@ export default function BeyondChatPreview() {
     <div className="flex h-full w-full flex-col bg-[#fafafa]">
       {/* Floating rounded header card with Beyond glyph avatar */}
       <header className="flex flex-shrink-0 items-center px-4 pb-3 pl-16 pr-4 pt-4 sm:px-6 sm:pl-20 sm:pr-6 sm:pt-5">
-        <div className="mx-auto flex w-full max-w-[760px] items-center gap-3 rounded-2xl bg-white px-4 py-3 shadow-[0_2px_16px_-8px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.04]">
+        <div className="mx-auto flex w-full max-w-[760px] items-center gap-3 rounded-2xl bg-white px-4 py-3 shadow-[0_2px_16px_-8px_rgba(0,0,0,0.06)] ring-1 ring-beyond-ink/[0.04]">
           <BeyondGlyph size={28} />
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-[14px] font-medium leading-tight text-beyond-ink">
@@ -94,13 +94,13 @@ export default function BeyondChatPreview() {
       {/* Composer — floating rounded card */}
       <div className="flex-shrink-0 px-4 pb-6 pt-3 sm:px-6 sm:pb-8 sm:pt-4">
         <div className="mx-auto w-full max-w-[760px]">
-          <div className="rounded-[24px] bg-white px-4 py-3 shadow-[0_4px_24px_-8px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.04] focus-within:shadow-[0_8px_32px_-8px_rgba(0,0,0,0.12)] focus-within:ring-black/[0.06]">
+          <div className="rounded-[24px] bg-white px-4 py-3 shadow-[0_4px_24px_-8px_rgba(0,0,0,0.08)] ring-1 ring-beyond-ink/[0.04] focus-within:shadow-[0_8px_32px_-8px_rgba(0,0,0,0.12)] focus-within:ring-beyond-ink/[0.06]">
             <div className="flex items-end gap-2">
               <button
                 type="button"
                 tabIndex={-1}
                 aria-label="Příloha"
-                className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-black/[0.04] hover:text-beyond-dim"
+                className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-beyond-ink/[0.04] hover:text-beyond-dim"
               >
                 <Paperclip className="h-[18px] w-[18px]" strokeWidth={1.8} />
               </button>
@@ -125,7 +125,7 @@ export default function BeyondChatPreview() {
                 <button
                   key={label}
                   type="button"
-                  className="rounded-full px-3 py-1 text-[12px] text-beyond-faint transition-colors hover:bg-black/[0.04] hover:text-beyond-ink"
+                  className="rounded-full px-3 py-1 text-[12px] text-beyond-faint transition-colors hover:bg-beyond-ink/[0.04] hover:text-beyond-ink"
                 >
                   {label}
                 </button>
@@ -152,7 +152,7 @@ function Message({ message }: { message: SeedMessage }) {
         transition={transition}
         className="flex justify-end"
       >
-        <div className="max-w-[85%] rounded-[22px] rounded-br-[6px] bg-white px-4 py-3 shadow-[0_2px_12px_-6px_rgba(0,0,0,0.08)] ring-1 ring-black/[0.04]">
+        <div className="max-w-[85%] rounded-[22px] rounded-br-[6px] bg-white px-4 py-3 shadow-[0_2px_12px_-6px_rgba(0,0,0,0.08)] ring-1 ring-beyond-ink/[0.04]">
           <p className="whitespace-pre-line text-[15px] leading-relaxed text-beyond-ink">
             {message.text}
           </p>
@@ -162,7 +162,7 @@ function Message({ message }: { message: SeedMessage }) {
   }
 
   return (
-    <motion.div variants={variants} transition={transition} className="flex flex-col gap-2 border-l border-black/[0.06] pl-4">
+    <motion.div variants={variants} transition={transition} className="flex flex-col gap-2 border-l border-beyond-ink/[0.06] pl-4">
       {message.tool && (
         <p className="text-[13px] italic text-beyond-faint">{message.tool}</p>
       )}
