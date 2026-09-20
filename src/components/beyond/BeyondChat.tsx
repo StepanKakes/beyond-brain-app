@@ -938,6 +938,18 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
   // and re-attaches on reconnect. These control messages carry a `type` (no
   // `kind`), so the stream handler above ignores them.
   const handleControlMessage = (m: Record<string, unknown>) => {
+    // The server failed before a turn even started (a thrown handler, a bad
+    // option). It arrives with `type`, not `kind`; without this the spinner
+    // would run for ever over nothing.
+    if (m.type === 'error' && thinkingRef.current) {
+      const err = typeof m.error === 'string' && m.error ? m.error : 'Server odmítl zprávu, zkus to znovu.';
+      setThinking(false);
+      setThinkingNote(null);
+      streamBubbleIdRef.current = null;
+      setStreamingId(null);
+      setMessages((prev) => [...prev, { id: uid(), role: 'assistant', kind: 'text', text: `Chyba serveru: ${err}` }]);
+      return;
+    }
     if (m.type === 'websocket-reconnected') {
       // Ask the server to re-attach us to any live turn and tell us its state.
       if (sessionIdRef.current) {

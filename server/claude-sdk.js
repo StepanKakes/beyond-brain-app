@@ -59,10 +59,10 @@ const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode'])
 // for the whole window); read at call time so a change applies to the next
 // chat without a restart.
 function tokenBudgetTotal() {
-  return parseInt(process.env.tokenBudgetTotal(), 10) || 200000;
+  return parseInt(process.env.BEYOND_TOKEN_BUDGET_TOTAL, 10) || 200000;
 }
 function autoCompactThreshold() {
-  return parseInt(process.env.autoCompactThreshold(), 10) || Math.floor(tokenBudgetTotal() * 0.8);
+  return parseInt(process.env.BEYOND_AUTO_COMPACT_THRESHOLD, 10) || Math.floor(tokenBudgetTotal() * 0.8);
 }
 
 // ---------------------------------------------------------------------------
