@@ -436,7 +436,9 @@ async function writeupAndNotion(call, log) {
   }
 
   const fm = parseFrontmatter(text);
-  const body = text.replace(/^---[\s\S]*?---\s*/, '');
+  // The "Souvisí" section is the brain's own wiring (paths for the graph),
+  // not part of what the client reads; it stays out of Notion.
+  const body = text.replace(/^---[\s\S]*?---\s*/, '').replace(/\n## Souvisí\s*\n[\s\S]*$/, '\n').replace(/<!--\s*notion:[^>]+-->\s*/g, '');
   const clientTasks = tasksFromWriteup(body);
   const ours = ourPromisesFromWriteup(body);
   const notes = [`${call.name}: zápis ${rel} (${clientTasks.length} úkolů klienta, ${ours.length} slibů našich)`];
@@ -477,7 +479,7 @@ async function writeupAndNotion(call, log) {
         `   Properties: Téma hovoru = tema z hlavičky souboru, Datum = ${call.dateIso}, Status = „✅ Zpracováno",`,
         '   Typ = typ z hlavičky (přesně jedna z hodnot databáze), Délka (min) = delka z hlavičky,',
         reg.dashboardId ? `   Klient = relace na stránku \`${reg.dashboardId}\`.` : '   Klient = relace na Dashboard klienta, když ho dohledáš.',
-        '   Obsah stránky = celý zápis ze souboru bez YAML hlavičky, v Notion markdownu (checkboxy, nadpisy, číslovaný seznam).',
+        '   Obsah stránky = celý zápis ze souboru bez YAML hlavičky a bez sekce „Souvisí" na konci (ta je jen pro brain), v Notion markdownu (checkboxy, nadpisy, číslovaný seznam).',
         '   U existujícího řádku starý obsah nahraď. Na konec dej odkaz „Záznam hovoru (Fathom)" z hlavičky.',
         '',
         '2. Úkoly klienta:' + (reg.tasksDbId ? ` databáze \`${reg.tasksDbId}\`.` : ' najdi přes notion-search „Úkoly " + jméno.'),
