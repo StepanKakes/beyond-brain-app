@@ -246,6 +246,16 @@ async function findUnwrittenCalls() {
     //    second-brain/_raw/cally/ in parts.
     for (const block of autoBlocksWithoutWriteup(c.slug)) {
       if (block.dateIso < cutoff) continue;
+      if (block.curated) {
+        // C. Curated already, but the client never got their write-up (the
+        //    write-up step is newer than the record). Only for a recent call.
+        const recent = Date.now() - Date.parse(block.dateIso) < 7 * 24 * 60 * 60 * 1000;
+        const hasZapis = fsSync.existsSync(path.join(resolveBrainPath(), 'workspace', 'zapisy', `${block.dateIso}-${c.slug}.md`));
+        if (recent && !hasZapis) {
+          out.push({ slug: c.slug, name: c.name, dateIso: block.dateIso, transcript: block.transcript, auto: true, recordingId: block.recordingId, onlyWriteup: true });
+        }
+        continue;
+      }
       out.push({ slug: c.slug, name: c.name, dateIso: block.dateIso, transcript: block.transcript, auto: true, recordingId: block.recordingId });
     }
   }
@@ -267,10 +277,10 @@ function autoBlocksWithoutWriteup(slug) {
     const rec = /<!--\s*fathom:(\d+)\s*-->/.exec(b);
     if (!head || !rec) continue;
     if (!/Automatický zápis z Fathomu/.test(b)) continue;
-    if (new RegExp(`<!--\\s*zpracovano:${rec[1]}\\s*-->`).test(b)) continue;
+    const curated = new RegExp(`<!--\\s*zpracovano:${rec[1]}\\s*-->`).test(b);
     const prepis = /\*\*Přepis:\*\*\s*`([^`]+)`/.exec(b);
     const transcript = prepis ? prepis[1] : `second-brain/_raw/cally/${head[1]}-${slug}-*-cast*.md`;
-    out.push({ dateIso: head[1], recordingId: rec[1], transcript });
+    out.push({ dateIso: head[1], recordingId: rec[1], transcript, curated });
   }
   return out;
 }
@@ -292,6 +302,15 @@ const processCall = {
 
     const done = [];
     for (const call of pending) {
+      if (call.onlyWriteup) {
+        log(`${call.slug} · ${call.dateIso}: jen klientský zápis a Notion`);
+        try {
+          done.push((await writeupAndNotion(call, log)) || `${call.name}: zápis hotov`);
+        } catch (err) {
+          done.push(`${call.name}: zápis selhal (${err?.message || err})`);
+        }
+        continue;
+      }
       log(`zpracovávám ${call.slug} · ${call.dateIso}${call.auto ? ' (auto blok z n8n)' : ''}`);
       const result = await runAgent(
         [
