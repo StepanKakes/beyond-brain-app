@@ -18,6 +18,7 @@
  *      to conclude "no changes".
  */
 import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
 import path from 'node:path';
 
 import { runSdkOneShot } from '../claude-sdk.js';
@@ -221,16 +222,53 @@ const pullWhatsAppJob = {
  * that always slips, and everything downstream (promises, numbers, the next
  * brief) depends on it having happened.
  */
+/** Calls no one has written up yet, from either place a transcript can land. */
 async function findUnwrittenCalls() {
   const index = await getBrainIndex({ force: true });
   const out = [];
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   for (const c of index.clients) {
     if (c.isActive === false) continue;
+
+    // A. A transcript in raw/fathom/ newer than the last entry in cally.md
+    //    (the older pull path).
     const newest = c.fathom?.[0];
-    if (!newest) continue;
     const lastWritten = c.calls?.[0]?.dateIso || null;
-    if (lastWritten && lastWritten >= newest.dateIso) continue;
-    out.push({ slug: c.slug, name: c.name, file: newest.file, dateIso: newest.dateIso });
+    if (newest && !(lastWritten && lastWritten >= newest.dateIso)) {
+      out.push({ slug: c.slug, name: c.name, dateIso: newest.dateIso, transcript: `clients/aktivni/${c.slug}/raw/fathom/${newest.file}`, auto: false });
+      continue;
+    }
+
+    // B. An automatic block n8n put into cally.md (Fathom summary + marker)
+    //    that nobody turned into a curated entry yet. The transcript sits in
+    //    second-brain/_raw/cally/ in parts.
+    for (const block of autoBlocksWithoutWriteup(c.slug)) {
+      if (block.dateIso < cutoff) continue;
+      out.push({ slug: c.slug, name: c.name, dateIso: block.dateIso, transcript: block.transcript, auto: true, recordingId: block.recordingId });
+    }
+  }
+  // Newest first, and never more than two in one run: each is a long read.
+  return out.sort((a, b) => (a.dateIso < b.dateIso ? 1 : -1)).slice(0, 2);
+}
+
+function autoBlocksWithoutWriteup(slug) {
+  let text;
+  try {
+    text = fsSync.readFileSync(path.join(resolveBrainPath(), 'clients', 'aktivni', slug, 'cally.md'), 'utf8');
+  } catch {
+    return [];
+  }
+  const blocks = text.split(/^(?=## \d{4}-\d{2}-\d{2})/m);
+  const out = [];
+  for (const b of blocks) {
+    const head = /^## (\d{4}-\d{2}-\d{2})/.exec(b);
+    const rec = /<!--\s*fathom:(\d+)\s*-->/.exec(b);
+    if (!head || !rec) continue;
+    if (!/Automatický zápis z Fathomu/.test(b)) continue;
+    if (new RegExp(`<!--\\s*zpracovano:${rec[1]}\\s*-->`).test(b)) continue;
+    const prepis = /\*\*Přepis:\*\*\s*`([^`]+)`/.exec(b);
+    const transcript = prepis ? prepis[1] : `second-brain/_raw/cally/${head[1]}-${slug}-*-cast*.md`;
+    out.push({ dateIso: head[1], recordingId: rec[1], transcript });
   }
   return out;
 }
@@ -252,18 +290,29 @@ const processCall = {
 
     const done = [];
     for (const call of pending) {
-      log(`zpracovávám ${call.slug} · ${call.file}`);
+      log(`zpracovávám ${call.slug} · ${call.dateIso}${call.auto ? ' (auto blok z n8n)' : ''}`);
       const result = await runAgent(
         [
           `Použij skill sync-client na klienta \`${call.slug}\`.`,
           '',
-          `V \`clients/aktivni/${call.slug}/raw/fathom/${call.file}\` je přepis callu`,
-          `z ${call.dateIso}, který ještě není zapsaný v \`cally.md\`.`,
+          call.auto
+            ? `V \`clients/aktivni/${call.slug}/cally.md\` je u callu z ${call.dateIso} jen automatický`
+            : `V \`${call.transcript}\` je přepis callu`,
+          call.auto
+            ? `blok ze souhrnu Fathomu (marker \`<!-- fathom:${call.recordingId} -->\`). Přepis je po částech v`
+            : `z ${call.dateIso}, který ještě není zapsaný v \`cally.md\`.`,
+          call.auto ? `\`${call.transcript}\` (přečti všechny části, v pořadí).` : '',
           '',
           'Udělej přesně tohle a nic víc:',
-          `1. Přečti ten přepis a zapiš call do \`clients/aktivni/${call.slug}/cally.md\``,
-          '   jako nový blok nahoru, formátem `## RRRR-MM-DD — účastníci`. Append-only,',
-          '   nic staršího nepřepisuj.',
+          call.auto
+            ? `1. Pod automatický blok toho callu (před další \`## \` nadpis) dopiš sekci \`**Kurátorský zápis:**\``
+            : `1. Přečti ten přepis a zapiš call do \`clients/aktivni/${call.slug}/cally.md\``,
+          call.auto
+            ? '   z přepisu: na čem jsme se shodli, co je jinak než v souhrnu Fathomu, co Tim doporučil'
+            : '   jako nový blok nahoru, formátem `## RRRR-MM-DD — účastníci`. Append-only,',
+          call.auto
+            ? `   a proč. Na konec sekce dej marker \`<!-- zpracovano:${call.recordingId} -->\`. Automatický blok nemaž.`
+            : '   nic staršího nepřepisuj.',
           '2. Vytáhni z callu závazky na obě strany a doplň je do',
           `   \`clients/aktivni/${call.slug}/_action-items.md\` (pokud soubor není, založ ho`,
           '   podle vzoru jiného klienta). Rozlišuj, co dlužíme my a co klient, a kde padl',
