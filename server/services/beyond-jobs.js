@@ -34,10 +34,11 @@ import { isDueAt, scheduleFromLegacy } from './beyond-schedule.js';
 import { listTasks, scheduleOverride } from './beyond-tasks.js';
 import { render as renderTemplate } from './beyond-events.js';
 import { countPending as mozekPending } from './beyond-mozek.js';
-import { notionConfigured, pullNotion, pullRegistry, pullWhatsApp } from './beyond-raw.js';
+import { notionConfigured, pullNotion, pullRegistry, pullWhatsApp, readRegistry } from './beyond-raw.js';
 import { isConfigured as wahaConfigured } from './beyond-waha.js';
 import { todayIso, timeLocal } from './beyond-time.js';
-import { createTask as createUkol, findByPrepRef } from './beyond-ukoly.js';
+import { createTask as createUkol, findByPrepRef, listTasks as listUkoly } from './beyond-ukoly.js';
+import { createClientTasks, notionConfigured as notionReady, tasksFromWriteup, upsertCallPage } from './beyond-notion.js';
 
 /** Give a scheduled run room; these prompts read a lot of files. */
 const JOB_TIMEOUT_MS = 12 * 60 * 1000;
@@ -330,6 +331,15 @@ const processCall = {
       done.push(`${call.name}: ${String(result.text || '').replace(/\s+/g, ' ').slice(0, 200)}`);
       invalidateBrainIndex();
 
+      // The client-facing write-up, and Notion.
+      try {
+        const noted = await writeupAndNotion(call, log);
+        if (noted) done.push(noted);
+      } catch (err) {
+        log(`${call.name}: zápis do Notionu selhal (${err?.message || err})`);
+        done.push(`${call.name}: zápis do Notionu selhal (${err?.message || err})`);
+      }
+
       // The record is written, but the client has heard nothing. A recap sent
       // the same day is what makes the next week start from an agreement
       // rather than from "co jsme si to říkali".
@@ -371,6 +381,109 @@ const processCall = {
     return { summary: done.join('\n') };
   },
 };
+
+/**
+ * After the brain has its own record of the call: the write-up the client
+ * reads (skill coaching-call-notes → workspace/zapisy/), then Notion: the
+ * Coaching Calls row with the write-up as content, the client's tasks in
+ * their Úkoly database, and what we promised as tasks on the velín.
+ */
+async function writeupAndNotion(call, log) {
+  const rel = `workspace/zapisy/${call.dateIso}-${call.slug}.md`;
+  const abs = path.join(resolveBrainPath(), rel);
+  let text = await fs.readFile(abs, 'utf8').catch(() => null);
+  if (!text) {
+    log(`${call.name}: píšu klientský zápis`);
+    await runAgent(
+      [
+        `Použij skill coaching-call-notes na klienta \`${call.slug}\`, call z ${call.dateIso}.`,
+        '',
+        `Přepis: \`${call.transcript}\`. Zápis ulož přesně do \`${rel}\` s hlavičkou podle skillu.`,
+        'Nic jiného v brainu neměň.',
+      ].join('\n'),
+      { timeoutMs: 12 * 60 * 1000 },
+    );
+    text = await fs.readFile(abs, 'utf8').catch(() => null);
+    if (!text) return `${call.name}: zápis nevznikl`;
+  }
+
+  const fm = parseFrontmatter(text);
+  const body = text.replace(/^---[\s\S]*?---\s*/, '');
+  const clientTasks = tasksFromWriteup(body);
+  const ours = ourPromisesFromWriteup(body);
+  const notes = [`${call.name}: zápis ${rel} (${clientTasks.length} úkolů klienta, ${ours.length} slibů našich)`];
+
+  // What we promised becomes our tasks, once.
+  const index = await getBrainIndex();
+  const client = index.clients.find((c) => c.slug === call.slug);
+  const existing = listUkoly().filter((t) => t.state !== 'done' && t.client === call.slug).map((t) => t.text.toLowerCase());
+  for (const promise of ours) {
+    if (existing.includes(promise.toLowerCase())) continue;
+    await createUkol({
+      text: promise,
+      priority: 2,
+      client: call.slug,
+      owner: process.env.BEYOND_DEFAULT_OWNER || getPeople()[0]?.key || 'tim',
+      createdBy: 'agent',
+      note: `slíbeno na callu ${call.dateIso}`,
+    }).catch((err) => log(`úkol se nezaložil: ${err?.message || err}`));
+  }
+
+  if (!notionReady()) {
+    notes.push('Notion přeskočen (chybí BEYOND_NOTION_TOKEN)');
+    return notes.join(' · ');
+  }
+  if (/<!--\s*notion:[^>]+-->/.test(text)) return `${notes[0]} · v Notionu už je`;
+
+  const reg = (await readRegistry()).find((k) => k.slug === call.slug) || {};
+  const page = await upsertCallPage({
+    callsDbId: reg.callsDbId,
+    dashboardId: reg.dashboardId || null,
+    dateIso: call.dateIso,
+    tema: fm.tema || `Call ${call.dateIso}`,
+    typ: fm.typ || null,
+    delkaMin: Number(fm.delka) || null,
+    markdown: body,
+    fathomUrl: fm.fathom || null,
+  });
+  notes.push(`Notion Coaching Calls ${page.created ? 'založeno' : 'doplněno'}`);
+
+  const week = client?.programWeek ? `W${String(client.programWeek).padStart(2, '0')}` : null;
+  const made = await createClientTasks({ tasksDbId: reg.tasksDbId, dashboardId: reg.dashboardId || null, tasks: clientTasks, week });
+  notes.push(made.note ? made.note : `úkoly klienta v Notionu: ${made.created.length} nových${made.skipped.length ? `, ${made.skipped.length} už byly` : ''}`);
+
+  // Remember it so a re-run does not create the row twice.
+  await fs.writeFile(abs, `${text.trimEnd()}\n\n<!-- notion:${page.pageId} -->\n`, 'utf8');
+  return notes.join(' · ');
+}
+
+function parseFrontmatter(text) {
+  const m = /^---\s*\n([\s\S]*?)\n---/.exec(text);
+  const out = {};
+  if (!m) return out;
+  for (const line of m[1].split('\n')) {
+    const kv = /^([\w-]+):\s*(.*)$/.exec(line.trim());
+    if (kv) out[kv[1]] = kv[2].trim().replace(/^["']|["']$/g, '');
+  }
+  return out;
+}
+
+/** Bullets under "Co dostaneš ode mě". */
+function ourPromisesFromWriteup(markdown) {
+  const lines = String(markdown || '').split('\n');
+  const out = [];
+  let inside = false;
+  for (const line of lines) {
+    if (/^#{1,3}\s+/.test(line)) {
+      inside = /dostaneš ode mě/i.test(line);
+      continue;
+    }
+    if (!inside) continue;
+    const m = /^\s*[-*•]\s+(?:\[[ xX]\]\s+)?(.*)$/.exec(line);
+    if (m && m[1].trim()) out.push(m[1].trim().replace(/\.$/, ''));
+  }
+  return out;
+}
 
 /* ------------------------------------------------------------------ */
 /* 2. morning: sync, then say what needs a person                      */

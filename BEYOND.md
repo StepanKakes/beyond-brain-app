@@ -351,6 +351,19 @@ Rychlé zadání (`POST /ukoly` s `quick`) rozumí `p1` až `p4`, `dnes`,
 (Pavlovi, Markovi) a `@štěpán`. Výchozí vlastník je `BEYOND_DEFAULT_OWNER`
 (jinak první v rosteru).
 
+### Po callu: zápis pro klienta a Notion
+
+`zpracuj-call` má od 21. 9. 2026 tři kroky. Kurátorský zápis do `cally.md`
+(sliby, čísla, vlajky). Pak skill `coaching-call-notes` napíše klientský
+zápis do `workspace/zapisy/<datum>-<slug>.md` (úkoly klienta jako checkboxy
+nahoře, cíl, závěry, co dostane od nás) a `beyond-notion.js` ho pošle do
+Notionu: doplní řádek v klientově Coaching Calls (ten, co n8n založil jako
+„Z Fathomu", jinak nový) s obsahem stránky a odkazem na Fathom, a z checkboxů
+založí řádky v klientově databázi Úkoly (stav Nezahájeno, typ Úkol, týden
+programu). Duplicity hlídá název. Sliby z „Co dostaneš ode mě" jsou úkoly
+na Velíně. Bez `BEYOND_NOTION_TOKEN` se Notion přeskočí, zápis v brainu
+zůstane a marker `<!-- notion:<id> -->` na konci souboru říká, že už tam je.
+
 ### Návrhy zpráv: jedno kliknutí, ale tvoje
 
 Tohle je jediná cesta, kterou něco opouští brain. Agent napíše zprávu, řekne

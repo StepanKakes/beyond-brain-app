@@ -46,7 +46,7 @@ export function notionConfigured() {
   return Boolean(notionToken());
 }
 
-async function notion(method, pathname, body = null) {
+export async function notion(method, pathname, body = null) {
   const token = notionToken();
   if (!token) {
     const err = new Error('chybí BEYOND_NOTION_TOKEN');
