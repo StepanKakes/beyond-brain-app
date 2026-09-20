@@ -247,11 +247,20 @@ async function findUnwrittenCalls() {
     for (const block of autoBlocksWithoutWriteup(c.slug)) {
       if (block.dateIso < cutoff) continue;
       if (block.curated) {
-        // C. Curated already, but the client never got their write-up (the
-        //    write-up step is newer than the record). Only for a recent call.
+        // C. Curated already, but the client side is unfinished: no write-up
+        //    yet (only for a recent call), or a write-up that never reached
+        //    Notion (no marker). Both are handled by writeupAndNotion alone.
         const recent = Date.now() - Date.parse(block.dateIso) < 7 * 24 * 60 * 60 * 1000;
-        const hasZapis = fsSync.existsSync(path.join(resolveBrainPath(), 'workspace', 'zapisy', `${block.dateIso}-${c.slug}.md`));
-        if (recent && !hasZapis) {
+        const zapisPath = path.join(resolveBrainPath(), 'workspace', 'zapisy', `${block.dateIso}-${c.slug}.md`);
+        let zapis = null;
+        try {
+          zapis = fsSync.readFileSync(zapisPath, 'utf8');
+        } catch {
+          zapis = null;
+        }
+        const needsWriteup = !zapis && recent;
+        const needsNotion = Boolean(zapis) && !/<!--\s*notion:[^>]+-->/.test(zapis);
+        if (needsWriteup || needsNotion) {
           out.push({ slug: c.slug, name: c.name, dateIso: block.dateIso, transcript: block.transcript, auto: true, recordingId: block.recordingId, onlyWriteup: true });
         }
         continue;
