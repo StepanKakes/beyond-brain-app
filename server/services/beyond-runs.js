@@ -14,6 +14,7 @@ import { promisify } from 'node:util';
 
 import { getConnection } from '../modules/database/connection.js';
 import { resolveBrainPath } from '../utils/brain-path.js';
+import { sameDay } from './beyond-time.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -291,11 +292,5 @@ export function reapOrphanedRuns() {
 export function ranToday(job) {
   const state = getJobState(job);
   if (!state.lastRunAt) return false;
-  const last = new Date(state.lastRunAt);
-  const now = new Date();
-  return (
-    last.getFullYear() === now.getFullYear() &&
-    last.getMonth() === now.getMonth() &&
-    last.getDate() === now.getDate()
-  );
+  return sameDay(new Date(state.lastRunAt), new Date());
 }

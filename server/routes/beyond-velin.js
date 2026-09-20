@@ -20,6 +20,7 @@ import { createTask, removeTask, setScheduleOverride, updateTask } from '../serv
 import { snapshot as memorySnapshot } from '../services/beyond-memory.js';
 import * as ukoly from '../services/beyond-ukoly.js';
 import { pullBrain } from '../services/beyond-git.js';
+import { todayIso, tz } from '../services/beyond-time.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { resolveBrainPath } from '../utils/brain-path.js';
@@ -95,8 +96,8 @@ router.get('/', async (req, res) => {
       upcomingCalls: calls.calls,
     });
 
-    const today = new Date().toISOString().slice(0, 10);
-    const todaysCalls = calls.calls.filter((c) => c.startIso.slice(0, 10) === today);
+    const today = todayIso();
+    const todaysCalls = calls.calls.filter((c) => todayIso(new Date(c.startIso)) === today);
 
     res.json({
       builtAt: index.builtAt,
@@ -279,7 +280,7 @@ function dueLabel(due, today) {
  * Nothing is duplicated into the file; a sent message simply stops appearing.
  */
 function composeTasks(index) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayIso();
   const nameOf = (slug) => index.clients.find((c) => c.slug === slug)?.name || null;
   const shapeClient = (slug) => (slug ? { slug, name: nameOf(slug) || slug } : null);
 
@@ -367,6 +368,8 @@ router.get('/ukoly', async (req, res) => {
     const me = personForUser(req.user);
     res.json({
       me: me ? me.key : DEFAULT_OWNER(),
+      tz: tz(),
+      today: todayIso(),
       people: getPeople().map((p) => ({ key: p.key, displayName: p.displayName, avatar: `/avatars/${p.key}.jpg` })),
       clients: index.clients.filter((c) => c.isActive !== false).map((c) => ({ slug: c.slug, name: c.name })),
       tasks: composeTasks(index),

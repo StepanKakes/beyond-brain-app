@@ -13,9 +13,12 @@
  *   { kind: 'at',     at: '2026-09-23T16:00:00+02:00' } // jednou
  *   { kind: 'manual' }                                   // jen tlačítkem nebo událostí
  *
- * All times are local time of the box, which is the time the people using it
- * live in. No timezone arithmetic on purpose.
+ * All times are wall-clock time in the app's zone (`BEYOND_TZ`, see
+ * beyond-time.js), which is where the people are, not where the box is. The
+ * arithmetic runs on "wall" Dates (UTC fields = wall clock) so DST cannot
+ * shift a 06:20 job to 05:20.
  */
+import { fromWall, toWall } from './beyond-time.js';
 
 const WEEKDAYS = ['ne', 'po', 'út', 'st', 'čt', 'pá', 'so'];
 
@@ -84,30 +87,30 @@ export function parseCron(expr) {
 /** Next minute strictly after `from` that matches. Bounded to two years. */
 function cronNext(parsed, from) {
   const d = new Date(from.getTime());
-  d.setSeconds(0, 0);
-  d.setMinutes(d.getMinutes() + 1);
+  d.setUTCSeconds(0, 0);
+  d.setUTCMinutes(d.getUTCMinutes() + 1);
   const limit = from.getTime() + 2 * 366 * 24 * 60 * 60 * 1000;
   while (d.getTime() < limit) {
-    if (!parsed.month.has(d.getMonth() + 1)) {
-      d.setMonth(d.getMonth() + 1, 1);
-      d.setHours(0, 0, 0, 0);
+    if (!parsed.month.has(d.getUTCMonth() + 1)) {
+      d.setUTCMonth(d.getUTCMonth() + 1, 1);
+      d.setUTCHours(0, 0, 0, 0);
       continue;
     }
-    const domOk = parsed.dom.has(d.getDate());
-    const dowOk = parsed.dow.has(d.getDay());
+    const domOk = parsed.dom.has(d.getUTCDate());
+    const dowOk = parsed.dow.has(d.getUTCDay());
     const dayOk =
       !parsed.domAny && !parsed.dowAny ? domOk || dowOk : !parsed.domAny ? domOk : !parsed.dowAny ? dowOk : true;
     if (!dayOk) {
-      d.setDate(d.getDate() + 1);
-      d.setHours(0, 0, 0, 0);
+      d.setUTCDate(d.getUTCDate() + 1);
+      d.setUTCHours(0, 0, 0, 0);
       continue;
     }
-    if (!parsed.hour.has(d.getHours())) {
-      d.setHours(d.getHours() + 1, 0, 0, 0);
+    if (!parsed.hour.has(d.getUTCHours())) {
+      d.setUTCHours(d.getUTCHours() + 1, 0, 0, 0);
       continue;
     }
-    if (!parsed.minute.has(d.getMinutes())) {
-      d.setMinutes(d.getMinutes() + 1, 0, 0);
+    if (!parsed.minute.has(d.getUTCMinutes())) {
+      d.setUTCMinutes(d.getUTCMinutes() + 1, 0, 0);
       continue;
     }
     return d;
@@ -177,7 +180,14 @@ export function normalizeSchedule(input) {
  * its own (manual, or a one-shot that already fired).
  */
 export function nextRunAt(schedule, { lastRunAt = null, now = new Date() } = {}) {
-  const last = lastRunAt ? new Date(lastRunAt) : null;
+  const wall = nextRunWall(schedule, { lastW: lastRunAt ? toWall(new Date(lastRunAt)) : null, nowW: toWall(now) });
+  return wall ? fromWall(wall) : null;
+}
+
+/** Same, but everything in wall-clock Dates (UTC fields = local wall clock). */
+function nextRunWall(schedule, { lastW, nowW }) {
+  const last = lastW;
+  const now = nowW;
   switch (schedule.kind) {
     case 'every': {
       if (!last) return now;
@@ -186,19 +196,19 @@ export function nextRunAt(schedule, { lastRunAt = null, now = new Date() } = {})
     case 'daily': {
       const { hour, minute } = parseTime(schedule.time);
       const today = new Date(now);
-      today.setHours(hour, minute, 0, 0);
+      today.setUTCHours(hour, minute, 0, 0);
       // Already ran today → tomorrow. Otherwise today's slot, which may
       // already be in the past (= due now, a missed slot fires once).
-      if (last && sameDay(last, now)) today.setDate(today.getDate() + 1);
+      if (last && sameWallDay(last, now)) today.setUTCDate(today.getUTCDate() + 1);
       return today;
     }
     case 'weekly': {
       const { hour, minute } = parseTime(schedule.time);
       const d = new Date(now);
-      d.setHours(hour, minute, 0, 0);
-      const delta = (schedule.weekday - d.getDay() + 7) % 7;
-      d.setDate(d.getDate() + delta);
-      if (delta === 0 && last && sameDay(last, now)) d.setDate(d.getDate() + 7);
+      d.setUTCHours(hour, minute, 0, 0);
+      const delta = (schedule.weekday - d.getUTCDay() + 7) % 7;
+      d.setUTCDate(d.getUTCDate() + delta);
+      if (delta === 0 && last && sameWallDay(last, now)) d.setUTCDate(d.getUTCDate() + 7);
       return d;
     }
     case 'cron': {
@@ -209,8 +219,9 @@ export function nextRunAt(schedule, { lastRunAt = null, now = new Date() } = {})
       return cronNext(parsed, last || new Date(now.getTime() - 60_000));
     }
     case 'at': {
-      if (last && Date.parse(last) >= Date.parse(schedule.at)) return null;
-      return new Date(schedule.at);
+      const atW = toWall(new Date(schedule.at));
+      if (last && last.getTime() >= atW.getTime()) return null;
+      return atW;
     }
     default:
       return null;
@@ -219,13 +230,14 @@ export function nextRunAt(schedule, { lastRunAt = null, now = new Date() } = {})
 
 /** Is the job due at `now`? A schedule with a fixed time fires once per period. */
 export function isDueAt(schedule, { lastRunAt = null, now = new Date() } = {}) {
-  const next = nextRunAt(schedule, { lastRunAt, now });
+  const nowW = toWall(now);
+  const next = nextRunWall(schedule, { lastW: lastRunAt ? toWall(new Date(lastRunAt)) : null, nowW });
   if (!next) return false;
-  return next <= now;
+  return next.getTime() <= nowW.getTime();
 }
 
-function sameDay(a, b) {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+function sameWallDay(a, b) {
+  return a.getUTCFullYear() === b.getUTCFullYear() && a.getUTCMonth() === b.getUTCMonth() && a.getUTCDate() === b.getUTCDate();
 }
 
 /** Human wording for the Agent screen. */
@@ -243,8 +255,8 @@ export function describeSchedule(schedule) {
     case 'cron':
       return `cron ${schedule.expr}`;
     case 'at': {
-      const d = new Date(schedule.at);
-      return `jednou, ${d.toLocaleDateString('cs-CZ')} ${d.toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' })}`;
+      const w = toWall(new Date(schedule.at));
+      return `jednou, ${w.getUTCDate()}. ${w.getUTCMonth() + 1}. ${String(w.getUTCHours()).padStart(2, '0')}:${String(w.getUTCMinutes()).padStart(2, '0')}`;
     }
     default:
       return 'ručně';

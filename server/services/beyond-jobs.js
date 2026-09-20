@@ -36,6 +36,7 @@ import { render as renderTemplate } from './beyond-events.js';
 import { countPending as mozekPending } from './beyond-mozek.js';
 import { notionConfigured, pullNotion, pullRegistry, pullWhatsApp } from './beyond-raw.js';
 import { isConfigured as wahaConfigured } from './beyond-waha.js';
+import { todayIso, timeLocal } from './beyond-time.js';
 import { createTask as createUkol, findByPrepRef } from './beyond-ukoly.js';
 
 /** Give a scheduled run room; these prompts read a lot of files. */
@@ -226,7 +227,7 @@ const pullWhatsAppJob = {
 async function findUnwrittenCalls() {
   const index = await getBrainIndex({ force: true });
   const out = [];
-  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const cutoff = todayIso(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
   for (const c of index.clients) {
     if (c.isActive === false) continue;
 
@@ -445,7 +446,7 @@ const waCheck = {
         'přepiš. Když se tím mění profil, uprav jen top-block a týdenní cíl.',
         '',
         'Když ze zprávy plyne, že klient něco potřebuje od nás (otázka, blok, prosba),',
-        'napiš do `workspace/drafty/wa-' + client.slug + '-' + new Date().toISOString().slice(0, 10) + '.md`',
+        'napiš do `workspace/drafty/wa-' + client.slug + '-' + todayIso() + '.md`',
         'návrh odpovědi v Beyond hlasu. Nic neodesílej.',
         '',
         'Na konci napiš dvě věty: co přišlo a jestli to od nás něco chce.',
@@ -476,8 +477,8 @@ const morningBrief = {
     const calls = await getCalls({ clients: index.clients, people, force: true });
     const { needsUs, risks, systemic } = inbox(index.clients, { upcomingCalls: calls.calls });
 
-    const today = new Date().toISOString().slice(0, 10);
-    const todaysCalls = calls.calls.filter((c) => c.startIso.slice(0, 10) === today);
+    const today = todayIso();
+    const todaysCalls = calls.calls.filter((c) => todayIso(new Date(c.startIso)) === today);
 
     if (!needsUs.length && !risks.length && !todaysCalls.length && !systemic.length && !countPending()) {
       return { skipped: 'nic k hlášení' };
@@ -488,7 +489,7 @@ const morningBrief = {
     const facts = [
       waiting ? `PŘIPRAVENO K ODESLÁNÍ: ${waiting}` : null,
       todaysCalls.length
-        ? `DNES: ${todaysCalls.map((c) => `${c.startIso.slice(11, 16)} ${c.clientName || c.title} (${c.host?.name || '?'})`).join(', ')}`
+        ? `DNES: ${todaysCalls.map((c) => `${timeLocal(new Date(c.startIso))} ${c.clientName || c.title} (${c.host?.name || '?'})`).join(', ')}`
         : 'DNES: žádný hovor',
       '',
       'VYŽADUJE NÁS:',
@@ -577,7 +578,7 @@ const prepareCalls = {
     const done = [];
     for (const call of soon) {
       log(`brief na ${call.clientName}`);
-      const when = `${call.startIso.slice(0, 10)} ${call.startIso.slice(11, 16)}`;
+      const when = `${todayIso(new Date(call.startIso))} ${timeLocal(new Date(call.startIso))}`;
       const result = await runAgent(
         [
           `Použij skill pre-call na klienta \`${call.clientSlug}\`.`,
@@ -845,7 +846,7 @@ const draftOurWork = {
     const debts = ourOpenDebts(index, calls);
     if (!debts.length) return { skipped: 'nic nedlužíme' };
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayIso();
     const results = [];
 
     for (const d of debts.slice(0, 3)) {
@@ -997,7 +998,7 @@ const callReminder = {
 
       const lines = [
         `Za hodinu: ${call.clientName || call.title}`,
-        `${call.startIso.slice(11, 16)} · ${call.host?.name || 'neznámý host'}${call.durationMin ? ` · ${call.durationMin} min` : ''}`,
+        `${timeLocal(new Date(call.startIso))} · ${call.host?.name || 'neznámý host'}${call.durationMin ? ` · ${call.durationMin} min` : ''}`,
       ];
       if (client) {
         const ours = client.promises?.ours?.length || 0;
@@ -1192,7 +1193,7 @@ function runnableFromTask(task) {
     task,
     schedule: task.schedule,
     async run({ log, context } = {}) {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayIso();
       let text;
       if (task.noAgent) {
         text = renderTemplate(task.prompt, context || {});

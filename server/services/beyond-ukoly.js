@@ -22,6 +22,7 @@ import { randomBytes } from 'node:crypto';
 import { resolveBrainPath } from '../utils/brain-path.js';
 import { commitBrain } from './beyond-git.js';
 import { getPeople } from './beyond-people.js';
+import { toWall } from './beyond-time.js';
 
 const FILE = path.join('workspace', 'ukoly.json');
 const STATES = new Set(['none', 'work', 'done']);
@@ -85,23 +86,24 @@ function fold(s) {
   return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
-function isoDay(d) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+function isoDay(w) {
+  return `${w.getUTCFullYear()}-${String(w.getUTCMonth() + 1).padStart(2, '0')}-${String(w.getUTCDate()).padStart(2, '0')}`;
 }
 
+/** Day words resolve on the wall clock of the app's zone, not the box's. */
 function resolveDay(word, now = new Date()) {
   const v = DAY_WORDS[word];
   if (v === undefined) return null;
-  const d = new Date(now);
-  d.setHours(12, 0, 0, 0);
+  const d = toWall(now);
+  d.setUTCHours(12, 0, 0, 0);
   if (typeof v === 'number') {
-    d.setDate(d.getDate() + v);
+    d.setUTCDate(d.getUTCDate() + v);
     return isoDay(d);
   }
   const target = Number(v.slice(1));
-  let delta = (target - d.getDay() + 7) % 7;
+  let delta = (target - d.getUTCDay() + 7) % 7;
   if (delta === 0) delta = 7; // "pátek" said on a Friday means next Friday
-  d.setDate(d.getDate() + delta);
+  d.setUTCDate(d.getUTCDate() + delta);
   return isoDay(d);
 }
 
@@ -129,9 +131,10 @@ export function parseQuick(text, { me = 'tim', clients = [], now = new Date() } 
     if (day) { out.due = day; continue; }
     const dm = /^(\d{1,2})\.(\d{1,2})\.?$/.exec(f);
     if (dm) {
-      const d = new Date(now);
-      d.setMonth(Number(dm[2]) - 1, Number(dm[1]));
-      if (d < now) d.setFullYear(d.getFullYear() + 1);
+      const d = toWall(now);
+      d.setUTCHours(12, 0, 0, 0);
+      d.setUTCMonth(Number(dm[2]) - 1, Number(dm[1]));
+      if (d.getTime() < toWall(now).getTime() - 12 * 3600_000) d.setUTCFullYear(d.getUTCFullYear() + 1);
       out.due = isoDay(d);
       continue;
     }

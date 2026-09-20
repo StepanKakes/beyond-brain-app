@@ -207,6 +207,11 @@ s důvodem, ať obrazovka Agent neukazuje fantoma.
 | `srovnat-profily` | pondělí 08:30 | Opraví „Aktuální týden" tam, kde se rozešel s datem startu |
 | `uceni-review` | denně 21:00 | Projde zprávy, které Tim před odesláním přepsal, a dnešní běhy; z toho, co se opakuje, navrhne patch skillu nebo zápis do paměti. Levnější model (`BEYOND_REVIEW_MODEL`, výchozí sonnet) |
 
+Časy jsou v pásmu `BEYOND_TZ` (výchozí Europe/Prague), ne v pásmu stroje:
+Tim v Thajsku dostane brief ve svých 06:40. Totéž pásmo řídí „dnes" u úkolů
+a slova jako `zítra` v rychlém zadání (`server/services/beyond-time.js`).
+Změna pásma je změna `.env` a restart, bez deploye.
+
 Rozvrh každé vestavěné úlohy jde přepsat v `system/ulohy.json` (`rozvrh`),
 bez deploye. Rozvrhy: `every`, `daily`, `weekly`, `cron` (pět polí), `at`
 (jednou), `manual`. Parser je `server/services/beyond-schedule.js`.
