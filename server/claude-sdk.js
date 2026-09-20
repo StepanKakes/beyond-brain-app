@@ -798,6 +798,11 @@ const BEYOND_WS_GRACE_MS =
     ? parseInt(process.env.BEYOND_WS_GRACE_MS, 10)
     : 5 * 60 * 1000;
 
+// A turn with no message from the SDK for this long is treated as dead.
+// Long tool calls send tool events, a retry sends api_retry, so silence of
+// this length means the process is stuck.
+const BEYOND_TURN_STALL_MS = parseInt(process.env.BEYOND_TURN_STALL_MS, 10) || 8 * 60 * 1000;
+
 /** End a detached streaming session after the grace window, unless it
  *  reconnected or already finished in the meantime. */
 function scheduleBeyondGraceEnd(entry) {
@@ -844,6 +849,21 @@ function isBeyondTurnActive(sessionId, userId = null) {
 
 /** How many chat turns are in flight right now, across all people. A deploy
  *  asks this before restarting the service, so a restart never cuts a reply. */
+/** The live streaming sessions, for /health and the diagnose workflow. */
+function describeBeyondStreams() {
+  const out = [];
+  for (const entry of beyondStreamSessions.values()) {
+    out.push({
+      session: entry.sdkSessionId || entry.chatKey,
+      turns: entry.pendingTurnResolves.length,
+      ended: Boolean(entry.ended),
+      wsAlive: Boolean(entry.wsAlive),
+      idleSec: Math.round((Date.now() - (entry.lastMessageAt || entry.lastActivity || Date.now())) / 1000),
+    });
+  }
+  return out;
+}
+
 function countActiveBeyondTurns() {
   let n = 0;
   for (const entry of beyondStreamSessions.values()) {
@@ -1201,6 +1221,29 @@ async function startNewBeyondStream(command, options, ws) {
     entry.firstTurnReject = reject;
   });
 
+  // A turn that stays silent for too long is over, whatever the process
+  // thinks: tell the person, resolve the turn, and end this entry so the next
+  // message starts a fresh process instead of queueing behind a stuck one.
+  entry.lastMessageAt = Date.now();
+  entry.stallTimer = setInterval(() => {
+    if (entry.ended || entry.pendingTurnResolves.length === 0) return;
+    if (Date.now() - entry.lastMessageAt < BEYOND_TURN_STALL_MS) return;
+    console.warn('[beyond-stream] turn stalled, ending session:', entry.sdkSessionId || entry.chatKey);
+    try {
+      entry.ws?.send(createNormalizedMessage({
+        kind: 'error',
+        content: `Model ${Math.round(BEYOND_TURN_STALL_MS / 60000)} minut nic neposlal, odpověď ukončuji. Pošli zprávu znovu.`,
+        sessionId: entry.sdkSessionId,
+        provider: 'claude',
+      }));
+    } catch { /* ws gone */ }
+    const pending = entry.pendingTurnResolves.splice(0);
+    pending.forEach((res) => res(undefined));
+    try { entry.inputQueue.end(); } catch { /* already ended */ }
+    entry.queryInstance?.interrupt?.().catch?.(() => {});
+  }, 15_000);
+  if (typeof entry.stallTimer.unref === 'function') entry.stallTimer.unref();
+
   // Background iteration loop — runs for the lifetime of the chat session.
   entry.iterationDone = (async () => {
     console.log('[beyond-stream] starting iteration for session:', entry.sdkSessionId || tempKey);
@@ -1225,6 +1268,7 @@ async function startNewBeyondStream(command, options, ws) {
       void turnErr;
     } finally {
       entry.ended = true;
+      if (entry.stallTimer) { clearInterval(entry.stallTimer); entry.stallTimer = null; }
       if (entry.graceTimer) { clearTimeout(entry.graceTimer); entry.graceTimer = null; }
       beyondStreamSessions.delete(entry.chatKey);
       if (entry.sdkSessionId) removeSession(entry.sdkSessionId);
@@ -1234,6 +1278,59 @@ async function startNewBeyondStream(command, options, ws) {
   })();
 
   return firstTurnPromise;
+}
+
+/** What to tell the person when the model side failed, in their words. */
+const SDK_ERROR_TEXT = {
+  rate_limit: 'Účet Claude na stroji narazil na limit (rate limit). Zkus to za chvíli.',
+  billing_error: 'Účet Claude hlásí problém s platbou nebo vyčerpaný limit.',
+  authentication_failed: 'Přihlášení Claude na stroji vypršelo, je potřeba se znovu přihlásit (claude login).',
+  oauth_org_not_allowed: 'Účet Claude na stroji nemá k tomuto modelu přístup.',
+  server_error: 'Server Anthropic vrátil chybu. Pošli zprávu znovu.',
+  max_output_tokens: 'Odpověď byla delší než povolený výstup, zkus ji rozdělit.',
+  invalid_request: 'Server Anthropic požadavek odmítl (invalid request).',
+  unknown: 'Model neodpověděl, důvod neznámý. Pošli zprávu znovu.',
+};
+
+/**
+ * The messages that mean "nothing is coming, and here is why", turned into
+ * something the person sees instead of a spinner that ends in silence:
+ * a retry the CLI is doing on its own, an assistant turn that failed at
+ * the API, or a result that carries an error (a spent session limit).
+ * Returns the normalized messages to send, possibly none.
+ */
+function explainSdkTrouble(message, sessionId) {
+  if (message.type === 'system' && message.subtype === 'api_retry') {
+    const secs = Math.max(1, Math.round((message.retry_delay_ms || 0) / 1000));
+    const what = message.error_status ? `API vrátila ${message.error_status}` : 'spojení k API selhalo';
+    return [createNormalizedMessage({
+      kind: 'status',
+      text: 'api_retry',
+      content: `${what}, pokus ${message.attempt} z ${message.max_retries}, znovu za ${secs} s`,
+      sessionId,
+      provider: 'claude',
+    })];
+  }
+  if (message.type === 'assistant' && message.error) {
+    return [createNormalizedMessage({
+      kind: 'error',
+      content: SDK_ERROR_TEXT[message.error] || `${SDK_ERROR_TEXT.unknown} (${message.error})`,
+      sessionId,
+      provider: 'claude',
+    })];
+  }
+  if (message.type === 'result' && message.is_error) {
+    const detail = Array.isArray(message.errors) && message.errors.length
+      ? message.errors.join('; ')
+      : typeof message.result === 'string' ? message.result : message.subtype || 'chyba';
+    return [createNormalizedMessage({
+      kind: 'error',
+      content: detail,
+      sessionId,
+      provider: 'claude',
+    })];
+  }
+  return [];
 }
 
 /**
@@ -1276,8 +1373,10 @@ async function handleBeyondStreamMessage(entry, message) {
   }
   if (message.type === 'assistant') recordSdkMessage(entry.sdkSessionId, message);
 
+  entry.lastMessageAt = Date.now();
+
   // Normalize + forward to client.
-  for (const msg of normalizeForBrowser(message, entry.sdkSessionId)) {
+  for (const msg of [...normalizeForBrowser(message, entry.sdkSessionId), ...explainSdkTrouble(message, entry.sdkSessionId)]) {
     try {
       entry.ws?.send(msg);
     } catch { /* ws gone */ }
@@ -1539,7 +1638,7 @@ async function queryClaudeSDKOneShot(command, options = {}, ws) {
 
       // Transform and normalize message via adapter
       const sid = capturedSessionId || sessionId || null;
-      for (const msg of normalizeForBrowser(message, sid)) {
+      for (const msg of [...normalizeForBrowser(message, sid), ...explainSdkTrouble(message, sid)]) {
         ws.send(msg);
       }
 
@@ -2047,6 +2146,7 @@ export {
   reconnectSessionWriter,
   isBeyondTurnActive,
   countActiveBeyondTurns,
+  describeBeyondStreams,
   runSdkOneShot,
   resolveSpawnCwd,
 };

@@ -30,6 +30,7 @@ import {
     reconnectSessionWriter,
     isBeyondTurnActive,
     countActiveBeyondTurns,
+    describeBeyondStreams,
 } from './claude-sdk.js';
 import {
     spawnCursor,
@@ -169,7 +170,7 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.get('/health', (req, res) => {
     let busy = { chats: 0, job: null };
     try {
-        busy = { chats: countActiveBeyondTurns(), job: schedulerStatus().running };
+        busy = { chats: countActiveBeyondTurns(), job: schedulerStatus().running, streams: describeBeyondStreams() };
     } catch {
         // health must answer even if the beyond layer is not up yet
     }

@@ -142,6 +142,9 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [thinking, setThinking] = useState(false);
+  // What the CLI is doing while the spinner runs (a retry after a 429 and
+  // such), so a long wait has a reason on the screen.
+  const [thinkingNote, setThinkingNote] = useState<string | null>(null);
   const thinkingRef = useRef(thinking);
   thinkingRef.current = thinking;
   const isConnectedRef = useRef(isConnected);
@@ -755,6 +758,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
     if (kind === 'stream_delta') {
       const text = (m.content as string | undefined) || '';
       if (!text) return;
+      setThinkingNote(null);
       if (!streamBubbleIdRef.current) streamBubbleIdRef.current = uid();
       const id = streamBubbleIdRef.current;
       appendAssistantTextById(setMessages, id, text);
@@ -858,6 +862,11 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
       return;
     }
 
+    if (kind === 'status' && m.text === 'api_retry') {
+      setThinkingNote(typeof m.content === 'string' ? m.content : null);
+      return;
+    }
+
     if (kind === 'status' && m.text === 'token_budget') {
       const tb = m.tokenBudget as {
         used?: number;
@@ -900,6 +909,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
 
     if (kind === 'complete') {
       setThinking(false);
+      setThinkingNote(null);
       // Turn done — finalize the streaming bubble to formatted Markdown.
       streamBubbleIdRef.current = null;
       setStreamingId(null);
@@ -914,6 +924,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
 
     if (kind === 'error') {
       setThinking(false);
+      setThinkingNote(null);
       streamBubbleIdRef.current = null;
       setStreamingId(null);
       const err = (m.content as string | undefined) || 'Hm, něco se rozbilo. Zkusíme znovu?';
@@ -1501,7 +1512,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
                 style={{ cursor: 'default' }}
               >
                 <BeyondBrainMark size={34} side={0.76} animate="pulse" />
-                <BeyondThinkingStates />
+                {thinkingNote ? <span className="bb-think__note">{thinkingNote}</span> : <BeyondThinkingStates />}
                 <BeyondLoader kind={loader} />
               </motion.div>
             )}

@@ -115,6 +115,20 @@ jobs:
             Start-Sleep -Seconds 10
           }
 
+          # Keep the service's own output. nssm writes stdout and stderr to a
+          # file when told to; without this the box has no log of what the
+          # app said, and the Diagnose workflow has nothing to read.
+          $nssm = (Get-CimInstance Win32_Service -Filter "Name='$svc'" -ErrorAction SilentlyContinue).PathName
+          if ($nssm -and (Test-Path $nssm) -and $nssm -match 'nssm') {
+            New-Item -ItemType Directory -Force -Path "$app\logs" | Out-Null
+            & $nssm set $svc AppStdout "$app\logs\service.log" | Out-Null
+            & $nssm set $svc AppStderr "$app\logs\service.log" | Out-Null
+            & $nssm set $svc AppRotateFiles 1 | Out-Null
+            & $nssm set $svc AppRotateOnline 1 | Out-Null
+            & $nssm set $svc AppRotateBytes 10485760 | Out-Null
+            Write-Host "==> service log: $app\logs\service.log"
+          }
+
           Write-Host "==> Restart-Service $svc"
           Restart-Service $svc -Force
 
