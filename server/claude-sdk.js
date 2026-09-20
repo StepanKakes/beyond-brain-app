@@ -417,6 +417,31 @@ function transformMessage(sdkMessage) {
 }
 
 /**
+ * What the browser gets for one SDK message. With partial messages on, the
+ * SDK wraps each API stream event as `{ type: 'stream_event', event }`; the
+ * normalizer reads the inner event, so the text reaches the screen word by
+ * word instead of only when the whole reply is done. Sub-agent output stays
+ * out of the main bubble; it is summarised by its tool step.
+ */
+function normalizeForBrowser(message, sessionId) {
+  const transformed = transformMessage(message);
+  let raw = transformed;
+  if (message.type === 'stream_event') {
+    if (message.parent_tool_use_id) return [];
+    raw = message.event;
+    if (!raw || typeof raw !== 'object') return [];
+  }
+  const normalized = sessionsService.normalizeMessage('claude', raw, sessionId);
+  for (const msg of normalized) {
+    // Preserve parentToolUseId from the SDK wrapper for subagent tool grouping.
+    if (transformed.parentToolUseId && !msg.parentToolUseId) {
+      msg.parentToolUseId = transformed.parentToolUseId;
+    }
+  }
+  return normalized;
+}
+
+/**
  * Extracts token usage from SDK result messages
  * @param {Object} resultMessage - SDK result message
  * @returns {Object|null} Token budget object or null
@@ -1250,13 +1275,7 @@ async function handleBeyondStreamMessage(entry, message) {
   if (message.type === 'assistant') recordSdkMessage(entry.sdkSessionId, message);
 
   // Normalize + forward to client.
-  const transformedMessage = transformMessage(message);
-  const sid = entry.sdkSessionId;
-  const normalized = sessionsService.normalizeMessage('claude', transformedMessage, sid);
-  for (const msg of normalized) {
-    if (transformedMessage.parentToolUseId && !msg.parentToolUseId) {
-      msg.parentToolUseId = transformedMessage.parentToolUseId;
-    }
+  for (const msg of normalizeForBrowser(message, entry.sdkSessionId)) {
     try {
       entry.ws?.send(msg);
     } catch { /* ws gone */ }
@@ -1517,16 +1536,8 @@ async function queryClaudeSDKOneShot(command, options = {}, ws) {
       }
 
       // Transform and normalize message via adapter
-      const transformedMessage = transformMessage(message);
       const sid = capturedSessionId || sessionId || null;
-
-      // Use adapter to normalize SDK events into NormalizedMessage[]
-      const normalized = sessionsService.normalizeMessage('claude', transformedMessage, sid);
-      for (const msg of normalized) {
-        // Preserve parentToolUseId from SDK wrapper for subagent tool grouping
-        if (transformedMessage.parentToolUseId && !msg.parentToolUseId) {
-          msg.parentToolUseId = transformedMessage.parentToolUseId;
-        }
+      for (const msg of normalizeForBrowser(message, sid)) {
         ws.send(msg);
       }
 

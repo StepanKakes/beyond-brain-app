@@ -69,8 +69,13 @@ const useWebSocketProviderState = (): WebSocketContextType => {
         setIsConnected(true);
         wsRef.current = websocket;
         if (hasConnectedRef.current) {
-          // This is a reconnect — signal so components can catch up on missed messages
-          setLatestMessage({ type: 'websocket-reconnected', timestamp: Date.now() });
+          // This is a reconnect — signal so components can catch up on missed
+          // messages. Goes to the direct subscribers too, like any message.
+          const notice = { type: 'websocket-reconnected', timestamp: Date.now() };
+          for (const handler of subscribersRef.current) {
+            try { handler(notice); } catch (e) { console.error('WS subscriber error:', e); }
+          }
+          setLatestMessage(notice);
         }
         hasConnectedRef.current = true;
       };

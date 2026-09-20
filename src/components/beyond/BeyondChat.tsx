@@ -723,9 +723,13 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
   }, [subscribeMessages]);
 
   // Stream handler — server emits NormalizedMessage shapes with `kind`.
-  useEffect(() => {
-    if (!latestMessage) return;
-    const m = latestMessage as Record<string, unknown>;
+  //
+  // Fed straight from the socket (see the subscription below), never from the
+  // batched `latestMessage` state: when the final `text` and `complete` of a
+  // turn arrive in the same tick, React keeps only the last state value and
+  // the reply would never show until a reload. Every setState here is a
+  // functional update, so order and completeness survive batching.
+  const handleStreamMessage = (m: Record<string, unknown>) => {
     const kind = String(m.kind ?? '');
     if (!kind) return;
 
@@ -752,10 +756,19 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
       if (m.role && m.role !== 'assistant') return;
       const text = (m.content as string | undefined) || '';
       if (!text) return;
-      // A whole-message text block ends any streaming bubble.
+      // A whole-message text block ends any streaming bubble. It is the
+      // authoritative copy of what the deltas spelled out, so it takes the
+      // bubble's place rather than appearing twice under it.
+      const bubbleId = streamBubbleIdRef.current;
       streamBubbleIdRef.current = null;
       setStreamingId(null);
-      setMessages((prev) => [...prev, { id: uid(), role: 'assistant', kind: 'text', text }]);
+      setMessages((prev) => {
+        const last = prev[prev.length - 1];
+        if (bubbleId && last && last.id === bubbleId && last.role === 'assistant' && last.kind === 'text' && text.startsWith(last.text.trimEnd().slice(0, 200))) {
+          return [...prev.slice(0, -1), { ...last, text }];
+        }
+        return [...prev, { id: uid(), role: 'assistant', kind: 'text', text }];
+      });
       return;
     }
 
@@ -894,16 +907,13 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
       setMessages((prev) => [...prev, { id: uid(), role: 'assistant', kind: 'text', text: err }]);
       return;
     }
-  }, [client.slug, latestMessage, belongsToThisChat, reloadHistory]);
+  };
 
   // ── Recovery after a dropped socket / backgrounded tab ────────────────────
-  // The server now keeps a streaming turn alive across WS drops (grace window)
-  // and re-attaches on reconnect. These control messages ride `latestMessage`
-  // with a `type` (no `kind`), so the main stream effect ignores them.
-  useEffect(() => {
-    const m = latestMessage as Record<string, unknown> | null;
-    if (!m) return;
-
+  // The server keeps a streaming turn alive across WS drops (grace window)
+  // and re-attaches on reconnect. These control messages carry a `type` (no
+  // `kind`), so the stream handler above ignores them.
+  const handleControlMessage = (m: Record<string, unknown>) => {
     if (m.type === 'websocket-reconnected') {
       // Ask the server to re-attach us to any live turn and tell us its state.
       if (sessionIdRef.current) {
@@ -930,7 +940,21 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
       }
       return;
     }
-  }, [latestMessage, sendMessage, reloadHistory]);
+  };
+
+  // The handlers close over this render's props and callbacks; the socket
+  // subscription lives once and always calls the newest pair.
+  const socketHandlerRef = useRef<(m: Record<string, unknown>) => void>(() => {});
+  socketHandlerRef.current = (m) => {
+    if (typeof m.kind === 'string' && m.kind) handleStreamMessage(m);
+    else if (typeof m.type === 'string') handleControlMessage(m);
+  };
+  useEffect(() => {
+    return subscribeMessages((m) => {
+      if (!m || typeof m !== 'object') return;
+      socketHandlerRef.current(m as Record<string, unknown>);
+    });
+  }, [subscribeMessages]);
 
   // Re-check on tab refocus / becoming visible (covers a silently-dead socket
   // that never fired an explicit reconnect, the classic "left the window and it
@@ -1452,7 +1476,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
           ))}
 
           <AnimatePresence>
-            {thinking && !askRequest && !permRequest && (
+            {thinking && !streamingId && !askRequest && !permRequest && (
               <motion.div
                 key="thinking"
                 initial={{ opacity: 0, y: 6 }}
