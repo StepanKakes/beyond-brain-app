@@ -271,6 +271,7 @@ function dedupeKeyFor(req, rawBody) {
     header(req, 'x-github-delivery') ||
     header(req, 'webhook-id') ||
     header(req, 'svix-id') ||
+    header(req, 'x-webhook-request-id') ||
     header(req, 'x-request-id') ||
     header(req, 'x-cal-delivery-id');
   if (id) return `id:${id}`;
