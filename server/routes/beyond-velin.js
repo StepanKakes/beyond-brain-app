@@ -22,6 +22,7 @@ import { createTask, removeTask, setScheduleOverride, updateTask } from '../serv
 import { snapshot as memorySnapshot } from '../services/beyond-memory.js';
 import * as ukoly from '../services/beyond-ukoly.js';
 import * as obsah from '../services/beyond-obsah.js';
+import { listConnectors } from '../services/beyond-mcp-connectors-store.js';
 import { pullBrain } from '../services/beyond-git.js';
 import { todayIso, tz } from '../services/beyond-time.js';
 import { describe as describeSettings, save as saveSettings } from '../services/beyond-settings.js';
@@ -415,6 +416,24 @@ function fmtSec(sec) {
   const m = Math.floor(s / 60);
   return `${m}:${String(s % 60).padStart(2, '0')}`;
 }
+
+/**
+ * Where to open Story Studio so it is already logged in: the studio accepts
+ * the same API key the agent uses, as a one-shot login link. The key never
+ * needs typing; the browser follows the link inside the Stories tab.
+ */
+router.get('/studio', async (_req, res) => {
+  try {
+    const all = await listConnectors();
+    const c = all.find((x) => x.enabled && /stories\.growbeyond\.cz|story/i.test(`${x.url} ${x.name}`) && /^Bearer\s+\S+/.test(x.headers?.Authorization || ''));
+    const base = (process.env.BEYOND_STORY_STUDIO_URL || 'https://stories.growbeyond.cz').replace(/\/+$/, '');
+    if (!c) return res.json({ url: base, signedIn: false });
+    const key = c.headers.Authorization.replace(/^Bearer\s+/, '');
+    res.json({ url: `${base}/api/auth/login?key=${encodeURIComponent(key)}&next=%2F`, signedIn: true });
+  } catch (err) {
+    res.status(500).json({ error: err?.message || 'studio failed' });
+  }
+});
 
 /* ---- content line ------------------------------------------------- */
 

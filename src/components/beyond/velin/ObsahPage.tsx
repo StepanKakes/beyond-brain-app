@@ -76,17 +76,15 @@ export default function ObsahPage({ onOpenStudio, onOpenClient }: { onOpenStudio
         </header>
 
         {data.error && <Empty>Nepovedlo se načíst: {data.error}</Empty>}
-        {data.data && items.length === 0 && (
-          <Empty>Zatím prázdné. Po každém callu s přepisem sem brain dá momenty na reel, ráno v 7:30 návrh stories.</Empty>
-        )}
 
         <div className="bb-ob__board">
           {COLUMNS.map((col) => {
             const rows = byState(col.key);
+            if (rows.length === 0 && col.key !== 'navrh') return null;
             return (
               <section key={col.key} className="bb-ob__col">
                 <p className="bb-uk__h">{col.label}<span>{rows.length}</span></p>
-                {rows.length === 0 && <p className="bb-ob__nothing">Nic.</p>}
+                {rows.length === 0 && <p className="bb-ob__nothing">Nic. Po každém callu s přepisem sem brain dá momenty na reel, ráno návrh stories.</p>}
                 {rows.map((item) => (
                   <Card
                     key={item.id}
@@ -138,42 +136,64 @@ function Card({ item, open, onToggle, onMove, onRemove, onOpenClient }: {
   const next = NEXT[item.state];
   const link = isReel ? fathomAt(item) : item.studio?.url || null;
   const renders = !isReel ? item.studio?.renders || [] : [];
+  const [showText, setShowText] = useState(false);
   return (
     <article className={`bb-ob__card${open ? ' bb-ob__card--open' : ''}`} data-kind={item.kind}>
-      <button type="button" className="bb-ob__head" onClick={onToggle}>
-        <span className="bb-ob__kind">{isReel ? 'Reel' : 'Stories'}</span>
-        <span className="bb-ob__title">{item.title || item.hook}</span>
-        <span className="bb-ob__meta">
-          {isReel && item.startSec != null && <>{fmtSec(item.startSec)} až {fmtSec(item.endSec)}</>}
-          {!isReel && item.slides?.length ? <>{item.slides.length} slidů</> : null}
-          {item.client && <> · {item.client}</>}
-          <> · {ago(item.createdAt)}</>
-        </span>
-      </button>
-      {renders.length > 0 && (
-        <div className="bb-ob__strip">
-          {renders.map((src, i) => (
-            <a key={src} href={src} target="_blank" rel="noreferrer" title={`Slide ${i + 1}`}><img src={src} alt={`Slide ${i + 1}`} loading="lazy" /></a>
-          ))}
-        </div>
-      )}
-      {open && (
-        <div className="bb-ob__body">
-          {item.hook && item.title && <p className="bb-ob__hook">{item.hook}</p>}
-          {isReel && item.quote && <blockquote className="bb-ob__quote">{item.quote}{item.speaker ? <footer>{item.speaker}</footer> : null}</blockquote>}
-          {!isReel && item.slides?.length ? (
-            <ol className="bb-ob__slides">{item.slides.map((sl, i) => <li key={i}>{sl}</li>)}</ol>
-          ) : null}
-          {item.why && <p className="bb-ob__row"><b>Proč</b> {item.why}</p>}
-          {isReel && item.broll && <p className="bb-ob__row"><b>B-roll a titulky</b> {item.broll}</p>}
-          {item.caption && <p className="bb-ob__row"><b>Popisek</b> {item.caption}</p>}
-          {item.note && <p className="bb-ob__row"><b>Poznámka</b> {item.note}</p>}
+      <div className="bb-ob__top">
+        <button type="button" className="bb-ob__head" onClick={onToggle} aria-expanded={open}>
+          <span className="bb-ob__kind">{isReel ? 'Reel' : 'Stories'}</span>
+          <span className="bb-ob__title">{item.title || item.hook}</span>
+          <span className="bb-ob__meta">
+            {isReel && item.startSec != null && <>{fmtSec(item.startSec)} až {fmtSec(item.endSec)}{item.speaker ? ` · ${item.speaker}` : ''}</>}
+            {!isReel && item.slides?.length ? <>{item.slides.length} slidů</> : null}
+            {item.client && <> · {item.client}</>}
+            <> · {ago(item.createdAt)}</>
+          </span>
+          {!open && item.hook && item.title && <span className="bb-ob__peek">{item.hook}</span>}
+        </button>
+        <div className="bb-ob__side">
+          {renders.length > 0 && (
+            <div className="bb-ob__strip">
+              {renders.map((src, i) => (
+                <a key={src} href={src} target="_blank" rel="noreferrer" title={`Slide ${i + 1}, plná velikost`}><img src={src} alt={`Slide ${i + 1}`} loading="lazy" /></a>
+              ))}
+            </div>
+          )}
           <div className="bb-ob__acts">
             {next && <button type="button" className="bb-pill bb-pill--sm bb-pill--primary" onClick={() => onMove(next.to)}>{next.label}</button>}
-            {link && <a className="bb-pill bb-pill--sm" href={link} target="_blank" rel="noreferrer">{isReel ? 'Přehrát ve Fathomu' : 'Upravit ve Story Studiu'}</a>}
-            {item.client && <button type="button" className="bb-pill bb-pill--sm" onClick={() => onOpenClient(item.client!)}>Klient</button>}
+            {link && <a className="bb-pill bb-pill--sm" href={link} target="_blank" rel="noreferrer">{isReel ? 'Přehrát' : 'Upravit'}</a>}
             {item.state !== 'zahozeno' && <button type="button" className="bb-uk__x" onClick={() => onMove('zahozeno')}>zahodit</button>}
-            <button type="button" className="bb-uk__x" onClick={onRemove}>smazat</button>
+          </div>
+        </div>
+      </div>
+      {open && (
+        <div className="bb-ob__body">
+          <div className="bb-ob__cols">
+            <div className="bb-ob__main">
+              {item.hook && item.title && <p className="bb-ob__hook">{item.hook}</p>}
+              {isReel && item.quote && <blockquote className="bb-ob__quote">{item.quote}</blockquote>}
+              {item.why && <p className="bb-ob__row"><b>Proč</b>{item.why}</p>}
+              {isReel && item.broll && <p className="bb-ob__row"><b>B-roll a titulky</b>{item.broll}</p>}
+              {item.caption && <p className="bb-ob__row"><b>Popisek</b>{item.caption}</p>}
+              {item.note && <p className="bb-ob__row"><b>Poznámka</b>{item.note}</p>}
+              {!isReel && item.slides?.length ? (
+                <button type="button" className="bb-uk__more" style={{ padding: 0 }} onClick={() => setShowText((v) => !v)}>
+                  {showText ? 'skrýt text slidů' : 'text slidů'}
+                </button>
+              ) : null}
+              {!isReel && showText && item.slides?.length ? (
+                <div className="bb-ob__slides">
+                  {item.slides.map((sl, i) => (
+                    <div key={i} className="bb-ob__slide"><span className="bb-ob__sn">{String(i + 1).padStart(2, '0')}</span><pre>{sl}</pre></div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            <div className="bb-ob__aside">
+              {item.client && <button type="button" className="bb-uk__x" onClick={() => onOpenClient(item.client!)}>otevřít klienta</button>}
+              {item.source?.date && <span className="bb-ob__meta">call {item.source.date}</span>}
+              <button type="button" className="bb-uk__x" onClick={onRemove}>smazat z osy</button>
+            </div>
           </div>
         </div>
       )}
