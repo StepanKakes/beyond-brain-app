@@ -203,7 +203,7 @@ export type ObsahItem = {
   slides?: string[];
   text?: string | null;
   studio?: { sequenceId: string | null; url: string | null; renders: string[] } | null;
-  clip?: string | null;
+  clip?: { status: 'cutting' | 'ready' | 'error'; at?: string; durationSec?: number; error?: string } | null;
   publishedAt?: string | null;
 };
 
@@ -277,6 +277,7 @@ export const prepAct = (path: string, body?: unknown) => send<{ ok: boolean; err
 export const editProposal = (id: number, body: string) => send<{ ok: boolean }>(`/navrhy/${id}`, 'PATCH', { body });
 export const fetchObsah = () => get<{ items: ObsahItem[] }>('/obsah');
 export const patchObsah = (id: string, patch: Partial<ObsahItem>) => send<{ ok: boolean; item: ObsahItem }>(`/obsah/${encodeURIComponent(id)}`, 'PATCH', patch);
+export const cutObsah = (id: string) => send<{ ok: boolean }>(`/obsah/${encodeURIComponent(id)}/strih`, 'POST');
 export const deleteObsah = (id: string) => send<{ ok: boolean }>(`/obsah/${encodeURIComponent(id)}`, 'DELETE');
 export const saveSettings = (values: Record<string, string>) => send<{ ok: boolean; changed: string[] }>('/nastaveni', 'PUT', { values });
 export const fetchMozekItem = async (id: number) => {

@@ -23,6 +23,7 @@ import { snapshot as memorySnapshot } from '../services/beyond-memory.js';
 import * as ukoly from '../services/beyond-ukoly.js';
 import * as obsah from '../services/beyond-obsah.js';
 import { listConnectors } from '../services/beyond-mcp-connectors-store.js';
+import { clipFileFor, cutClip } from '../services/beyond-clip.js';
 import { pullBrain } from '../services/beyond-git.js';
 import { todayIso, tz } from '../services/beyond-time.js';
 import { describe as describeSettings, save as saveSettings } from '../services/beyond-settings.js';
@@ -444,11 +445,52 @@ router.get('/obsah', (_req, res) => {
 
 router.patch('/obsah/:id', async (req, res) => {
   try {
-    const it = await obsah.updateItem(req.params.id, req.body || {}, { by: req.user?.username || 'velin' });
+    const by = req.user?.username || 'velin';
+    const it = await obsah.updateItem(req.params.id, req.body || {}, { by });
+    // An approved moment gets its clip cut right away, and a moment whose
+    // seconds changed gets a fresh one.
+    const secondsChanged = req.body?.startSec !== undefined || req.body?.endSec !== undefined;
+    if (it.kind === 'reel' && it.source?.fathom && ((req.body?.state === 'schvaleno' && it.clip?.status !== 'ready') || (secondsChanged && it.clip))) {
+      void startCut(it, by);
+    }
     res.json({ ok: true, item: it });
   } catch (err) {
     res.status(400).json({ ok: false, error: err?.message || 'nešlo upravit' });
   }
+});
+
+/** Cut the moment out of the recording; runs in the background, the item says how it went. */
+const cutting = new Set();
+async function startCut(item, by) {
+  if (cutting.has(item.id)) return;
+  cutting.add(item.id);
+  await obsah.updateItem(item.id, { clip: { status: 'cutting', at: new Date().toISOString() } }, { by }).catch(() => {});
+  try {
+    const r = await cutClip({ id: item.id, fathom: item.source?.fathom, startSec: item.startSec, endSec: item.endSec });
+    await obsah.updateItem(item.id, { clip: { status: 'ready', at: new Date().toISOString(), durationSec: r.durationSec } }, { by });
+  } catch (err) {
+    console.error('[obsah] střih selhal', item.id, err?.message || err);
+    await obsah.updateItem(item.id, { clip: { status: 'error', at: new Date().toISOString(), error: err?.message || String(err) } }, { by }).catch(() => {});
+  } finally {
+    cutting.delete(item.id);
+  }
+}
+
+router.post('/obsah/:id/strih', async (req, res) => {
+  const item = obsah.getItem(req.params.id);
+  if (!item) return res.status(404).json({ ok: false, error: 'položka neexistuje' });
+  if (item.kind !== 'reel') return res.status(400).json({ ok: false, error: 'střih jde jen u reelu' });
+  if (!item.source?.fathom) return res.status(400).json({ ok: false, error: 'chybí odkaz na Fathom' });
+  void startCut(item, req.user?.username || 'velin');
+  res.json({ ok: true, status: 'cutting' });
+});
+
+router.get('/obsah/:id/clip', (req, res) => {
+  const file = clipFileFor(req.params.id);
+  if (!file) return res.status(404).json({ error: 'výsek ještě není' });
+  res.setHeader('Content-Type', 'video/mp4');
+  res.setHeader('Cache-Control', 'private, max-age=60');
+  res.sendFile(file);
 });
 
 router.delete('/obsah/:id', async (req, res) => {

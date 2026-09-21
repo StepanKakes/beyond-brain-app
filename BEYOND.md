@@ -551,3 +551,26 @@ EXDATE) a jako hovor bere schůzku s dalším účastníkem nebo s odkazem na
 meet, zoom a podobně. `beyond-calls.js` je sloučí s Cal.com; stejný hovor
 z obou zdrojů se ukáže jednou, Cal.com má přednost. Žádný Google projekt ani
 OAuth, adresa nevyprší; když ji člověk v Googlu resetuje, vloží novou.
+
+
+## Obsah pro Instagram
+
+Osa `workspace/obsah/osa.json` v brainu (reel = moment z callu se sekundami,
+story = sekvence ve Story Studiu; stavy navrh → schvaleno → natoceno →
+zverejneno, zahozeno). Agent do ní píše jen nástrojem `obsah`. Úlohy:
+`obsah-momenty` (každých 10 min, jeden přepis bez momentů za běh, sonnet,
+bez konektorů) a `obsah-stories` (7:30, opus, jen konektor Story Studio;
+`render_sequence` vrátí veřejné JPEG, které se ukážou na Velíně, v Obsahu i
+v chatu). Každá úloha dostane jen konektory, které jmenuje (`JOB_MCP` v
+beyond-jobs.js), ať se schémata nástrojů neposílají s každým krokem.
+
+**Střih výseku:** Fathom share link má HLS stream `<share>/video.m3u8`, bez
+přihlášení. `beyond-clip.js` z něj ffmpegem (`BEYOND_FFMPEG`, jinak kopie v
+brainu `system/bin/**/ffmpeg.exe`, jinak PATH) vystřihne sekundy z položky do
+`~/.cloudcli/clips/<id>.mp4`. Střih spustí schválení reelu, změna sekund
+nebo tlačítko v Obsahu; přehrání a stažení jde přes
+`GET /api/beyond/velin/obsah/:id/clip`. Video se do gitu nedává.
+
+Story Studio uvnitř brainu (záložka Stories) se otevírá přes
+`GET /api/beyond/velin/studio`, který z konektoru vezme klíč a složí
+přihlašovací odkaz Story Studia (`/api/auth/login?key=`).

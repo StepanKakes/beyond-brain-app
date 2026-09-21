@@ -1007,3 +1007,9 @@ details.bb-set__group .bb-set__row:focus-within .bb-set__h { display: block; }
 .bb-ob__files { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 .bb-ob__file { border: 0; background: var(--bb-panel2); padding: 3px 8px; border-radius: 6px; font: inherit; font-size: 11.5px; color: var(--bb-ink2); cursor: pointer; text-align: left; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bb-ob__file:hover { color: var(--bb-ink); }
+
+/* the cut moment */
+.bb-ob__clip { display: flex; flex-direction: column; gap: 8px; }
+.bb-ob__cliprow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; color: var(--bb-ink2); font-variant-numeric: tabular-nums; }
+.bb-ob__player { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.bb-ob__player video { max-width: 100%; width: 420px; border-radius: 10px; border: 1px solid var(--bb-line); background: #000; }

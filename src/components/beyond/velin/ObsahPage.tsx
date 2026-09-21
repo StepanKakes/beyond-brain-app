@@ -1,7 +1,8 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Empty, ago, usePolled } from './bits';
-import { deleteObsah, fetchObsah, patchObsah, type ObsahItem } from './api';
+import { cutObsah, deleteObsah, fetchObsah, patchObsah, type ObsahItem } from './api';
+import { authenticatedFetch } from '../../../utils/api';
 
 /**
  * Beyond Brain — Obsah.
@@ -94,6 +95,7 @@ export default function ObsahPage({ onOpenStudio, onOpenClient }: { onOpenStudio
                     onMove={(to) => void move(item, to)}
                     onRemove={() => void remove(item)}
                     onOpenClient={onOpenClient}
+                    onRefresh={() => void data.reload()}
                   />
                 ))}
               </section>
@@ -124,19 +126,42 @@ export default function ObsahPage({ onOpenStudio, onOpenClient }: { onOpenStudio
   );
 }
 
-function Card({ item, open, onToggle, onMove, onRemove, onOpenClient }: {
+function Card({ item, open, onToggle, onMove, onRemove, onOpenClient, onRefresh }: {
   item: ObsahItem;
   open: boolean;
   onToggle: () => void;
   onMove: (to: ObsahItem['state']) => void;
   onRemove: () => void;
   onOpenClient: (slug: string) => void;
+  onRefresh: () => void;
 }) {
   const isReel = item.kind === 'reel';
   const next = NEXT[item.state];
   const link = isReel ? fathomAt(item) : item.studio?.url || null;
   const renders = !isReel ? item.studio?.renders || [] : [];
   const [showText, setShowText] = useState(false);
+  const [range, setRange] = useState<{ a: string; b: string } | null>(null);
+  const [clipUrl, setClipUrl] = useState<string | null>(null);
+  const [clipBusy, setClipBusy] = useState(false);
+  useEffect(() => () => { if (clipUrl) URL.revokeObjectURL(clipUrl); }, [clipUrl]);
+  const loadClip = async () => {
+    setClipBusy(true);
+    try {
+      const r = await authenticatedFetch(`/api/beyond/velin/obsah/${encodeURIComponent(item.id)}/clip`);
+      if (!r.ok) throw new Error('výsek není');
+      const blob = await r.blob();
+      setClipUrl(URL.createObjectURL(blob));
+    } finally {
+      setClipBusy(false);
+    }
+  };
+  const saveRange = async () => {
+    if (!range) return;
+    const toSec = (v: string) => { const p = v.trim().split(':').map(Number); return p.length === 2 ? p[0] * 60 + p[1] : Number(v); };
+    await patchObsah(item.id, { startSec: toSec(range.a), endSec: toSec(range.b) });
+    setRange(null);
+    onRefresh();
+  };
   return (
     <article className={`bb-ob__card${open ? ' bb-ob__card--open' : ''}`} data-kind={item.kind}>
       <div className="bb-ob__top">
@@ -176,6 +201,46 @@ function Card({ item, open, onToggle, onMove, onRemove, onOpenClient }: {
             <div className="bb-ob__main">
               {item.hook && item.title && <p className="bb-ob__hook">{item.hook}</p>}
               {isReel && item.quote && <blockquote className="bb-ob__quote">{item.quote}</blockquote>}
+              {isReel && (
+                <div className="bb-ob__clip">
+                  <div className="bb-ob__cliprow">
+                    <span className="bb-ob__srcl" style={{ color: 'var(--bb-ink3)', background: 'var(--bb-panel2)' }}>Výsek</span>
+                    {range ? (
+                      <>
+                        <input className="bb-te__date" value={range.a} onChange={(e) => setRange({ ...range, a: e.target.value })} aria-label="Od (m:ss)" style={{ width: 70 }} />
+                        <span>až</span>
+                        <input className="bb-te__date" value={range.b} onChange={(e) => setRange({ ...range, b: e.target.value })} aria-label="Do (m:ss)" style={{ width: 70 }} />
+                        <button type="button" className="bb-pill bb-pill--sm bb-pill--primary" onClick={() => void saveRange()}>Uložit a střihnout</button>
+                        <button type="button" className="bb-uk__x" onClick={() => setRange(null)}>zrušit</button>
+                      </>
+                    ) : (
+                      <>
+                        <span>{fmtSec(item.startSec)} až {fmtSec(item.endSec)}</span>
+                        <button type="button" className="bb-uk__x" onClick={() => setRange({ a: fmtSec(item.startSec), b: fmtSec(item.endSec) })}>upravit sekundy</button>
+                        {item.clip?.status === 'ready' ? (
+                          <>
+                            <span className="bb-ob__meta">hotový, {item.clip.durationSec} s</span>
+                            {!clipUrl && <button type="button" className="bb-pill bb-pill--sm" disabled={clipBusy} onClick={() => void loadClip()}>{clipBusy ? 'Načítám' : 'Přehrát výsek'}</button>}
+                          </>
+                        ) : item.clip?.status === 'cutting' ? (
+                          <span className="bb-ob__meta">stříhám…</span>
+                        ) : item.clip?.status === 'error' ? (
+                          <span className="bb-fx__err" title={item.clip.error}>střih selhal</span>
+                        ) : null}
+                        {item.clip?.status !== 'cutting' && (
+                          <button type="button" className="bb-pill bb-pill--sm" onClick={async () => { await cutObsah(item.id); onRefresh(); }}>{item.clip?.status === 'ready' ? 'Střihnout znovu' : 'Vystřihnout'}</button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  {clipUrl && (
+                    <div className="bb-ob__player">
+                      <video src={clipUrl} controls playsInline preload="metadata" />
+                      <a className="bb-pill bb-pill--sm" href={clipUrl} download={`${item.client || 'reel'}-${item.source?.date || ''}-${fmtSec(item.startSec).replace(':', '-')}.mp4`}>Stáhnout mp4</a>
+                    </div>
+                  )}
+                </div>
+              )}
               {item.why && <p className="bb-ob__row"><b>Proč</b>{item.why}</p>}
               {isReel && item.broll && <p className="bb-ob__row"><b>B-roll a titulky</b>{item.broll}</p>}
               {item.caption && <p className="bb-ob__row"><b>Popisek</b>{item.caption}</p>}
