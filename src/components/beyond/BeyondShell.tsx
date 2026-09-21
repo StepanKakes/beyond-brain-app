@@ -38,6 +38,8 @@ type Props = {
   onOpenCalls?: () => void;
   onOpenAgent?: () => void;
   onOpenFiles?: () => void;
+  onOpenObsah?: () => void;
+  onOpenStudio?: () => void;
   onOpenUniversalChat?: () => void;
   onSwitchUniversalSession?: (uuid: string) => void;
   children?: ReactNode;
@@ -52,6 +54,8 @@ export default function BeyondShell({
   onOpenCalls,
   onOpenAgent,
   onOpenFiles,
+  onOpenObsah,
+  onOpenStudio,
   onOpenUniversalChat,
   onSwitchUniversalSession,
   children,
@@ -106,6 +110,8 @@ export default function BeyondShell({
             onOpenCalls={onOpenCalls ? () => { onOpenCalls(); closeOnMobile(); } : undefined}
             onOpenAgent={onOpenAgent ? () => { onOpenAgent(); closeOnMobile(); } : undefined}
             onOpenFiles={onOpenFiles ? () => { onOpenFiles(); closeOnMobile(); } : undefined}
+            onOpenObsah={onOpenObsah ? () => { onOpenObsah(); closeOnMobile(); } : undefined}
+            onOpenStudio={onOpenStudio ? () => { onOpenStudio(); closeOnMobile(); } : undefined}
             onOpenUniversalChat={onOpenUniversalChat ? handleOpenUniversal : undefined}
             onSwitchUniversalSession={onSwitchUniversalSession ? handleSwitchUniversal : undefined}
             onCollapse={() => setOpen(false)}

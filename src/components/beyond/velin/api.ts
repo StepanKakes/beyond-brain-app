@@ -166,12 +166,43 @@ export type CallsPage = {
 
 export type PrepAction = { label: string; action: string; primary?: boolean; path?: string };
 export type Prep = {
-  kind: 'zprava' | 'navrh' | 'podklad';
+  kind: 'zprava' | 'navrh' | 'podklad' | 'obsah';
   title: string;
   body: string;
   ref: number | string;
   canSend?: boolean;
+  /** Rendered slides, when the brain already made pictures. */
+  images?: string[];
+  /** Somewhere to go: the recording at the second, the Story Studio editor. */
+  link?: { label: string; url: string } | null;
   actions: PrepAction[];
+};
+
+export type ObsahItem = {
+  id: string;
+  kind: 'reel' | 'story';
+  state: 'navrh' | 'schvaleno' | 'natoceno' | 'zverejneno' | 'zahozeno';
+  title: string | null;
+  hook: string | null;
+  why: string | null;
+  caption: string | null;
+  client: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  note: string | null;
+  source?: { kind: string; date: string | null; recordingId: string | null; fathom: string | null; transcript: string | null };
+  startSec?: number | null;
+  endSec?: number | null;
+  quote?: string | null;
+  speaker?: string | null;
+  broll?: string | null;
+  format?: string | null;
+  slides?: string[];
+  text?: string | null;
+  studio?: { sequenceId: string | null; url: string | null; renders: string[] } | null;
+  clip?: string | null;
+  publishedAt?: string | null;
 };
 
 export type Task = {
@@ -242,6 +273,9 @@ export const patchTask = (id: string, patch: Partial<Pick<Task, 'state' | 'prior
 export const deleteTask = (id: string) => send<{ ok: boolean }>(`/ukoly/${encodeURIComponent(id)}`, 'DELETE');
 export const prepAct = (path: string, body?: unknown) => send<{ ok: boolean; error?: string }>(path, 'POST', body);
 export const editProposal = (id: number, body: string) => send<{ ok: boolean }>(`/navrhy/${id}`, 'PATCH', { body });
+export const fetchObsah = () => get<{ items: ObsahItem[] }>('/obsah');
+export const patchObsah = (id: string, patch: Partial<ObsahItem>) => send<{ ok: boolean; item: ObsahItem }>(`/obsah/${encodeURIComponent(id)}`, 'PATCH', patch);
+export const deleteObsah = (id: string) => send<{ ok: boolean }>(`/obsah/${encodeURIComponent(id)}`, 'DELETE');
 export const saveSettings = (values: Record<string, string>) => send<{ ok: boolean; changed: string[] }>('/nastaveni', 'PUT', { values });
 export const fetchMozekItem = async (id: number) => {
   const r = await get<{ items: { id: number; before: string | null; after: string }[] }>('/agent/mozek');

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import {
   Search, Plus, Check, MessagesSquare, Trash2, Plug,
   PanelLeftClose, Settings, Sun, Moon,
-  Gauge, Users, CalendarDays, MessageSquare, Bot, FolderTree,
+  Gauge, Users, CalendarDays, MessageSquare, Bot, FolderTree, Clapperboard, Images,
 } from 'lucide-react';
 import BeyondBrainMark from './BeyondBrainMark';
 import { useBeyondClients } from './useBeyondClients';
@@ -31,6 +31,8 @@ type Props = {
   onOpenCalls?: () => void;
   onOpenAgent?: () => void;
   onOpenFiles?: () => void;
+  onOpenObsah?: () => void;
+  onOpenStudio?: () => void;
   onOpenUniversalChat?: () => void;
   onSwitchUniversalSession?: (uuid: string) => void;
   /** Collapse the sidebar (rendered as a button in the head). */
@@ -45,6 +47,8 @@ export default function BeyondSidebarPreview({
   onOpenCalls,
   onOpenAgent,
   onOpenFiles,
+  onOpenObsah,
+  onOpenStudio,
   onOpenUniversalChat,
   onSwitchUniversalSession,
   onCollapse,
@@ -158,6 +162,32 @@ export default function BeyondSidebarPreview({
               <Bot size={15} strokeWidth={1.8} style={{ color: 'var(--bb-ink2)' }} />
             </span>
             <span className="bb-row__label">Agent</span>
+          </button>
+        )}
+        {onOpenObsah && (
+          <button
+            type="button"
+            className="bb-row"
+            aria-current={section === 'obsah' ? 'true' : undefined}
+            onClick={onOpenObsah}
+          >
+            <span className="bb-avatar" style={{ background: 'transparent', boxShadow: 'none' }}>
+              <Clapperboard size={15} strokeWidth={1.8} style={{ color: 'var(--bb-ink2)' }} />
+            </span>
+            <span className="bb-row__label">Obsah</span>
+          </button>
+        )}
+        {onOpenStudio && (
+          <button
+            type="button"
+            className="bb-row"
+            aria-current={section === 'studio' ? 'true' : undefined}
+            onClick={onOpenStudio}
+          >
+            <span className="bb-avatar" style={{ background: 'transparent', boxShadow: 'none' }}>
+              <Images size={15} strokeWidth={1.8} style={{ color: 'var(--bb-ink2)' }} />
+            </span>
+            <span className="bb-row__label">Stories</span>
           </button>
         )}
         {onOpenFiles && (

@@ -14,6 +14,8 @@ import ClientDetail from './velin/ClientDetail';
 import CallsPage from './velin/CallsPage';
 import AgentPage from './velin/AgentPage';
 import FilesPage from './files/FilesPage';
+import ObsahPage from './velin/ObsahPage';
+import StudioPage from './velin/StudioPage';
 import { useBeyondClients, type BeyondClient } from './useBeyondClients';
 import { UNIVERSAL_SLUG } from './beyondSessionsApi';
 
@@ -54,6 +56,8 @@ type View =
   | { kind: 'calls' }
   | { kind: 'agent' }
   | { kind: 'files'; path: string | null }
+  | { kind: 'obsah' }
+  | { kind: 'studio' }
   | { kind: 'chat' };
 
 function parseView(pathname: string): View {
@@ -62,6 +66,8 @@ function parseView(pathname: string): View {
   if (parts[0] === 'klienti') return { kind: 'board' };
   if (parts[0] === 'hovory') return { kind: 'calls' };
   if (parts[0] === 'agent') return { kind: 'agent' };
+  if (parts[0] === 'obsah') return { kind: 'obsah' };
+  if (parts[0] === 'stories') return { kind: 'studio' };
   if (parts[0] === 'soubory') {
     const rest = parts.slice(1).map((p) => decodeURIComponent(p)).join('/');
     return { kind: 'files', path: rest || null };
@@ -248,6 +254,8 @@ export default function BeyondApp() {
   const openBoard = useCallback(() => navigate('/klienti'), [navigate]);
   const openCalls = useCallback(() => navigate('/hovory'), [navigate]);
   const openAgent = useCallback(() => navigate('/agent'), [navigate]);
+  const openObsah = useCallback(() => navigate('/obsah'), [navigate]);
+  const openStudio = useCallback(() => navigate('/stories'), [navigate]);
   const openFiles = useCallback(
     (p?: string | null) => navigate(p ? `/soubory/${p.split('/').map(encodeURIComponent).join('/')}` : '/soubory'),
     [navigate],
@@ -261,6 +269,8 @@ export default function BeyondApp() {
       onOpenCalls={openCalls}
       onOpenAgent={openAgent}
       onOpenFiles={() => openFiles(null)}
+      onOpenObsah={openObsah}
+      onOpenStudio={openStudio}
       onOpenUniversalChat={handleOpenUniversalChat}
       onSwitchUniversalSession={handleSwitchUniversalSession}
     >
@@ -285,6 +295,10 @@ export default function BeyondApp() {
             <AgentPage />
           ) : view.kind === 'files' ? (
             <FilesPage path={view.path} onOpen={openFiles} />
+          ) : view.kind === 'obsah' ? (
+            <ObsahPage onOpenStudio={openStudio} onOpenClient={openClient} />
+          ) : view.kind === 'studio' ? (
+            <StudioPage />
           ) : activeClient ? (
             <BeyondChat
               client={activeClient}

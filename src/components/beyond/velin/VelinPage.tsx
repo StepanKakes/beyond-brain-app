@@ -10,6 +10,7 @@ import {
   fetchVelin,
   parseQuick,
   patchTask,
+  patchObsah,
   prepAct,
   type BoardClient,
   type QuickParse,
@@ -119,7 +120,9 @@ function Prep({ task, onDone, onOpenFile }: { task: Task; onDone: () => void; on
     setBusy(action);
     try {
       const id = Number(prep.ref);
-      if (action === 'navrh-odeslat') await prepAct(`/navrhy/${id}/odeslat`);
+      if (action === 'obsah-schvalit') await patchObsah(String(prep.ref), { state: 'schvaleno' });
+      else if (action === 'obsah-zahodit') await patchObsah(String(prep.ref), { state: 'zahozeno' });
+      else if (action === 'navrh-odeslat') await prepAct(`/navrhy/${id}/odeslat`);
       else if (action === 'navrh-zahodit') await prepAct(`/navrhy/${id}/zahodit`);
       else if (action === 'navrh-upravit') {
         if (editing) {
@@ -179,6 +182,18 @@ function Prep({ task, onDone, onOpenFile }: { task: Task; onDone: () => void; on
         <div className="bb-uk__pb bb-uk__pb--full">{draft}</div>
       ) : (
         <button type="button" className={`bb-uk__pb${prep.kind === 'navrh' ? ' bb-uk__pb--navrh' : ''}`} onClick={() => long && setExpanded(true)}>{draft}</button>
+      )}
+      {prep.images && prep.images.length > 0 && (
+        <div className="bb-uk__imgs">
+          {prep.images.map((src, i) => (
+            <a key={src} href={src} target="_blank" rel="noreferrer" className="bb-uk__img" title={`Slide ${i + 1}, otevřít v plné velikosti`}>
+              <img src={src} alt={`Slide ${i + 1}`} loading="lazy" />
+            </a>
+          ))}
+        </div>
+      )}
+      {prep.link && (
+        <a className="bb-uk__link" href={prep.link.url} target="_blank" rel="noreferrer">{prep.link.label}</a>
       )}
       {diff && (
         <pre className="bb-uk__diff">

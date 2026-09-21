@@ -115,6 +115,13 @@ export default function MessageBlock({
                   </a>
                 );
               },
+              // Pictures the agent made (rendered stories) open full size in a
+              // new tab; the chat shows them at a story's proportions.
+              img: ({ src, alt }) => (
+                <a href={typeof src === 'string' ? src : undefined} target="_blank" rel="noopener noreferrer" className="bb-md__img">
+                  <img src={typeof src === 'string' ? src : undefined} alt={alt || ''} loading="lazy" />
+                </a>
+              ),
               code: ({ className, children }) => {
                 const raw = String(children ?? '');
                 const isBlock = /\n/.test(raw);
