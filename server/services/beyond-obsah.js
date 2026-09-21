@@ -36,6 +36,7 @@ function emptyFile() {
   return {
     _: 'Osa obsahu: co brain navrhl pro Instagram a co se s tím stalo. kind reel|story, state navrh|schvaleno|natoceno|zverejneno|zahozeno. Reel má zdroj v callu (recordingId, startSec, endSec).',
     polozky: [],
+    prosle: [],
   };
 }
 
@@ -50,7 +51,7 @@ export function readFile() {
   if (cache.data && cache.mtimeMs === stat.mtimeMs) return cache.data;
   try {
     const parsed = JSON.parse(fs.readFileSync(p, 'utf8'));
-    cache = { mtimeMs: stat.mtimeMs, data: { ...emptyFile(), ...parsed, polozky: Array.isArray(parsed.polozky) ? parsed.polozky : [] } };
+    cache = { mtimeMs: stat.mtimeMs, data: { ...emptyFile(), ...parsed, polozky: Array.isArray(parsed.polozky) ? parsed.polozky : [], prosle: Array.isArray(parsed.prosle) ? parsed.prosle : [] } };
   } catch (err) {
     console.warn('[obsah] workspace/obsah/osa.json se nedá přečíst:', err?.message || err);
     cache = { mtimeMs: stat.mtimeMs, data: emptyFile() };
@@ -158,10 +159,26 @@ export async function removeItem(id, { by = 'app' } = {}) {
   return it;
 }
 
-/** Has this call already been mined for moments? */
+/**
+ * Has this call already been looked at for moments? Either it produced
+ * some, or it was read and found to have none, which is recorded too so the
+ * same transcript is not mined every half hour for ever.
+ */
 export function hasMomentsFor(recordingId) {
   if (!recordingId) return false;
-  return readFile().polozky.some((i) => i.kind === 'reel' && i.source?.recordingId === String(recordingId));
+  const data = readFile();
+  const rec = String(recordingId);
+  if (data.polozky.some((i) => i.kind === 'reel' && i.source?.recordingId === rec)) return true;
+  return Array.isArray(data.prosle) && data.prosle.some((p) => p.recordingId === rec);
+}
+
+/** Remember that a call was read, with how many moments it gave. */
+export async function markChecked({ recordingId, slug, date, count }) {
+  const data = structuredClone(readFile());
+  if (!Array.isArray(data.prosle)) data.prosle = [];
+  if (data.prosle.some((p) => p.recordingId === String(recordingId))) return;
+  data.prosle.push({ recordingId: String(recordingId), slug: slug || null, date: date || null, count: Number(count) || 0, at: new Date().toISOString() });
+  await write(data, `Obsah: call ${slug || ''} ${date || ''} projitý (${count || 0} momentů)`);
 }
 
 /** The pieces waiting for a person, for the velín. */

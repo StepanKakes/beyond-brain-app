@@ -39,7 +39,7 @@ import { isConfigured as wahaConfigured } from './beyond-waha.js';
 import { todayIso, timeLocal } from './beyond-time.js';
 import { createTask as createUkol, findByPrepRef, listTasks as listUkoly } from './beyond-ukoly.js';
 import { createClientTasks, notionConfigured as notionReady, tasksFromWriteup, upsertCallPage } from './beyond-notion.js';
-import { hasMomentsFor, listItems as listObsah } from './beyond-obsah.js';
+import { hasMomentsFor, listItems as listObsah, markChecked as markCallChecked } from './beyond-obsah.js';
 
 /** Give a scheduled run room; these prompts read a lot of files. */
 const JOB_TIMEOUT_MS = 12 * 60 * 1000;
@@ -1438,7 +1438,7 @@ const contentMoments = {
   description:
     'Po každém callu s přepisem projde záznam a vybere 3 až 5 míst, která by fungovala jako reel nebo story: ' +
     'sekundy k vystřižení, hook, proč to funguje, B-roll a popisek. Návrhy čekají na Velíně.',
-  everyMs: 30 * 60 * 1000,
+  everyMs: 10 * 60 * 1000,
   async hasWork() {
     const calls = await callsWithoutMoments();
     return calls.length ? `${calls.length} callů bez momentů` : null;
@@ -1450,7 +1450,7 @@ const contentMoments = {
     log(`${call.slug} ${call.date} (${call.files.length} částí)`);
     const result = await runAgent(
       [
-        'Použij skill obsah-momenty.',
+        'Přečti soubor .claude/skills/obsah-momenty.md a postupuj přesně podle něj (je to návod v brainu, ne registrovaný skill; čti ho nástrojem Read).',
         '',
         `Klient: ${call.slug}`,
         `Datum callu: ${call.date}`,
@@ -1463,6 +1463,8 @@ const contentMoments = {
       { timeoutMs: 12 * 60 * 1000 },
     );
     const added = listObsah().filter((i) => i.kind === 'reel' && i.source?.recordingId === call.recordingId).length;
+    // Zero is an answer too; without this the same call comes up every run.
+    await markCallChecked({ recordingId: call.recordingId, slug: call.slug, date: call.date, count: added }).catch((err) => log(`zápis prošlého callu selhal: ${err?.message || err}`));
     return { summary: `${call.slug} ${call.date}: ${added} momentů. ${String(result.text || '').slice(0, 1500)}` };
   },
 };
@@ -1483,7 +1485,7 @@ const contentStories = {
   async run({ log }) {
     const result = await runAgent(
       [
-        'Použij skill obsah-stories, režim úlohy (ranní sekvence).',
+        'Přečti soubor .claude/skills/obsah-stories.md a postupuj podle něj v režimu úlohy (ranní sekvence); stejně si přečti .claude/skills/story-sekvence.md, na který odkazuje. Jsou to návody v brainu, čti je nástrojem Read.',
         `Dnes je ${todayIso()}.`,
         'Vyber jedno téma podle pořadí ve skillu, napiš sekvenci, když je napojené Story Studio vyrenderuj slidy, zapiš na osu nástrojem obsah (akce story).',
         'Když není z čeho (nic nového za poslední dny), nezapisuj nic a řekni to jednou větou.',
