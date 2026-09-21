@@ -1015,3 +1015,5 @@ details.bb-set__group .bb-set__row:focus-within .bb-set__h { display: block; }
 .bb-ob__player video { max-width: 100%; width: 420px; border-radius: 10px; border: 1px solid var(--bb-line); background: #000; }
 .bb-pill--danger { color: var(--bb-danger); border-color: color-mix(in srgb, var(--bb-danger) 35%, transparent); }
 .bb-pill--danger:hover { background: var(--bb-danger-soft); border-color: var(--bb-danger); }
+.bb-uk__clip { grid-column: 1 / -1; }
+.bb-uk__clip video { width: 100%; max-width: 420px; border-radius: 10px; border: 1px solid var(--bb-line); background: #000; display: block; }

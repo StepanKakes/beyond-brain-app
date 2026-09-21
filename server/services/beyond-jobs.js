@@ -40,6 +40,7 @@ import { todayIso, timeLocal } from './beyond-time.js';
 import { createTask as createUkol, findByPrepRef, listTasks as listUkoly } from './beyond-ukoly.js';
 import { createClientTasks, notionConfigured as notionReady, tasksFromWriteup, upsertCallPage } from './beyond-notion.js';
 import { hasMomentsFor, listItems as listObsah, markChecked as markCallChecked } from './beyond-obsah.js';
+import { cutMissing } from './beyond-clip.js';
 
 /** Give a scheduled run room; these prompts read a lot of files. */
 const JOB_TIMEOUT_MS = 12 * 60 * 1000;
@@ -1499,6 +1500,11 @@ const contentMoments = {
     const added = listObsah().filter((i) => i.kind === 'reel' && i.source?.recordingId === call.recordingId).length;
     // Zero is an answer too; without this the same call comes up every run.
     await markCallChecked({ recordingId: call.recordingId, slug: call.slug, date: call.date, count: added }).catch((err) => log(`zápis prošlého callu selhal: ${err?.message || err}`));
+    // The clips right away, so opening the card shows the moment, not a button.
+    if (added) {
+      log(`stříhám ${added} výseků`);
+      await cutMissing('obsah-momenty').catch((err) => log(`střih selhal: ${err?.message || err}`));
+    }
     return { summary: `${call.slug} ${call.date}: ${added} momentů. ${String(result.text || '').slice(0, 1500)}` };
   },
 };

@@ -173,6 +173,8 @@ export type Prep = {
   canSend?: boolean;
   /** Rendered slides, when the brain already made pictures. */
   images?: string[];
+  /** The cut moment, as an authenticated path to fetch, when it is ready. */
+  clip?: string | null;
   /** Somewhere to go: the recording at the second, the Story Studio editor. */
   link?: { label: string; url: string } | null;
   actions: PrepAction[];

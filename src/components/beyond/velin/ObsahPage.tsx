@@ -154,6 +154,12 @@ function Card({ item, open, onToggle, onMove, onRemove, onDiscard, onOpenClient,
   const [clipUrl, setClipUrl] = useState<string | null>(null);
   const [clipBusy, setClipBusy] = useState(false);
   useEffect(() => () => { if (clipUrl) URL.revokeObjectURL(clipUrl); }, [clipUrl]);
+  // The moment plays as soon as the card opens; no button between the
+  // person and the picture.
+  useEffect(() => {
+    if (open && isReel && item.clip?.status === 'ready' && !clipUrl && !clipBusy) void loadClip();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, item.clip?.status]);
   const loadClip = async () => {
     setClipBusy(true);
     try {
@@ -230,7 +236,7 @@ function Card({ item, open, onToggle, onMove, onRemove, onDiscard, onOpenClient,
                         {item.clip?.status === 'ready' ? (
                           <>
                             <span className="bb-ob__meta">hotový, {item.clip.durationSec} s</span>
-                            {!clipUrl && <button type="button" className="bb-pill bb-pill--sm" disabled={clipBusy} onClick={() => void loadClip()}>{clipBusy ? 'Načítám' : 'Přehrát výsek'}</button>}
+                            {!clipUrl && clipBusy && <span className="bb-ob__meta">načítám…</span>}
                           </>
                         ) : item.clip?.status === 'cutting' ? (
                           <span className="bb-ob__meta">stříhám…</span>

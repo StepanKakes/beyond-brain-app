@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { authenticatedFetch } from '../../../utils/api';
+
 import {
   createQuick,
   deleteTask,
@@ -111,6 +113,19 @@ function Prep({ task, onDone, onOpenFile }: { task: Task; onDone: () => void; on
   const [draft, setDraft] = useState(prep?.body || '');
   const [diff, setDiff] = useState<{ removed: string[]; added: string[] } | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [clipUrl, setClipUrl] = useState<string | null>(null);
+  // A cut moment plays inside the proposal once it is opened.
+  useEffect(() => {
+    if (!prep?.clip || !expanded || clipUrl) return;
+    let cancelled = false;
+    authenticatedFetch(prep.clip)
+      .then((r) => (r.ok ? r.blob() : null))
+      .then((b) => { if (b && !cancelled) setClipUrl(URL.createObjectURL(b)); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prep?.clip, expanded]);
+  useEffect(() => () => { if (clipUrl) URL.revokeObjectURL(clipUrl); }, [clipUrl]);
   if (!prep) return null;
   const isMessage = prep.kind === 'zprava';
   const long = (prep.body || '').length > 160 || (prep.body || '').includes('\n');
@@ -186,6 +201,9 @@ function Prep({ task, onDone, onOpenFile }: { task: Task; onDone: () => void; on
         <div className="bb-uk__pb bb-uk__pb--full">{draft}</div>
       ) : (
         <button type="button" className={`bb-uk__pb${prep.kind === 'navrh' ? ' bb-uk__pb--navrh' : ''}`} onClick={() => long && setExpanded(true)}>{draft}</button>
+      )}
+      {expanded && clipUrl && (
+        <div className="bb-uk__clip"><video src={clipUrl} controls playsInline preload="metadata" /></div>
       )}
       {prep.images && prep.images.length > 0 && (
         <div className="bb-uk__imgs">

@@ -17,6 +17,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 
 import { resolveBrainPath } from '../utils/brain-path.js';
+import * as obsah from './beyond-obsah.js';
 
 const PAD_BEFORE_S = 0.8;
 const PAD_AFTER_S = 0.6;
@@ -118,4 +119,46 @@ export function cutClip({ id, fathom, startSec, endSec }) {
 export function clipFileFor(id) {
   const p = path.join(clipsDir(), `${String(id).replace(/[^\w-]/g, '')}.mp4`);
   return fs.existsSync(p) ? p : null;
+}
+
+/* ------------------------------------------------------------------ */
+/* cutting for an item on the line                                     */
+/* ------------------------------------------------------------------ */
+
+const cutting = new Set();
+
+/**
+ * Cut the clip for a reel item in the background and write how it went
+ * onto the item. Safe to call twice; a cut in flight is not started again.
+ */
+export async function cutForItem(item, by = 'agent') {
+  if (!item || item.kind !== 'reel' || !item.source?.fathom) return;
+  if (cutting.has(item.id)) return;
+  cutting.add(item.id);
+  await obsah.updateItem(item.id, { clip: { status: 'cutting', at: new Date().toISOString() } }, { by }).catch(() => {});
+  try {
+    const r = await cutClip({ id: item.id, fathom: item.source.fathom, startSec: item.startSec, endSec: item.endSec });
+    await obsah.updateItem(item.id, { clip: { status: 'ready', at: new Date().toISOString(), durationSec: r.durationSec } }, { by });
+  } catch (err) {
+    console.error('[obsah] střih selhal', item.id, err?.message || err);
+    await obsah.updateItem(item.id, { clip: { status: 'error', at: new Date().toISOString(), error: err?.message || String(err) } }, { by }).catch(() => {});
+  } finally {
+    cutting.delete(item.id);
+  }
+}
+
+/** Every reel that has no clip yet, one after another. */
+export async function cutMissing(by = 'agent') {
+  const todo = obsah.listItems().filter((i) => i.kind === 'reel' && i.state !== 'zahozeno' && i.source?.fathom && (!i.clip || (i.clip.status === 'error' && !i.clip.retried)));
+  for (const it of todo) {
+    // eslint-disable-next-line no-await-in-loop
+    await cutForItem(it, by);
+    const after = obsah.getItem(it.id);
+    if (after?.clip?.status === 'error') {
+      // One retry on the next pass, then it waits for a person.
+      // eslint-disable-next-line no-await-in-loop
+      await obsah.updateItem(it.id, { clip: { ...after.clip, retried: Boolean(it.clip) } }, { by }).catch(() => {});
+    }
+  }
+  return todo.length;
 }
