@@ -52,6 +52,28 @@ export function setCurrentJob(name) {
   currentJob = name;
 }
 
+/**
+ * Which model a job runs on. Opus for everything ate the week's limit, so
+ * each job names the cheapest model that does its work well: haiku for
+ * reading and bookkeeping, sonnet for summaries and structured writing,
+ * opus only where the words go to a client in Tim's voice. Overridable per
+ * job from the settings (`BEYOND_JOB_MODELS`, JSON like
+ * {"napsat-navrhy":"sonnet"}), and as a whole with `BEYOND_MODEL_JOBS`.
+ */
+export function modelForJob(name) {
+  try {
+    const raw = process.env.BEYOND_JOB_MODELS;
+    if (raw && raw.trim()) {
+      const map = JSON.parse(raw);
+      if (map && typeof map === 'object' && typeof map[name] === 'string' && map[name].trim()) return map[name].trim();
+    }
+  } catch { /* a bad override falls through to the defaults */ }
+  const job = name ? allJobs().find((j) => j.name === name) : null;
+  if (job?.model) return job.model;
+  const all = process.env.BEYOND_MODEL_JOBS;
+  return all && all.trim() ? all.trim() : 'sonnet';
+}
+
 async function runAgent(command, { timeoutMs = JOB_TIMEOUT_MS, model = undefined, allowedTools = [] } = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -60,7 +82,7 @@ async function runAgent(command, { timeoutMs = JOB_TIMEOUT_MS, model = undefined
       command,
       skipPermissions: true,
       signal: ctrl.signal,
-      model,
+      model: model || modelForJob(currentJob),
       allowedTools,
       beyond: {
         source: 'job',
@@ -296,6 +318,7 @@ function autoBlocksWithoutWriteup(slug) {
 
 const processCall = {
   name: 'zpracuj-call',
+  model: 'opus',
   title: 'Zpracovat call do brainu',
   description:
     'Když v raw/fathom přibude přepis novější než poslední zápis v cally.md, ' +
@@ -566,6 +589,7 @@ function ourPromisesFromWriteup(markdown) {
 
 const syncClients = {
   name: 'sync-klientu',
+  model: 'sonnet',
   title: 'Ranní sync klientů',
   description:
     'Promítne noční raw vrstvu (Notion, WhatsApp) do kurátorských souborů přes skill sync-client.',
@@ -611,6 +635,7 @@ const syncClients = {
  */
 const waCheck = {
   name: 'wa-check',
+  model: 'haiku',
   title: 'WhatsApp: nové zprávy klienta',
   description:
     'Po zprávě od klienta (událost z WAHA) načte živé vlákno, doplní whatsapp.md a profil, ' +
@@ -654,6 +679,7 @@ const waCheck = {
  */
 const morningBrief = {
   name: 'ranni-brief',
+  model: 'sonnet',
   title: 'Ranní brief',
   description:
     'Spočítá signály, napíše krátký brief o tom, co dnes hoří, uloží ho do workspace ' +
@@ -746,6 +772,7 @@ const morningBrief = {
  */
 const prepareCalls = {
   name: 'pripravit-hovory',
+  model: 'sonnet',
   title: 'Připravit briefy na hovory',
   description:
     'Pro každý hovor v příštích 36 hodinách vygeneruje 1-page brief skillem pre-call ' +
@@ -798,6 +825,7 @@ function upcomingWithin(calls, hours) {
 
 const roadmapCheck = {
   name: 'roadmap-check',
+  model: 'sonnet',
   title: 'Týdenní roadmap check',
   description: 'Porovná u každého aktivního klienta plán s realitou a zapíše snapshot.',
   weeklyAt: { weekday: 1, hour: 8, minute: 0 }, // pondělí
@@ -835,6 +863,7 @@ const roadmapCheck = {
  */
 const tidyProfiles = {
   name: 'srovnat-profily',
+  model: 'haiku',
   title: 'Srovnat týdny v profilech',
   description:
     'Kde se zapsaný „Aktuální týden" rozešel s datem startu, opraví ho podle kalendáře.',
@@ -887,6 +916,7 @@ const tidyProfiles = {
  */
 const prepareProposals = {
   name: 'napsat-navrhy',
+  model: 'opus',
   title: 'Připravit zprávy klientům',
   description:
     'Kde klient klouže nebo se dlouho neozval, napíše návrh zprávy v Beyond hlasu ' +
@@ -1016,6 +1046,7 @@ async function proposalCandidates(index, calls) {
  */
 const draftOurWork = {
   name: 'napsat-co-dluzime',
+  model: 'sonnet',
   title: 'Rozepsat, co dlužíme',
   description:
     'U otevřených slibů na naší straně zkusí rovnou napsat ten výstup do workspace/drafty. ' +
@@ -1151,6 +1182,7 @@ function truncate(text, max) {
  */
 const callReminder = {
   name: 'pripomenout-hovor',
+  model: 'haiku',
   title: 'Připomenout hovor hodinu předem',
   description:
     'Hodinu před každým hovorem pošle na Telegram, s kým je, co je otevřené a na co si dát pozor.',
@@ -1234,6 +1266,7 @@ function callsInWindow(calls, fromMin, toMin) {
  */
 const scaffoldClients = {
   name: 'zalozit-soubory',
+  model: 'haiku',
   title: 'Doplnit chybějící soubory klientům',
   description:
     'Kde aktivnímu klientovi chybí mereni.md nebo _action-items.md, založí je podle vzoru.',
@@ -1307,6 +1340,7 @@ function clientsMissingFiles(index) {
  */
 const learningReview = {
   name: 'uceni-review',
+  model: 'sonnet',
   title: 'Co jsme se dnes naučili',
   description:
     'Projde dnešní běhy a zprávy, které Tim před odesláním upravil, a navrhne úpravy skillů ' +
@@ -1356,7 +1390,7 @@ const learningReview = {
         '',
         'Nic jiného v brainu neměň. Na konci napiš tři věty: co ses naučil, co jsi navrhl, co nechal být.',
       ].join('\n'),
-      { timeoutMs: 10 * 60 * 1000, model: process.env.BEYOND_REVIEW_MODEL || 'sonnet' },
+      { timeoutMs: 10 * 60 * 1000, model: process.env.BEYOND_REVIEW_MODEL || undefined },
     );
     return { summary: String(result.text || '').slice(0, 3000) };
   },
@@ -1379,6 +1413,7 @@ function runnableFromTask(task) {
     description: task.prompt.slice(0, 200),
     custom: true,
     task,
+    model: task.model || null,
     schedule: task.schedule,
     async run({ log, context } = {}) {
       const today = todayIso();

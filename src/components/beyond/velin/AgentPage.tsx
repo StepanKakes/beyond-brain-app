@@ -26,6 +26,8 @@ type Job = {
   lastError: string | null;
   failureStreak: number;
   createdBy: string | null;
+  /** Which model runs it; null for fetch-only jobs. */
+  model: string | null;
 };
 
 type EventRow = {
@@ -272,34 +274,32 @@ function SettingsSection() {
 
   return (
     <section>
-      <SectionHead title="Napojení a klíče" count={items.filter((i) => i.set).length ? `${items.filter((i) => i.set).length} nastaveno` : undefined} />
-      <Empty>
-        Co je tady, platí místo <code>.env</code> na stroji. Tajné hodnoty se zobrazují zkrácené, prázdné pole znamená nenastaveno.
-        Vymazat = uložit prázdné.
-      </Empty>
-      {groups.map((g) => (
-        <div key={g} className="bb-set__group">
-          <p className="bb-set__g">{g}</p>
-          {items.filter((i) => i.group === g).map((i) => (
-            <label key={i.key} className="bb-set__row">
-              <span className="bb-set__l">
-                {i.label}
-                {i.source === 'env' && <small>z .env</small>}
-                {i.source === 'app' && i.updatedBy && <small>{i.updatedBy}</small>}
-              </span>
-              <input
-                className="bb-set__in"
-                type={i.secret ? 'password' : 'text'}
-                autoComplete="off"
-                placeholder={i.set ? i.display : i.placeholder || ''}
-                value={edits[i.key] ?? ''}
-                onChange={(e) => setEdits((cur) => ({ ...cur, [i.key]: e.target.value }))}
-              />
-              {i.hint && <span className="bb-set__h">{i.hint}</span>}
-            </label>
-          ))}
-        </div>
-      ))}
+      <SectionHead title="Nastavení" count={items.filter((i) => i.set).length ? `${items.filter((i) => i.set).length} nastaveno` : undefined} />
+      <p className="bb-set__intro">Platí místo <code>.env</code> na stroji. Tečka u pole znamená nastaveno; vysvětlivka se ukáže, když do pole klikneš. Vymazat = uložit prázdné.</p>
+      <div className="bb-set__grid">
+        {groups.map((g) => (
+          <details key={g} className="bb-set__group" open={g === groups[0] || items.some((i) => i.group === g && i.set)}>
+            <summary className="bb-set__g">{g}<span className="bb-set__gn">{items.filter((i) => i.group === g && i.set).length} / {items.filter((i) => i.group === g).length}</span></summary>
+            {items.filter((i) => i.group === g).map((i) => (
+              <label key={i.key} className="bb-set__row" data-set={i.set ? 'true' : undefined}>
+                <span className="bb-set__l">
+                  <i className="bb-set__dot" aria-hidden="true" />
+                  {i.label}
+                </span>
+                <input
+                  className="bb-set__in"
+                  type={i.secret ? 'password' : 'text'}
+                  autoComplete="off"
+                  placeholder={i.set ? i.display : i.placeholder || ''}
+                  value={edits[i.key] ?? ''}
+                  onChange={(e) => setEdits((cur) => ({ ...cur, [i.key]: e.target.value }))}
+                />
+                {i.hint && <span className="bb-set__h">{i.hint}{i.source === 'env' ? ' Teď z .env.' : ''}</span>}
+              </label>
+            ))}
+          </details>
+        ))}
+      </div>
       <div className="bb-set__acts">
         <button type="button" className="bb-pill bb-pill--primary" disabled={busy || !Object.keys(edits).length} onClick={() => void saveAll()}>
           Uložit
@@ -431,6 +431,11 @@ const STATUS_LABEL: Record<Run['status'], string> = {
 };
 
 export default function AgentPage() {
+  const [tab, setTab] = useState<TabKey>(() => readTab());
+  const pickTab = (k: TabKey) => {
+    setTab(k);
+    try { localStorage.setItem('beyond:agent-tab', k); } catch { /* fine */ }
+  };
   const load = useCallback(async () => {
     const res = await authenticatedFetch('/api/beyond/velin/agent');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -471,6 +476,7 @@ export default function AgentPage() {
   if (!data) return null;
 
   const { scheduler, jobs, runs, events, routes, pamet } = data;
+  const waiting = jobs.filter((j) => j.failureStreak >= 2).length;
 
   return (
     <div className="bb-vel">
@@ -498,10 +504,23 @@ export default function AgentPage() {
           </button>
         </header>
 
-        <Proposals />
+        <nav className="bb-tabs" aria-label="Části agenta">
+          {TABS.map((t) => (
+            <button key={t.key} type="button" className="bb-tabs__t" aria-pressed={tab === t.key} onClick={() => pickTab(t.key)}>
+              {t.label}
+              {t.key === 'ulohy' && waiting > 0 && <i className="bb-tabs__dot" aria-label={`${waiting} úloh selhává`} />}
+            </button>
+          ))}
+        </nav>
 
-        <MozekQueue onChange={() => void reload()} />
+        {tab === 'prehled' && (
+          <>
+            <Proposals />
+            <MozekQueue onChange={() => void reload()} />
+          </>
+        )}
 
+        {tab === 'ulohy' && (
         <section>
           <SectionHead title="Co dělá sám" count={jobs.filter((j) => j.enabled).length} />
           <div className="bb-sig">
@@ -510,13 +529,13 @@ export default function AgentPage() {
                 <span className="bb-sev" data-sev={j.enabled ? undefined : 'off'}>
                   {j.cadence}
                 </span>
-                <span className="bb-sig__t">
+                <span className="bb-sig__t" title={j.description}>
                   {j.title}
                   {j.custom ? ` · vlastní${j.createdBy ? ` (${j.createdBy})` : ''}` : ''}
+                  {j.model && <span className="bb-sig__model" title="Model, na kterém běží">{j.model}</span>}
                 </span>
-                <span className="bb-sig__d">{j.description}</span>
                 <span className="bb-sig__m">
-                  {j.lastRunAt ? `naposledy ${ago(j.lastRunAt)}` : 'zatím neběželo'}
+                  {j.lastRunAt ? ago(j.lastRunAt) : 'neběželo'}
                   {j.lastStatus && j.lastStatus !== 'ok' && j.lastStatus !== 'skipped' ? ` · ${j.lastStatus}` : ''}
                   {j.failureStreak >= 2 ? ` · ${j.failureStreak}× po sobě selhalo` : ''}
                 </span>
@@ -552,7 +571,9 @@ export default function AgentPage() {
             ))}
           </div>
         </section>
+        )}
 
+        {tab === 'behy' && (
         <section>
           <SectionHead title="Co udělal" count={runs.length} />
           {runs.length === 0 ? (
@@ -612,7 +633,9 @@ export default function AgentPage() {
             </div>
           )}
         </section>
+        )}
 
+        {tab === 'udalosti' && (
         <section>
           <SectionHead title="Na co reaguje" count={routes.length} />
           {routes.length === 0 ? (
@@ -661,7 +684,9 @@ export default function AgentPage() {
             </div>
           )}
         </section>
+        )}
 
+        {tab === 'pamet' && (
         <section>
           <SectionHead title="Co si pamatuje" />
           {[pamet.agent, pamet.tim].map((m) => (
@@ -680,21 +705,35 @@ export default function AgentPage() {
               )}
             </div>
           ))}
+          <p className="bb-vel__sub" style={{ marginTop: 6 }}>
+            Nic z toho neopouští brain bez kliknutí: úlohy čtou repo a zapisují zpátky do něj, každý běh se commitne pod svým jménem a jde vrátit. Zprávy klientům i změny vlastních pravidel čekají na schválení.
+          </p>
         </section>
+        )}
 
-        <UsageSection />
+        {tab === 'spotreba' && <UsageSection />}
 
-        <SettingsSection />
-
-        <section>
-          <SectionHead title="Co agent nesmí" />
-          <Empty>
-            Nic z toho neopouští brain bez kliknutí. Úlohy čtou repo a zapisují zpátky do něj,
-            každý běh se commitne pod svým jménem a jde vrátit. Zprávy klientům i změny vlastních
-            pravidel čekají tady na schválení. Naplánovaný běh si nesmí plánovat další běhy.
-          </Empty>
-        </section>
+        {tab === 'nastaveni' && <SettingsSection />}
       </div>
     </div>
   );
+}
+
+const TABS = [
+  { key: 'prehled', label: 'Ke schválení' },
+  { key: 'ulohy', label: 'Úlohy' },
+  { key: 'behy', label: 'Běhy' },
+  { key: 'udalosti', label: 'Události' },
+  { key: 'pamet', label: 'Paměť' },
+  { key: 'spotreba', label: 'Spotřeba' },
+  { key: 'nastaveni', label: 'Nastavení' },
+] as const;
+type TabKey = (typeof TABS)[number]['key'];
+
+function readTab(): TabKey {
+  try {
+    const v = localStorage.getItem('beyond:agent-tab');
+    if (v && TABS.some((t) => t.key === v)) return v as TabKey;
+  } catch { /* private window */ }
+  return 'prehled';
 }

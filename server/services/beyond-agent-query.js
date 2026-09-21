@@ -190,6 +190,9 @@ export async function askAgent({ text, source = 'unknown', meta = {}, slug: expl
     const result = await runSdkOneShot({
       command,
       sessionId: resumeId || undefined,
+      // Telegram and the velín ask short questions; sonnet answers them well
+      // and does not eat the week. Chat keeps its own picker.
+      model: process.env.BEYOND_MODEL_AGENT?.trim() || 'sonnet',
       skipPermissions: true,
       onProgress: progress || undefined,
       beyond: {

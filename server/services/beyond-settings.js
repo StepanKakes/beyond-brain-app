@@ -60,7 +60,10 @@ export const CATALOG = [
   { group: 'Chat', key: 'BEYOND_AUTO_COMPACT_THRESHOLD', label: 'Shrnout při (tokeny)', hint: 'Prázdné = 80 % okna.' },
 
   { group: 'Agent', key: 'BEYOND_SYNC_PARALLEL', label: 'Klientů najednou při syncu', hint: '1 až 4.', placeholder: '2' },
-  { group: 'Agent', key: 'BEYOND_REVIEW_MODEL', label: 'Model večerní kontroly učení', placeholder: 'sonnet' },
+  { group: 'Modely', key: 'BEYOND_MODEL_JOBS', label: 'Model úloh, když úloha nemá vlastní', hint: 'haiku, sonnet nebo opus. Každá úloha má rozumný výchozí (vidíš ho v tabulce úloh); tohle platí pro ty bez něj.', placeholder: 'sonnet' },
+  { group: 'Modely', key: 'BEYOND_JOB_MODELS', label: 'Výjimky po úlohách (JSON)', hint: 'Např. {"napsat-navrhy":"sonnet","wa-check":"sonnet"}. Přebije výchozí model konkrétní úlohy.' },
+  { group: 'Modely', key: 'BEYOND_MODEL_AGENT', label: 'Model pro Telegram a dotazy z Velína', placeholder: 'sonnet' },
+  { group: 'Modely', key: 'BEYOND_REVIEW_MODEL', label: 'Model večerní kontroly učení', placeholder: 'sonnet' },
   { group: 'Agent', key: 'BEYOND_SCHEDULER', label: 'Plánovač', hint: '0 vypne všechny úlohy (ale dashboardy běží).', placeholder: '1', restart: true },
 ];
 

@@ -21,7 +21,7 @@
  * to the log with a git diff of what it touched, and what it touched is
  * committed under the job's name so the history is complete.
  */
-import { allJobs, JOBS, effectiveSchedule, isDue, jobByName, setCurrentJob } from './beyond-jobs.js';
+import { allJobs, JOBS, effectiveSchedule, isDue, jobByName, setCurrentJob, modelForJob } from './beyond-jobs.js';
 import {
   getJobState,
   isJobEnabled,
@@ -313,6 +313,7 @@ export function describeJobs() {
       failureStreak: state.failureStreak,
       deliver: j.task?.deliver || null,
       createdBy: j.task?.createdBy || null,
+      model: j.name === 'registr-klientu' || j.name === 'notion-raw' || j.name === 'wa-raw' || j.task?.noAgent ? null : modelForJob(j.name),
     };
   });
 }
