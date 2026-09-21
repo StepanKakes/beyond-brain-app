@@ -2039,7 +2039,20 @@ async function runSdkOneShot({
   // queries land in the brain repo with zero MCP tools available. Callers that
   // don't need tools (e.g. generating a short chat title) pass `loadMcp:false`
   // to skip the connector startup cost entirely.
-  const mcpServers = loadMcp ? await loadMcpConfig(resolvedCwd) : null;
+  let mcpServers = loadMcp ? await loadMcpConfig(resolvedCwd) : null;
+  // A job names the servers it needs (`beyond.mcp`, by connector key such as
+  // 'story-studio' or 'notion'); every other server stays out. Each server's
+  // tool schemas ride along on every turn, so forty Beo tools on a job that
+  // reads a transcript is the difference between a cheap run and a dear one.
+  if (mcpServers && Array.isArray(beyond?.mcp)) {
+    const want = beyond.mcp.map((k) => String(k).toLowerCase());
+    const picked = {};
+    for (const [key, val] of Object.entries(mcpServers)) {
+      const k = key.toLowerCase();
+      if (want.some((w) => k === w || k.startsWith(`${w}-`) || k.replace(/[-_]/g, '') === w.replace(/[-_]/g, ''))) picked[key] = val;
+    }
+    mcpServers = Object.keys(picked).length ? picked : null;
+  }
   if (mcpServers) {
     sdkOptions.mcpServers = mcpServers;
     if (process.env.BEYOND_STRICT_MCP !== '0') {

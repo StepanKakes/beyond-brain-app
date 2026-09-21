@@ -165,7 +165,7 @@ function UsageSection() {
               <div key={k} className="bb-us__period">
                 <span className="bb-us__pl">{k === 'today' ? 'Dnes' : k === 'week' ? '7 dní' : '30 dní'}</span>
                 <b className="bb-us__pv">{fmtUsd(p.cost_usd || 0)}</b>
-                <span className="bb-us__pm">{p.runs || 0} běhů · {fmtK((p.input || 0) + (p.cache_read || 0) + (p.cache_write || 0))} in · {fmtK(p.output || 0)} out{p.errors ? ` · ${p.errors} chyb` : ''}</span>
+                <span className="bb-us__pm">{p.runs || 0} běhů · {fmtK((p.input || 0) + (p.cache_write || 0))} in · {fmtK(p.cache_read || 0)} cache · {fmtK(p.output || 0)} out{p.errors ? ` · ${p.errors} chyb` : ''}</span>
               </div>
             );
           })}
@@ -189,12 +189,13 @@ function UsageSection() {
                   <tr key={i}>
                     <td>{sourceName(r)}</td>
                     <td className="bb-us__num">{r.runs}×</td>
-                    <td className="bb-us__num">{fmtK((r.input || 0) + (r.cache_read || 0) + (r.cache_write || 0))} in</td>
+                    <td className="bb-us__num" title="Nové tokeny dovnitř">{fmtK((r.input || 0) + (r.cache_write || 0))} in</td>
+                    <td className="bb-us__num" title="Z cache, desetina ceny; každý krok agenta si znovu čte celý kontext">{fmtK(r.cache_read || 0)} cache</td>
                     <td className="bb-us__num">{fmtK(r.output || 0)} out</td>
                     <td className="bb-us__num"><b>{fmtUsd(r.cost_usd || 0)}</b></td>
                   </tr>
                 ))}
-                {d.bySource.length === 0 && <tr><td colSpan={5} className="bb-us__empty">Zatím nic zaznamenaného; sbírá se od teď.</td></tr>}
+                {d.bySource.length === 0 && <tr><td colSpan={6} className="bb-us__empty">Zatím nic zaznamenaného; sbírá se od teď.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -224,7 +225,7 @@ function UsageSection() {
                   <td className="bb-us__ts">{new Date(r.ts).toLocaleString('cs-CZ', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
                   <td>{sourceName(r)}{r.actor && r.source !== 'job' ? ` · ${r.actor}` : ''}</td>
                   <td className="bb-us__num">{r.model || ''}</td>
-                  <td className="bb-us__num">{fmtK((r.input || 0) + (r.cache_read || 0) + (r.cache_write || 0))} / {fmtK(r.output || 0)}</td>
+                  <td className="bb-us__num" title="nové / z cache / ven">{fmtK((r.input || 0) + (r.cache_write || 0))} / {fmtK(r.cache_read || 0)} / {fmtK(r.output || 0)}</td>
                   <td className="bb-us__num">{r.duration_ms != null ? `${Math.round(r.duration_ms / 1000)} s` : ''}</td>
                   <td className="bb-us__num"><b>{fmtUsd(r.cost_usd || 0)}</b></td>
                 </tr>

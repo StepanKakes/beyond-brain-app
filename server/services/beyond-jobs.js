@@ -75,7 +75,29 @@ export function modelForJob(name) {
   return all && all.trim() ? all.trim() : 'sonnet';
 }
 
-async function runAgent(command, { timeoutMs = JOB_TIMEOUT_MS, model = undefined, allowedTools = [] } = {}) {
+/**
+ * Which remote connectors a job may use. Empty means only the brain's own
+ * tools; a job that writes to Notion or Story Studio names it. Unlisted jobs
+ * get everything, the way they always did.
+ */
+const JOB_MCP = {
+  'obsah-momenty': [],
+  'obsah-stories': ['story-studio', 'stories'],
+  'zpracuj-call': ['notion'],
+  'sync-klientu': ['notion'],
+  'wa-check': ['waha'],
+  'napsat-navrhy': [],
+  'napsat-co-dluzime': [],
+  'ranni-brief': [],
+  'pripravit-hovory': [],
+  'roadmap-check': [],
+  'srovnat-profily': [],
+  'zalozit-soubory': [],
+  'pripomenout-hovor': [],
+  'uceni-review': [],
+};
+
+async function runAgent(command, { timeoutMs = JOB_TIMEOUT_MS, model = undefined, allowedTools = [], mcp = undefined } = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
@@ -91,6 +113,7 @@ async function runAgent(command, { timeoutMs = JOB_TIMEOUT_MS, model = undefined
         label: currentJob || null,
         // A scheduled run must not schedule more runs; that stays with a person.
         allowSchedule: false,
+        mcp: mcp !== undefined ? mcp : JOB_MCP[currentJob],
       },
     });
   } finally {
