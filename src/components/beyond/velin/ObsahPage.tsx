@@ -150,6 +150,10 @@ function Card({ item, open, onToggle, onMove, onRemove, onOpenClient }: {
             <> · {ago(item.createdAt)}</>
           </span>
           {!open && item.hook && item.title && <span className="bb-ob__peek">{item.hook}</span>}
+          <span className="bb-ob__src">
+            <span className="bb-ob__srcl">Zdroj</span>
+            {item.zdroj || (isReel && item.source ? `call ${item.client || ''} ${item.source.date || ''}` : 'neuvedený')}
+          </span>
         </button>
         <div className="bb-ob__side">
           {renders.length > 0 && (
@@ -190,8 +194,15 @@ function Card({ item, open, onToggle, onMove, onRemove, onOpenClient }: {
               ) : null}
             </div>
             <div className="bb-ob__aside">
+              {(item.zdrojSoubory?.length || item.source?.transcript) && (
+                <div className="bb-ob__files">
+                  <span className="bb-ob__srcl">Soubory</span>
+                  {[...(item.zdrojSoubory || []), ...(item.source?.transcript && !(item.zdrojSoubory || []).includes(item.source.transcript) ? [item.source.transcript] : [])].map((f) => (
+                    <button key={f} type="button" className="bb-ob__file" onClick={() => window.dispatchEvent(new CustomEvent('beyond:open-file', { detail: { path: f } }))} title={f}>{f.split('/').pop()}</button>
+                  ))}
+                </div>
+              )}
               {item.client && <button type="button" className="bb-uk__x" onClick={() => onOpenClient(item.client!)}>otevřít klienta</button>}
-              {item.source?.date && <span className="bb-ob__meta">call {item.source.date}</span>}
               <button type="button" className="bb-uk__x" onClick={onRemove}>smazat z osy</button>
             </div>
           </div>

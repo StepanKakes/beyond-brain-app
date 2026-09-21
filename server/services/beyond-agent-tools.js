@@ -319,6 +319,7 @@ export function buildBeyondToolsServer(ctx = {}) {
       'reel = moment z callu, který má šanci fungovat jako reel: title, hook (první věta na obrazovce), quote (doslovný výsek řeči), speaker,',
       'startSec a endSec (sekundy od začátku nahrávky, z časových značek přepisu), why (proč to funguje), broll (co dotočit / co dát do titulků), caption, client (slug), date, recordingId, fathom (odkaz), transcript (cesta k přepisu).',
       'story = sekvence slidů v Timově hlasu: title, slides (pole textů slidů), text (celý text ve formátu Story Studia, DEN/SLIDE), caption, studio {sequenceId, url, renders} když už je ve Story Studiu.',
+      'Vždy vyplň zdroj: zdroj = jedna věta, odkud to je („call tobias-beranek 20.9., část 3, 41:20" nebo „hlasovka 19.9." nebo „mezera z dira: téma X"), zdrojSoubory = cesty k souborům v brainu, ze kterých jsi čerpal.',
       'update: id + state (navrh|schvaleno|natoceno|zverejneno|zahozeno) nebo libovolné pole. Návrhy čekají na Velíně na schválení; nikdy sám neschvaluj.',
     ].join(' '),
     {
@@ -342,6 +343,8 @@ export function buildBeyondToolsServer(ctx = {}) {
       slides: z.array(z.string()).optional(),
       text: z.string().optional(),
       studio: z.object({ sequenceId: z.string().optional(), url: z.string().optional(), renders: z.array(z.string()).optional() }).optional(),
+      zdroj: z.string().optional(),
+      zdrojSoubory: z.array(z.string()).optional(),
       note: z.string().optional(),
     },
     async (args) => {

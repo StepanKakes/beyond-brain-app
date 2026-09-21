@@ -187,6 +187,8 @@ export type ObsahItem = {
   why: string | null;
   caption: string | null;
   client: string | null;
+  zdroj?: string | null;
+  zdrojSoubory?: string[];
   createdBy: string;
   createdAt: string;
   updatedAt: string;

@@ -92,6 +92,10 @@ export async function addItem(input, { by = 'agent' } = {}) {
     why: str(input.why, 600),
     caption: str(input.caption, 1500),
     client: str(input.client, 80),
+    // Where it came from, in words a person reads at a glance: "call
+    // tobias-beranek 20.9., část 3" or "hlasovka 19.9." plus the files.
+    zdroj: str(input.zdroj, 300),
+    zdrojSoubory: Array.isArray(input.zdrojSoubory) ? input.zdrojSoubory.map((f) => String(f).trim()).filter(Boolean).slice(0, 8) : [],
     createdBy: by,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -135,7 +139,7 @@ export async function updateItem(id, patch, { by = 'app' } = {}) {
     if (!STATES.includes(patch.state)) throw new Error(`stav musí být jeden z ${STATES.join(', ')}`);
     it.state = patch.state;
   }
-  for (const k of ['title', 'hook', 'why', 'caption', 'note', 'broll', 'quote', 'format', 'text']) {
+  for (const k of ['title', 'hook', 'why', 'caption', 'note', 'broll', 'quote', 'format', 'text', 'zdroj']) {
     if (patch[k] !== undefined) it[k] = patch[k] == null ? null : String(patch[k]).trim();
   }
   if (patch.startSec !== undefined) it.startSec = num(patch.startSec);

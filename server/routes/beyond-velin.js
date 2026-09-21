@@ -375,9 +375,10 @@ function composeTasks(index) {
     const fathomAt = isReel && o.source?.fathom && o.startSec != null
       ? `${o.source.fathom}${o.source.fathom.includes('?') ? '&' : '?'}timestamp=${Math.max(0, Math.floor(o.startSec) - 2)}`
       : null;
+    const zdroj = o.zdroj || (isReel && o.source ? `call ${o.client || ''} ${o.source.date || ''}`.trim() : null);
     const body = isReel
-      ? [o.hook, '', o.quote ? `„${o.quote}"` : '', '', o.why ? `Proč: ${o.why}` : '', o.broll ? `B-roll: ${o.broll}` : ''].filter((x) => x != null).join('\n').replace(/\n{3,}/g, '\n\n').trim()
-      : [o.hook || o.title, '', ...(o.slides || []).map((sl, i) => `${i + 1}. ${sl}`)].join('\n').trim();
+      ? [o.hook, '', o.quote ? `„${o.quote}"` : '', '', zdroj ? `Zdroj: ${zdroj}` : '', o.why ? `Proč: ${o.why}` : '', o.broll ? `B-roll: ${o.broll}` : ''].filter((x) => x != null).join('\n').replace(/\n{3,}/g, '\n\n').trim()
+      : [o.hook || o.title, '', zdroj ? `Zdroj: ${zdroj}` : '', '', ...(o.slides || []).map((sl, i) => `${i + 1}. ${sl}`)].join('\n').replace(/\n{3,}/g, '\n\n').trim();
     return {
       id: `obsah:${o.id}`,
       text: isReel ? `Reel z callu: ${o.title || o.hook}` : `Stories: ${o.title || o.hook}`,
