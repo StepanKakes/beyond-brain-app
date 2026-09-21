@@ -1,0 +1,37 @@
+name: Connector
+
+# Wire a remote MCP server into the app on the box without anyone pasting a
+# token: the token lives in a repository secret, the runner writes it into
+# the connector store. Run by hand from the Actions tab.
+
+on:
+  workflow_dispatch:
+    inputs:
+      name:
+        description: Connector name as shown in Konektory
+        default: Story Studio
+      url:
+        description: MCP endpoint
+        default: https://stories.growbeyond.cz/mcp
+      secret:
+        description: Which repository secret holds the bearer token
+        default: STORY_STUDIO_MCP_KEY
+
+jobs:
+  connector:
+    runs-on: [self-hosted, windows, beyond-brain]
+    timeout-minutes: 5
+    env:
+      STORY_STUDIO_MCP_KEY: ${{ secrets.STORY_STUDIO_MCP_KEY }}
+    steps:
+      - name: Write connector
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $app = if ($env:BEYOND_APP_DIR) { $env:BEYOND_APP_DIR } else { 'C:\Users\Vlast\beyond\beyond-brain-app' }
+          Set-Location $app
+          $env:NAME = '${{ github.event.inputs.name }}'
+          $env:URL = '${{ github.event.inputs.url }}'
+          $env:TOKEN = [Environment]::GetEnvironmentVariable('${{ github.event.inputs.secret }}')
+          if (-not $env:TOKEN) { throw "secret ${{ github.event.inputs.secret }} is empty" }
+          node scripts\set-connector.cjs
