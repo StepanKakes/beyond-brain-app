@@ -12,6 +12,7 @@ import { getBrainIndex, invalidateBrainIndex, daysSince } from '../services/brai
 import { inbox, signalsForClient } from '../services/brain-signals.js';
 import { getCalls, isConfigured as callsConfigured, invalidateCallsCache } from '../services/beyond-calls.js';
 import { calendarStatus, invalidateCalendars } from '../services/beyond-kalendar.js';
+import { usageReport, subscriptionLimits } from '../services/beyond-usage.js';
 import { getPeople, personForUser } from '../services/beyond-people.js';
 import { listRuns, setJobEnabled } from '../services/beyond-runs.js';
 import { describeJobs, runJob, schedulerStatus, setPaused } from '../services/beyond-scheduler.js';
@@ -531,6 +532,19 @@ router.post('/navrhy/:id/odeslat', async (req, res) => {
 /* ------------------------------------------------------------------ */
 
 /** What the agent does, when it last did it, and how the last runs went. */
+/** What the brain spent and how much of the account is left. */
+router.get('/spotreba', async (req, res) => {
+  try {
+    const [report, limits] = await Promise.all([
+      Promise.resolve(usageReport()),
+      subscriptionLimits({ force: req.query.force === '1' }),
+    ]);
+    res.json({ ...report, limits });
+  } catch (err) {
+    res.status(500).json({ error: err?.message || 'spotřeba selhala' });
+  }
+});
+
 router.get('/agent', (_req, res) => {
   try {
     res.json({

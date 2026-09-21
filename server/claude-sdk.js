@@ -37,6 +37,7 @@ import { resolveSpawnCwd } from './utils/brain-path.js';
 import { buildBeyondToolsServer, BEYOND_TOOL_NAMES } from './services/beyond-agent-tools.js';
 import { promptBlock as memoryPromptBlock } from './services/beyond-memory.js';
 import { record as recordHistory, touchSession as touchHistorySession } from './services/beyond-history.js';
+import { recordUsage } from './services/beyond-usage.js';
 
 const activeSessions = new Map();
 const pendingToolApprovals = new Map();
@@ -1384,6 +1385,7 @@ async function handleBeyondStreamMessage(entry, message) {
 
   // On turn end: live context usage + resolve the oldest pending turn.
   if (message.type === 'result') {
+    recordUsage(message, { source: 'chat', label: entry.sessionSummary || null, actor: entry.historyUser || null, sessionId: entry.sdkSessionId });
     let liveCtx = null;
     try {
       if (typeof entry.queryInstance?.getContextUsage === 'function') {
@@ -1648,6 +1650,7 @@ async function queryClaudeSDKOneShot(command, options = {}, ws) {
       // resumed turn). Falls back to extractTokenBudget if the SDK doesn't
       // expose getContextUsage (older versions, non-streaming mode, etc).
       if (message.type === 'result') {
+        recordUsage(message, { source: 'chat', label: sessionSummary || null, actor: ws?.username || null, sessionId: sid });
         let liveCtx = null;
         try {
           if (typeof queryInstance?.getContextUsage === 'function') {
@@ -2113,6 +2116,7 @@ async function runSdkOneShot({
       }
       if (message.type === 'result') {
         resultRaw = message;
+        recordUsage(message, { source: beyond?.source || 'agent', label: beyond?.label || null, actor: beyond?.actor || null, sessionId: capturedSessionId });
         if (typeof message.stop_reason === 'string') finishReason = message.stop_reason;
         else if (typeof message.subtype === 'string') finishReason = message.subtype;
         // result is terminal — the loop will exit naturally on the next iteration

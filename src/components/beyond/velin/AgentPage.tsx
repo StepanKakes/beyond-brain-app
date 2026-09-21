@@ -80,6 +80,160 @@ type SettingItem = {
  * Keys and switches the server needs, editable here so nobody has to open
  * the box and edit .env. A value saved here wins over .env.
  */
+type UsageSum = { runs: number; input: number; output: number; cache_read: number; cache_write: number; cost_usd: number; errors: number };
+type Usage = {
+  periods: { today: UsageSum; week: UsageSum; month: UsageSum };
+  bySource: (UsageSum & { source: string; label: string | null })[];
+  byModel: (UsageSum & { model: string | null })[];
+  byDay: (UsageSum & { day: string })[];
+  recent: { ts: string; source: string; label: string | null; actor: string | null; model: string | null; input: number; output: number; cache_read: number; cache_write: number; cost_usd: number; duration_ms: number | null; turns: number | null; is_error: number }[];
+  limits:
+    | { available: true; subscription: string | null; fetchedAt: string; windows: { kind: string; label: string; percent: number; severity: string; resetsAt: string | null }[]; extra: { used: number | null; limit: number | null; currency: string | null } | null }
+    | { available: false; reason: string };
+};
+
+const fmtK = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
+const fmtUsd = (n: number) => `$${n.toFixed(n >= 10 ? 0 : 2)}`;
+const SOURCE_LABEL: Record<string, string> = { chat: 'Chat', job: 'Úloha', telegram: 'Telegram', agent: 'Agent', velin: 'Velín', voice: 'Hlasovka' };
+
+function sourceName(r: { source: string; label: string | null }) {
+  const base = SOURCE_LABEL[r.source] || r.source;
+  if (r.source === 'job') return r.label || base;
+  if (r.source === 'chat') return r.label ? r.label.replace(/^Beyond · /, 'Chat: ') : base;
+  return r.label ? `${base}: ${r.label}` : base;
+}
+
+function resetIn(iso: string | null): string {
+  if (!iso) return '';
+  const ms = Date.parse(iso) - Date.now();
+  if (!Number.isFinite(ms)) return '';
+  if (ms <= 0) return 'resetuje se';
+  const h = Math.floor(ms / 3_600_000);
+  const m = Math.round((ms % 3_600_000) / 60_000);
+  const at = new Date(iso).toLocaleString('cs-CZ', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+  return h >= 24 ? `reset ${new Date(iso).toLocaleString('cs-CZ', { weekday: 'short', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}` : `reset za ${h} h ${m} min (${at})`;
+}
+
+/**
+ * Where the tokens went and how much of the account is left. Cost is what the
+ * same work would have cost on the API; on a subscription it is a measure,
+ * not a bill.
+ */
+function UsageSection() {
+  const load = useCallback(async () => {
+    const res = await authenticatedFetch('/api/beyond/velin/spotreba');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return (await res.json()) as Usage;
+  }, []);
+  const u = usePolled<Usage>(load, 60_000);
+  const d = u.data;
+  if (!d) return (
+    <section>
+      <SectionHead title="Spotřeba" />
+      <Empty>{u.error ? `Nepovedlo se načíst: ${u.error}` : 'Počítám…'}</Empty>
+    </section>
+  );
+  const maxDay = Math.max(1, ...d.byDay.map((x) => x.cost_usd));
+  return (
+    <section>
+      <SectionHead title="Spotřeba" />
+      <div className="bb-us">
+        <div className="bb-us__limits">
+          {d.limits.available ? (
+            <>
+              {d.limits.windows.map((w) => (
+                <div key={w.kind} className="bb-us__win" data-sev={w.severity}>
+                  <div className="bb-us__wl"><span>{w.label}</span><b>{w.percent} %</b></div>
+                  <div className="bb-us__bar"><i style={{ width: `${Math.min(100, w.percent)}%` }} /></div>
+                  <div className="bb-us__wr">{resetIn(w.resetsAt)}</div>
+                </div>
+              ))}
+              <p className="bb-us__note">Účet Claude {d.limits.subscription ? `(${d.limits.subscription})` : ''} na stroji, stejné číslo jako /usage v Claude Code.{d.limits.extra ? ` Extra kredit: ${d.limits.extra.used ?? 0} z ${d.limits.extra.limit ?? '?'} ${d.limits.extra.currency || ''}.` : ''}</p>
+            </>
+          ) : (
+            <Empty>Limity účtu nejdou přečíst: {d.limits.reason}</Empty>
+          )}
+        </div>
+
+        <div className="bb-us__periods">
+          {(['today', 'week', 'month'] as const).map((k) => {
+            const p = d.periods[k];
+            return (
+              <div key={k} className="bb-us__period">
+                <span className="bb-us__pl">{k === 'today' ? 'Dnes' : k === 'week' ? '7 dní' : '30 dní'}</span>
+                <b className="bb-us__pv">{fmtUsd(p.cost_usd || 0)}</b>
+                <span className="bb-us__pm">{p.runs || 0} běhů · {fmtK((p.input || 0) + (p.cache_read || 0) + (p.cache_write || 0))} in · {fmtK(p.output || 0)} out{p.errors ? ` · ${p.errors} chyb` : ''}</span>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="bb-us__days" aria-label="Spotřeba po dnech, 14 dní">
+          {d.byDay.map((x) => (
+            <div key={x.day} className="bb-us__day" title={`${x.day}: ${fmtUsd(x.cost_usd)}, ${x.runs} běhů`}>
+              <i style={{ height: `${Math.max(2, (x.cost_usd / maxDay) * 100)}%` }} />
+              <span>{x.day.slice(8)}.</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="bb-us__cols">
+          <div>
+            <p className="bb-set__g">Kde, posledních 7 dní</p>
+            <table className="bb-us__t">
+              <tbody>
+                {d.bySource.map((r, i) => (
+                  <tr key={i}>
+                    <td>{sourceName(r)}</td>
+                    <td className="bb-us__num">{r.runs}×</td>
+                    <td className="bb-us__num">{fmtK((r.input || 0) + (r.cache_read || 0) + (r.cache_write || 0))} in</td>
+                    <td className="bb-us__num">{fmtK(r.output || 0)} out</td>
+                    <td className="bb-us__num"><b>{fmtUsd(r.cost_usd || 0)}</b></td>
+                  </tr>
+                ))}
+                {d.bySource.length === 0 && <tr><td colSpan={5} className="bb-us__empty">Zatím nic zaznamenaného; sbírá se od teď.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+          <div>
+            <p className="bb-set__g">Modely, posledních 7 dní</p>
+            <table className="bb-us__t">
+              <tbody>
+                {d.byModel.map((r, i) => (
+                  <tr key={i}>
+                    <td>{r.model || 'neznámý'}</td>
+                    <td className="bb-us__num">{r.runs}×</td>
+                    <td className="bb-us__num">{fmtK(r.output || 0)} out</td>
+                    <td className="bb-us__num"><b>{fmtUsd(r.cost_usd || 0)}</b></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <details className="bb-us__recent">
+          <summary>Posledních {d.recent.length} běhů</summary>
+          <table className="bb-us__t">
+            <tbody>
+              {d.recent.map((r, i) => (
+                <tr key={i} data-err={r.is_error ? 'true' : undefined}>
+                  <td className="bb-us__ts">{new Date(r.ts).toLocaleString('cs-CZ', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
+                  <td>{sourceName(r)}{r.actor && r.source !== 'job' ? ` · ${r.actor}` : ''}</td>
+                  <td className="bb-us__num">{r.model || ''}</td>
+                  <td className="bb-us__num">{fmtK((r.input || 0) + (r.cache_read || 0) + (r.cache_write || 0))} / {fmtK(r.output || 0)}</td>
+                  <td className="bb-us__num">{r.duration_ms != null ? `${Math.round(r.duration_ms / 1000)} s` : ''}</td>
+                  <td className="bb-us__num"><b>{fmtUsd(r.cost_usd || 0)}</b></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </details>
+      </div>
+    </section>
+  );
+}
+
 function SettingsSection() {
   const load = useCallback(async () => {
     const res = await authenticatedFetch('/api/beyond/velin/nastaveni');
@@ -527,6 +681,8 @@ export default function AgentPage() {
             </div>
           ))}
         </section>
+
+        <UsageSection />
 
         <SettingsSection />
 
