@@ -49,7 +49,10 @@ function sortTasks(list: Task[]): Task[] {
 function Avatar({ person, people, me }: { person: string; people: Ukoly['people']; me: string }) {
   const p = people.find((x) => x.key === person);
   const [broken, setBroken] = useState(false);
-  const name = p?.displayName || person;
+  const name = p?.displayName || (person === 'all' ? 'Všichni' : person);
+  if (person === 'all') {
+    return <span className="bb-uk__av bb-uk__av--all" title="Všichni">∗</span>;
+  }
   if (p?.avatar && !broken) {
     return <img className={`bb-uk__av${person === me ? ' bb-uk__av--me' : ''}`} src={p.avatar} alt={name} title={name} onError={() => setBroken(true)} />;
   }
@@ -200,9 +203,10 @@ function Prep({ task, onDone, onOpenFile }: { task: Task; onDone: () => void; on
   );
 }
 
-function TaskRow({ task, people, me, onState, onRemove, onReload, onOpenFile }: {
+function TaskRow({ task, people, clients, me, onState, onRemove, onReload, onOpenFile }: {
   task: Task;
   people: Ukoly['people'];
+  clients: Ukoly['clients'];
   me: string;
   onState: (task: Task, next: Task['state']) => void;
   onRemove: (task: Task) => void;
@@ -210,12 +214,20 @@ function TaskRow({ task, people, me, onState, onRemove, onReload, onOpenFile }: 
   onOpenFile: (path: string) => void;
 }) {
   const [pop, setPop] = useState(false);
+  const [editing, setEditing] = useState(false);
   const by = task.createdBy === 'agent' || task.createdBy.includes('-') ? 'od brainu' : task.createdBy !== task.owner ? `zadal ${people.find((p) => p.key === task.createdBy)?.displayName || task.createdBy}` : null;
   const fire = (next: Task['state']) => {
     setPop(true);
     setTimeout(() => setPop(false), 400);
     onState(task, next);
   };
+  if (editing && !task.virtual) {
+    return (
+      <div className="bb-uk__row bb-uk__row--edit">
+        <TaskEditor task={task} people={people} clients={clients} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); onReload(); }} onRemove={() => onRemove(task)} />
+      </div>
+    );
+  }
   return (
     <div className={`bb-uk__row${task.state === 'work' ? ' bb-uk__row--work' : task.state === 'done' ? ' bb-uk__row--done' : ''}`}>
       <button
@@ -232,7 +244,11 @@ function TaskRow({ task, people, me, onState, onRemove, onReload, onOpenFile }: 
         {CHECK}
       </button>
       <div className="bb-uk__body">
-        <div className="bb-uk__t">{task.text}</div>
+        {task.virtual ? (
+          <div className="bb-uk__t">{task.text}</div>
+        ) : (
+          <button type="button" className="bb-uk__t bb-uk__t--btn" onClick={() => setEditing(true)} title="Upravit">{task.text}</button>
+        )}
         <div className="bb-uk__meta">
           {task.client && <span className="bb-uk__cl">{task.client.name}</span>}
           {task.note && <span>{task.note}</span>}
@@ -249,6 +265,116 @@ function TaskRow({ task, people, me, onState, onRemove, onReload, onOpenFile }: 
         <Avatar person={task.owner} people={people} me={me} />
       </span>
       {task.state !== 'done' && task.prep && <Prep task={task} onDone={onReload} onOpenFile={onOpenFile} />}
+    </div>
+  );
+}
+
+const DUE_QUICK: { label: string; iso: () => string | null }[] = [
+  { label: 'bez termínu', iso: () => null },
+  { label: 'dnes', iso: () => isoPlus(0) },
+  { label: 'zítra', iso: () => isoPlus(1) },
+  { label: 'za týden', iso: () => isoPlus(7) },
+];
+
+function isoPlus(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * Everything about a task in one place: the words, the priority, the day,
+ * whose it is (one of us, or everyone), the client. Enter saves, Escape
+ * leaves it as it was.
+ */
+function TaskEditor({ task, people, clients, onClose, onSaved, onRemove }: {
+  task: Task;
+  people: Ukoly['people'];
+  clients: Ukoly['clients'];
+  onClose: () => void;
+  onSaved: () => void;
+  onRemove: () => void;
+}) {
+  const [text, setText] = useState(task.text);
+  const [priority, setPriority] = useState<Task['priority']>(task.priority);
+  const [due, setDue] = useState<string | null>(task.due);
+  const [owner, setOwner] = useState(task.owner);
+  const [client, setClient] = useState<string | null>(task.client?.slug ?? null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const save = async () => {
+    if (!text.trim() || busy) return;
+    setBusy(true);
+    setErr(null);
+    const patch: Parameters<typeof patchTask>[1] = {};
+    if (text.trim() !== task.text) patch.text = text.trim();
+    if (priority !== task.priority) patch.priority = priority;
+    if (due !== task.due) patch.due = due;
+    if (owner !== task.owner) patch.owner = owner;
+    if (client !== (task.client?.slug ?? null)) patch.client = client;
+    try {
+      if (Object.keys(patch).length) await patchTask(task.id, patch);
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Nešlo uložit.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      className="bb-te"
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') { e.preventDefault(); onClose(); }
+        if (e.key === 'Enter' && !(e.target instanceof HTMLTextAreaElement)) { e.preventDefault(); void save(); }
+      }}
+    >
+      <input id={`bb-te-text-${task.id}`} className="bb-te__text" type="text" value={text} onChange={(e) => setText(e.target.value)} autoFocus placeholder="Co je potřeba udělat" />
+      <div className="bb-te__row">
+        <span className="bb-te__l">Priorita</span>
+        <div className="bb-te__opts">
+          {([1, 2, 3, 4] as Task['priority'][]).map((p) => (
+            <button key={p} type="button" className={`bb-te__p bb-uk__chk--p${p}`} aria-pressed={priority === p} onClick={() => setPriority(p)} title={`P${p}`}>P{p}</button>
+          ))}
+        </div>
+      </div>
+      <div className="bb-te__row">
+        <span className="bb-te__l">Termín</span>
+        <div className="bb-te__opts">
+          {DUE_QUICK.map((q) => (
+            <button key={q.label} type="button" className="bb-pill bb-pill--sm" aria-pressed={due === q.iso()} onClick={() => setDue(q.iso())}>{q.label}</button>
+          ))}
+          <input id={`bb-te-due-${task.id}`} className="bb-te__date" type="date" value={due || ''} onChange={(e) => setDue(e.target.value || null)} aria-label="Datum" />
+        </div>
+      </div>
+      <div className="bb-te__row">
+        <span className="bb-te__l">Komu</span>
+        <div className="bb-te__opts">
+          {people.map((p) => (
+            <button key={p.key} type="button" className="bb-pill bb-pill--sm bb-pill--person" aria-pressed={owner === p.key} onClick={() => setOwner(p.key)}>
+              <Avatar person={p.key} people={people} me="" />{p.displayName}
+            </button>
+          ))}
+          <button type="button" className="bb-pill bb-pill--sm" aria-pressed={owner === 'all'} onClick={() => setOwner('all')}>Všichni</button>
+        </div>
+      </div>
+      <div className="bb-te__row">
+        <span className="bb-te__l">Klient</span>
+        <div className="bb-te__opts">
+          <select id={`bb-te-client-${task.id}`} className="bb-te__sel" value={client || ''} onChange={(e) => setClient(e.target.value || null)}>
+            <option value="">bez klienta</option>
+            {clients.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
+          </select>
+        </div>
+      </div>
+      {err && <p className="bb-fx__err">{err}</p>}
+      <div className="bb-te__acts">
+        <button type="button" className="bb-pill bb-pill--sm bb-pill--primary" disabled={busy || !text.trim()} onClick={() => void save()}>Uložit</button>
+        <button type="button" className="bb-pill bb-pill--sm" onClick={onClose}>Zrušit</button>
+        <button type="button" className="bb-uk__x" style={{ marginLeft: 'auto' }} onClick={onRemove}>smazat</button>
+      </div>
     </div>
   );
 }
@@ -486,7 +612,7 @@ export default function VelinPage({ onOpenClient, onOpenCalls, onOpenChat }: Pro
 
   const visible = sortTasks(
     tasks.filter((t) => {
-      if (viewedPerson) return t.owner === viewedPerson;
+      if (viewedPerson) return t.owner === viewedPerson || t.owner === 'all';
       if (view === 'ready') return Boolean(t.prep) && t.state !== 'done';
       return true;
     }),
@@ -499,7 +625,7 @@ export default function VelinPage({ onOpenClient, onOpenCalls, onOpenChat }: Pro
   const risks = (velin.data?.risks || []).slice(0, 4);
   const clients = (board.data?.clients || []).filter((c) => c.isActive !== false);
 
-  const rowProps = { people, me, onState: setState, onRemove: remove, onReload: () => void ukoly.reload(), onOpenFile: openFile };
+  const rowProps = { people, clients: ukoly.data?.clients || [], me, onState: setState, onRemove: remove, onReload: () => void ukoly.reload(), onOpenFile: openFile };
 
   return (
     <div className="bb-vel">
