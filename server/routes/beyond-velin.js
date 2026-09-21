@@ -23,7 +23,7 @@ import { snapshot as memorySnapshot } from '../services/beyond-memory.js';
 import * as ukoly from '../services/beyond-ukoly.js';
 import * as obsah from '../services/beyond-obsah.js';
 import { listConnectors } from '../services/beyond-mcp-connectors-store.js';
-import { clipFileFor, cutForItem } from '../services/beyond-clip.js';
+import { clipFileFor, cutForItem, removeClipFile } from '../services/beyond-clip.js';
 import { pullBrain } from '../services/beyond-git.js';
 import { todayIso, tz } from '../services/beyond-time.js';
 import { describe as describeSettings, save as saveSettings } from '../services/beyond-settings.js';
@@ -450,6 +450,11 @@ router.patch('/obsah/:id', async (req, res) => {
     const it = await obsah.updateItem(req.params.id, req.body || {}, { by });
     // An approved moment gets its clip cut right away, and a moment whose
     // seconds changed gets a fresh one.
+    // A discarded moment does not keep its video around.
+    if (req.body?.state === 'zahozeno' && it.kind === 'reel') {
+      removeClipFile(it.id);
+      if (it.clip) await obsah.updateItem(it.id, { clip: null }, { by }).catch(() => {});
+    }
     const secondsChanged = req.body?.startSec !== undefined || req.body?.endSec !== undefined;
     if (it.kind === 'reel' && it.source?.fathom && ((req.body?.state === 'schvaleno' && it.clip?.status !== 'ready') || (secondsChanged && it.clip))) {
       void cutForItem(it, by);
@@ -479,6 +484,7 @@ router.get('/obsah/:id/clip', (req, res) => {
 
 router.delete('/obsah/:id', async (req, res) => {
   try {
+    removeClipFile(req.params.id);
     await obsah.removeItem(req.params.id, { by: req.user?.username || 'velin' });
     res.json({ ok: true });
   } catch (err) {

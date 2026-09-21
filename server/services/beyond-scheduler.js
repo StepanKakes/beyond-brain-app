@@ -39,6 +39,8 @@ import { describeSchedule } from './beyond-schedule.js';
 import { broadcast as tgBroadcast, sendTo as tgSendTo } from './beyond-telegram.js';
 import { pruneHistory } from './beyond-history.js';
 import { invalidateBrainIndex } from './brain-index.js';
+import { pruneOsa } from './beyond-obsah.js';
+import { removeClipFile } from './beyond-clip.js';
 
 /** How often to look at the clock. Jobs decide their own cadence. */
 const TICK_MS = 60_000;
@@ -236,6 +238,13 @@ async function tick() {
       if (n) log(`historie: ${n} starých sessions smazáno`);
     } catch (err) {
       log('úklid historie selhal', err?.message || err);
+    }
+    try {
+      const { removed } = await pruneOsa();
+      for (const id of removed) removeClipFile(id);
+      if (removed.length) log(`obsah: ${removed.length} zahozených po měsíci smazáno i s výseky`);
+    } catch (err) {
+      log('úklid obsahu selhal', err?.message || err);
     }
   }
 }

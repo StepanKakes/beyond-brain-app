@@ -189,3 +189,30 @@ export async function markChecked({ recordingId, slug, date, count }) {
 export function pending() {
   return readFile().polozky.filter((i) => i.state === 'navrh');
 }
+
+const DISCARD_KEEP_DAYS = 30;
+const CHECKED_KEEP_DAYS = 60;
+
+/**
+ * Housekeeping, once a day: a discarded piece is gone after a month (its
+ * reason has been read by the evening review long before), published and
+ * filmed pieces stay as the record of what went out, and the list of calls
+ * already read is trimmed after two months (the transcripts are older than
+ * the window by then anyway). Returns the ids whose clip files can go.
+ */
+export async function pruneOsa() {
+  const data = structuredClone(readFile());
+  const now = Date.now();
+  const gone = [];
+  data.polozky = data.polozky.filter((i) => {
+    const old = now - Date.parse(i.updatedAt || i.createdAt || 0) > DISCARD_KEEP_DAYS * 24 * 60 * 60 * 1000;
+    if (i.state === 'zahozeno' && old) { gone.push(i.id); return false; }
+    return true;
+  });
+  const before = (data.prosle || []).length;
+  data.prosle = (data.prosle || []).filter((p) => now - Date.parse(p.at || 0) < CHECKED_KEEP_DAYS * 24 * 60 * 60 * 1000);
+  if (gone.length || data.prosle.length !== before) {
+    await write(data, `Obsah: úklid, ${gone.length} zahozených po měsíci smazáno`);
+  }
+  return { removed: gone };
+}

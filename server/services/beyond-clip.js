@@ -162,3 +162,9 @@ export async function cutMissing(by = 'agent') {
   }
   return todo.length;
 }
+
+export function removeClipFile(id) {
+  const p = clipFileFor(id);
+  if (!p) return false;
+  try { fs.unlinkSync(p); return true; } catch { return false; }
+}
