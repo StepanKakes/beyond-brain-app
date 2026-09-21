@@ -72,7 +72,8 @@ type SettingItem = {
   secret?: boolean;
   restart?: boolean;
   set: boolean;
-  source: 'app' | 'env' | null;
+  source: 'app' | 'env' | 'derived' | null;
+  derivedFrom: string | null;
   display: string;
   updatedAt: string | null;
   updatedBy: string | null;
@@ -294,7 +295,7 @@ function SettingsSection() {
                   value={edits[i.key] ?? ''}
                   onChange={(e) => setEdits((cur) => ({ ...cur, [i.key]: e.target.value }))}
                 />
-                {i.hint && <span className="bb-set__h">{i.hint}{i.source === 'env' ? ' Teď z .env.' : ''}</span>}
+                {i.hint && <span className="bb-set__h">{i.hint}{i.source === 'env' ? ' Teď z .env na stroji.' : i.source === 'derived' ? ` Bere se: ${i.derivedFrom}.` : ''}</span>}
               </label>
             ))}
           </details>

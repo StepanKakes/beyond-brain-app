@@ -24,6 +24,7 @@ import { search as searchHistory, readSession, recentSessions } from './beyond-h
 import * as memory from './beyond-memory.js';
 import * as mozek from './beyond-mozek.js';
 import * as ukoly from './beyond-ukoly.js';
+import * as obsah from './beyond-obsah.js';
 import { getPeople } from './beyond-people.js';
 
 function text(payload) {
@@ -311,8 +312,58 @@ export function buildBeyondToolsServer(ctx = {}) {
     },
   );
 
-  return createSdkMcpServer({ name: 'beyond', version: '1.0.0', tools: [schedule, history, pamet, skillManage, tasks] });
+  const content = tool(
+    'obsah',
+    [
+      'Osa obsahu pro Instagram (workspace/obsah/osa.json). Akce: list, reel, story, update.',
+      'reel = moment z callu, který má šanci fungovat jako reel: title, hook (první věta na obrazovce), quote (doslovný výsek řeči), speaker,',
+      'startSec a endSec (sekundy od začátku nahrávky, z časových značek přepisu), why (proč to funguje), broll (co dotočit / co dát do titulků), caption, client (slug), date, recordingId, fathom (odkaz), transcript (cesta k přepisu).',
+      'story = sekvence slidů v Timově hlasu: title, slides (pole textů slidů), text (celý text ve formátu Story Studia, DEN/SLIDE), caption, studio {sequenceId, url, renders} když už je ve Story Studiu.',
+      'update: id + state (navrh|schvaleno|natoceno|zverejneno|zahozeno) nebo libovolné pole. Návrhy čekají na Velíně na schválení; nikdy sám neschvaluj.',
+    ].join(' '),
+    {
+      action: z.enum(['list', 'reel', 'story', 'update']),
+      id: z.string().optional(),
+      state: z.enum(['navrh', 'schvaleno', 'natoceno', 'zverejneno', 'zahozeno']).optional(),
+      title: z.string().optional(),
+      hook: z.string().optional(),
+      quote: z.string().optional(),
+      speaker: z.string().optional(),
+      startSec: z.number().optional(),
+      endSec: z.number().optional(),
+      why: z.string().optional(),
+      broll: z.string().optional(),
+      caption: z.string().optional(),
+      client: z.string().optional(),
+      date: z.string().optional(),
+      recordingId: z.string().optional(),
+      fathom: z.string().optional(),
+      transcript: z.string().optional(),
+      slides: z.array(z.string()).optional(),
+      text: z.string().optional(),
+      studio: z.object({ sequenceId: z.string().optional(), url: z.string().optional(), renders: z.array(z.string()).optional() }).optional(),
+      note: z.string().optional(),
+    },
+    async (args) => {
+      try {
+        if (args.action === 'list') {
+          return text(obsah.listItems().filter((i) => i.state !== 'zahozeno').map((i) => ({ id: i.id, kind: i.kind, state: i.state, title: i.title, hook: i.hook, client: i.client, date: i.source?.date || null, recordingId: i.source?.recordingId || null, createdAt: i.createdAt })));
+        }
+        if (args.action === 'reel' || args.action === 'story') {
+          const it = await obsah.addItem({ ...args, kind: args.action }, { by: actor });
+          return text({ ok: true, id: it.id, kind: it.kind, title: it.title || it.hook });
+        }
+        if (!args.id) return fail('id chybí');
+        const it = await obsah.updateItem(args.id, args, { by: actor });
+        return text({ ok: true, id: it.id, state: it.state });
+      } catch (err) {
+        return fail(err?.message || String(err));
+      }
+    },
+  );
+
+  return createSdkMcpServer({ name: 'beyond', version: '1.0.0', tools: [schedule, history, pamet, skillManage, tasks, content] });
 }
 
 /** Tool names as the SDK exposes them, for allow lists. */
-export const BEYOND_TOOL_NAMES = ['mcp__beyond__beyond_schedule', 'mcp__beyond__hledej_historii', 'mcp__beyond__pamet', 'mcp__beyond__skill_manage', 'mcp__beyond__ukoly'];
+export const BEYOND_TOOL_NAMES = ['mcp__beyond__beyond_schedule', 'mcp__beyond__hledej_historii', 'mcp__beyond__pamet', 'mcp__beyond__skill_manage', 'mcp__beyond__ukoly', 'mcp__beyond__obsah'];

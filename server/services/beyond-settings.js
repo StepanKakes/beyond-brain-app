@@ -14,6 +14,7 @@
 import { getConnection } from '../modules/database/connection.js';
 import { getPeople } from './beyond-people.js';
 import { icsKeyFor } from './beyond-kalendar.js';
+import { wahaConfig } from './beyond-waha.js';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS beyond_settings (
@@ -107,17 +108,40 @@ function mask(value) {
   return `${value.slice(0, 3)}…${value.slice(-3)}`;
 }
 
+/**
+ * Values the app uses even though nobody typed them here: taken from
+ * elsewhere (the WAHA connector in ~/.claude.json, a fallback to another
+ * key). Shown so the screen does not look empty for something that works.
+ */
+function derived(key) {
+  try {
+    if (key === 'BEYOND_WAHA_URL' || key === 'BEYOND_WAHA_API_KEY') {
+      const cfg = wahaConfig();
+      if (!cfg) return null;
+      return { value: key === 'BEYOND_WAHA_URL' ? cfg.baseUrl : cfg.apiKey, from: cfg.source || 'konektor WAHA' };
+    }
+    if (key === 'BEYOND_TG_ERROR_CHAT_ID' && !process.env.BEYOND_TG_ERROR_CHAT_ID && process.env.BEYOND_TG_CHAT_ID) {
+      return { value: process.env.BEYOND_TG_CHAT_ID, from: 'stejný jako brief' };
+    }
+    if (key === 'BEYOND_TZ' && !process.env.BEYOND_TZ) return { value: 'Europe/Prague', from: 'výchozí' };
+  } catch { /* derived values are a courtesy */ }
+  return null;
+}
+
 /** The catalogue with current state, secrets masked, for the UI. */
 export function describe() {
   const values = stored();
   return CATALOG.map((c) => {
     const inDb = values[c.key];
     const env = process.env[c.key];
-    const value = inDb?.value ?? env ?? '';
+    const own = inDb?.value ?? env ?? '';
+    const d = own ? null : derived(c.key);
+    const value = own || d?.value || '';
     return {
       ...c,
       set: Boolean(value),
-      source: inDb?.value ? 'app' : env ? 'env' : null,
+      source: inDb?.value ? 'app' : env ? 'env' : d ? 'derived' : null,
+      derivedFrom: d?.from || null,
       display: c.secret ? mask(value) : value,
       updatedAt: inDb?.updatedAt || null,
       updatedBy: inDb?.updatedBy || null,

@@ -39,6 +39,7 @@ import { isConfigured as wahaConfigured } from './beyond-waha.js';
 import { todayIso, timeLocal } from './beyond-time.js';
 import { createTask as createUkol, findByPrepRef, listTasks as listUkoly } from './beyond-ukoly.js';
 import { createClientTasks, notionConfigured as notionReady, tasksFromWriteup, upsertCallPage } from './beyond-notion.js';
+import { hasMomentsFor, listItems as listObsah } from './beyond-obsah.js';
 
 /** Give a scheduled run room; these prompts read a lot of files. */
 const JOB_TIMEOUT_MS = 12 * 60 * 1000;
@@ -1397,6 +1398,104 @@ const learningReview = {
 };
 
 /* ------------------------------------------------------------------ */
+/* content: moments from calls, stories with pictures                  */
+/* ------------------------------------------------------------------ */
+
+const RAW_CALLS_DIR = path.join('second-brain', '_raw', 'cally');
+const MOMENTS_WINDOW_DAYS = 10;
+
+/**
+ * Calls with a transcript in the brain and no moments on the line yet, oldest
+ * first. A transcript file is `<date>-<slug>-<recordingId>[-castN].md`.
+ */
+async function callsWithoutMoments() {
+  const dir = path.join(resolveBrainPath(), RAW_CALLS_DIR);
+  let names;
+  try {
+    names = await fs.readdir(dir);
+  } catch {
+    return [];
+  }
+  const cutoff = Date.now() - MOMENTS_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+  const byRec = new Map();
+  for (const n of names) {
+    const m = /^(\d{4}-\d{2}-\d{2})-(.+?)-(\d+)(?:-cast(\d+))?\.md$/.exec(n);
+    if (!m) continue;
+    const [, date, slug, rec, part] = m;
+    if (Date.parse(`${date}T00:00:00Z`) < cutoff) continue;
+    if (hasMomentsFor(rec)) continue;
+    const cur = byRec.get(rec) || { date, slug, recordingId: rec, files: [] };
+    cur.files.push({ name: n, part: part ? Number(part) : 1 });
+    byRec.set(rec, cur);
+  }
+  return [...byRec.values()].sort((a, b) => a.date.localeCompare(b.date)).map((c) => ({ ...c, files: c.files.sort((a, b) => a.part - b.part).map((f) => `${RAW_CALLS_DIR}/${f.name}`) }));
+}
+
+const contentMoments = {
+  name: 'obsah-momenty',
+  model: 'sonnet',
+  title: 'Momenty z callu pro Instagram',
+  description:
+    'Po každém callu s přepisem projde záznam a vybere 3 až 5 míst, která by fungovala jako reel nebo story: ' +
+    'sekundy k vystřižení, hook, proč to funguje, B-roll a popisek. Návrhy čekají na Velíně.',
+  everyMs: 30 * 60 * 1000,
+  async hasWork() {
+    const calls = await callsWithoutMoments();
+    return calls.length ? `${calls.length} callů bez momentů` : null;
+  },
+  async run({ log }) {
+    const calls = await callsWithoutMoments();
+    if (!calls.length) return { skipped: 'žádný call bez momentů' };
+    const call = calls[0];
+    log(`${call.slug} ${call.date} (${call.files.length} částí)`);
+    const result = await runAgent(
+      [
+        'Použij skill obsah-momenty.',
+        '',
+        `Klient: ${call.slug}`,
+        `Datum callu: ${call.date}`,
+        `recording_id: ${call.recordingId}`,
+        'Přepis (čti všechny části, v pořadí):',
+        ...call.files.map((f) => `- ${f}`),
+        '',
+        'Zapiš momenty nástrojem obsah (akce reel). Když call nic nemá, nezapisuj nic a řekni proč.',
+      ].join('\n'),
+      { timeoutMs: 12 * 60 * 1000 },
+    );
+    const added = listObsah().filter((i) => i.kind === 'reel' && i.source?.recordingId === call.recordingId).length;
+    return { summary: `${call.slug} ${call.date}: ${added} momentů. ${String(result.text || '').slice(0, 1500)}` };
+  },
+};
+
+const contentStories = {
+  name: 'obsah-stories',
+  model: 'opus',
+  title: 'Story sekvence na dnešek',
+  description:
+    'Ráno vybere jedno téma z posledních dnů (moment z callu, čerstvá hlasovka, mezera v obsahu), napíše story ' +
+    'sekvenci v Timově hlasu a když je napojené Story Studio, rovnou ji vyrenderuje. Čeká na Velíně.',
+  dailyAt: { hour: 7, minute: 30 },
+  async hasWork() {
+    const today = todayIso();
+    const already = listObsah().some((i) => i.kind === 'story' && i.createdBy === 'obsah-stories' && (i.createdAt || '').startsWith(today));
+    return already ? null : 'dnes ještě žádná sekvence';
+  },
+  async run({ log }) {
+    const result = await runAgent(
+      [
+        'Použij skill obsah-stories, režim úlohy (ranní sekvence).',
+        `Dnes je ${todayIso()}.`,
+        'Vyber jedno téma podle pořadí ve skillu, napiš sekvenci, když je napojené Story Studio vyrenderuj slidy, zapiš na osu nástrojem obsah (akce story).',
+        'Když není z čeho (nic nového za poslední dny), nezapisuj nic a řekni to jednou větou.',
+      ].join('\n'),
+      { timeoutMs: 12 * 60 * 1000 },
+    );
+    log('hotovo');
+    return { summary: String(result.text || '').slice(0, 2000) };
+  },
+};
+
+/* ------------------------------------------------------------------ */
 /* custom jobs from system/ulohy.json                                  */
 /* ------------------------------------------------------------------ */
 
@@ -1494,6 +1593,8 @@ export const JOBS = [
   prepareCalls,
   roadmapCheck,
   tidyProfiles,
+  contentMoments,
+  contentStories,
   learningReview,
 ];
 

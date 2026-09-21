@@ -21,6 +21,7 @@ import * as mozek from '../services/beyond-mozek.js';
 import { createTask, removeTask, setScheduleOverride, updateTask } from '../services/beyond-tasks.js';
 import { snapshot as memorySnapshot } from '../services/beyond-memory.js';
 import * as ukoly from '../services/beyond-ukoly.js';
+import * as obsah from '../services/beyond-obsah.js';
 import { pullBrain } from '../services/beyond-git.js';
 import { todayIso, tz } from '../services/beyond-time.js';
 import { describe as describeSettings, save as saveSettings } from '../services/beyond-settings.js';
@@ -367,8 +368,77 @@ function composeTasks(index) {
     virtual: true,
   }));
 
-  return [...stored, ...messages, ...brain];
+  // What the brain proposed for Instagram and nobody has looked at yet.
+  const content = obsah.pending().map((o) => {
+    const isReel = o.kind === 'reel';
+    const fathomAt = isReel && o.source?.fathom && o.startSec != null
+      ? `${o.source.fathom}${o.source.fathom.includes('?') ? '&' : '?'}timestamp=${Math.max(0, Math.floor(o.startSec) - 2)}`
+      : null;
+    const body = isReel
+      ? [o.hook, '', o.quote ? `„${o.quote}"` : '', '', o.why ? `Proč: ${o.why}` : '', o.broll ? `B-roll: ${o.broll}` : ''].filter((x) => x != null).join('\n').replace(/\n{3,}/g, '\n\n').trim()
+      : [o.hook || o.title, '', ...(o.slides || []).map((sl, i) => `${i + 1}. ${sl}`)].join('\n').trim();
+    return {
+      id: `obsah:${o.id}`,
+      text: isReel ? `Reel z callu: ${o.title || o.hook}` : `Stories: ${o.title || o.hook}`,
+      priority: 3,
+      state: ukoly.virtualState(`obsah:${o.id}`),
+      client: shapeClient(o.client),
+      owner: DEFAULT_OWNER(),
+      createdBy: 'agent',
+      due: null,
+      dueLabel: null,
+      dueKind: '',
+      note: isReel && o.startSec != null ? `${fmtSec(o.startSec)} až ${fmtSec(o.endSec)}${o.speaker ? ` · ${o.speaker}` : ''}` : null,
+      prep: {
+        kind: 'obsah',
+        title: isReel ? 'Brain našel moment na reel' : 'Brain připravil stories',
+        body,
+        ref: o.id,
+        images: !isReel && o.studio?.renders?.length ? o.studio.renders : [],
+        link: fathomAt ? { label: 'Přehrát ve Fathomu', url: fathomAt } : o.studio?.url ? { label: 'Upravit ve Story Studiu', url: o.studio.url } : null,
+        actions: [
+          { label: 'Schválit', action: 'obsah-schvalit', primary: true },
+          { label: 'Zahodit', action: 'obsah-zahodit' },
+        ],
+      },
+      createdAt: o.createdAt,
+      doneAt: null,
+      virtual: true,
+    };
+  });
+
+  return [...stored, ...messages, ...brain, ...content];
 }
+
+function fmtSec(sec) {
+  const s = Math.max(0, Math.round(Number(sec) || 0));
+  const m = Math.floor(s / 60);
+  return `${m}:${String(s % 60).padStart(2, '0')}`;
+}
+
+/* ---- content line ------------------------------------------------- */
+
+router.get('/obsah', (_req, res) => {
+  res.json({ items: obsah.listItems() });
+});
+
+router.patch('/obsah/:id', async (req, res) => {
+  try {
+    const it = await obsah.updateItem(req.params.id, req.body || {}, { by: req.user?.username || 'velin' });
+    res.json({ ok: true, item: it });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'nešlo upravit' });
+  }
+});
+
+router.delete('/obsah/:id', async (req, res) => {
+  try {
+    await obsah.removeItem(req.params.id, { by: req.user?.username || 'velin' });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'nešlo smazat' });
+  }
+});
 
 router.get('/ukoly', async (req, res) => {
   try {
@@ -431,7 +501,7 @@ router.patch('/ukoly/:id', async (req, res) => {
   try {
     const by = req.user?.username || 'velin';
     const id = req.params.id;
-    if (id.startsWith('navrh:') || id.startsWith('mozek:')) {
+    if (id.startsWith('navrh:') || id.startsWith('mozek:') || id.startsWith('obsah:')) {
       if (req.body?.state == null) return res.status(400).json({ ok: false, error: 'u připravené věci jde měnit jen stav' });
       await ukoly.setVirtualState(id, req.body.state, { by });
       return res.json({ ok: true, id, state: req.body.state });
