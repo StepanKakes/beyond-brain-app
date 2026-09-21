@@ -20,7 +20,7 @@ import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 
 import { resolveBrainPath } from '../utils/brain-path.js';
-import { commitBrain } from './beyond-git.js';
+import { commitBrainLater } from './beyond-git.js';
 
 const FILE = path.join('workspace', 'obsah', 'osa.json');
 export const KINDS = ['reel', 'story'];
@@ -64,8 +64,8 @@ async function write(data, message) {
   fs.mkdirSync(path.dirname(p), { recursive: true });
   fs.writeFileSync(p, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
   cache = { mtimeMs: -1, data: null };
-  const git = await commitBrain(message, { paths: [FILE] });
-  if (git.note) console.warn('[obsah]', git.note);
+  // The screen gets its answer now; git catches up right behind.
+  void commitBrainLater(message, { paths: [FILE] });
 }
 
 export function listItems() {

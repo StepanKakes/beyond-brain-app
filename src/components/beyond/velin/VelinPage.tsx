@@ -502,13 +502,18 @@ function QuickAdd({ me, owner, people, onAdded }: { me: string; owner: string; p
 
   const submit = async () => {
     if (!value.trim() || busy) return;
+    // The field empties on Enter, the way a notes app does; the request
+    // runs behind it and the text comes back only if it failed.
+    const text = value;
+    setValue('');
+    setParsed(null);
     setBusy(true);
+    inputRef.current?.focus();
     try {
-      await createQuick(value, owner);
-      setValue('');
-      setParsed(null);
+      await createQuick(text, owner);
       onAdded();
-      inputRef.current?.focus();
+    } catch {
+      setValue(text);
     } finally {
       setBusy(false);
     }

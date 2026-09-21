@@ -81,3 +81,18 @@ export async function commitBrain(message, { paths = null, push = true } = {}) {
     note: pushed.ok ? null : `commit je jen lokálně, push selhal: ${pushed.stderr.slice(0, 300)}`,
   };
 }
+
+/**
+ * Commit and push without making the caller wait. Calls line up so two
+ * quick edits do not race git; a failure is logged, never thrown. For the
+ * small files a person edits from the screen (tasks, the content line),
+ * where a click should answer in milliseconds, not after a push.
+ */
+let laterChain = Promise.resolve();
+export function commitBrainLater(message, opts = {}) {
+  laterChain = laterChain
+    .then(() => commitBrain(message, opts))
+    .then((r) => { if (r?.note) console.warn('[git]', r.note); })
+    .catch((err) => console.warn('[git] odložený commit selhal', err?.message || err));
+  return laterChain;
+}
