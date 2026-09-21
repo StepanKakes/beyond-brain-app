@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type React from 'react';
 
 import { authenticatedFetch } from '../../../utils/api';
 
@@ -319,10 +320,20 @@ function isoPlus(days: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+/** A chip that opens a small menu; the choice applies at once. */
+function Chip({ label, tone, children, open, onToggle }: { label: React.ReactNode; tone?: string; children: React.ReactNode; open: boolean; onToggle: () => void }) {
+  return (
+    <span className="bb-te__chipwrap">
+      <button type="button" className="bb-te__chip" data-tone={tone} aria-expanded={open} onClick={onToggle}>{label}</button>
+      {open && <div className="bb-te__menu" role="menu">{children}</div>}
+    </span>
+  );
+}
+
 /**
- * Everything about a task in one place: the words, the priority, the day,
- * whose it is (one of us, or everyone), the client. Enter saves, Escape
- * leaves it as it was.
+ * Everything about a task in one line under its words. Nothing to save:
+ * every choice applies as it is made, the text saves as it is typed, a
+ * click outside or Escape closes.
  */
 function TaskEditor({ task, people, clients, onClose, onSaved, onRemove }: {
   task: Task;
@@ -333,84 +344,91 @@ function TaskEditor({ task, people, clients, onClose, onSaved, onRemove }: {
   onRemove: () => void;
 }) {
   const [text, setText] = useState(task.text);
-  const [priority, setPriority] = useState<Task['priority']>(task.priority);
-  const [due, setDue] = useState<string | null>(task.due);
-  const [owner, setOwner] = useState(task.owner);
-  const [client, setClient] = useState<string | null>(task.client?.slug ?? null);
-  const [busy, setBusy] = useState(false);
+  const [cur, setCur] = useState<{ priority: Task['priority']; due: string | null; owner: string; client: string | null }>({ priority: task.priority, due: task.due, owner: task.owner, client: task.client?.slug ?? null });
+  const [menu, setMenu] = useState<'p' | 'due' | 'owner' | 'client' | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const textTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dirtyText = useRef(false);
 
-  const save = async () => {
-    if (!text.trim() || busy) return;
-    setBusy(true);
+  const apply = async (patch: Parameters<typeof patchTask>[1]) => {
     setErr(null);
-    const patch: Parameters<typeof patchTask>[1] = {};
-    if (text.trim() !== task.text) patch.text = text.trim();
-    if (priority !== task.priority) patch.priority = priority;
-    if (due !== task.due) patch.due = due;
-    if (owner !== task.owner) patch.owner = owner;
-    if (client !== (task.client?.slug ?? null)) patch.client = client;
     try {
-      if (Object.keys(patch).length) await patchTask(task.id, patch);
+      await patchTask(task.id, patch);
       onSaved();
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Nešlo uložit.');
-    } finally {
-      setBusy(false);
     }
   };
+  const pick = (patch: Partial<typeof cur>) => {
+    setCur((c) => ({ ...c, ...patch }));
+    setMenu(null);
+    void apply(patch as Parameters<typeof patchTask>[1]);
+  };
+  const flushText = () => {
+    if (textTimer.current) clearTimeout(textTimer.current);
+    if (dirtyText.current && text.trim() && text.trim() !== task.text) void apply({ text: text.trim() });
+    dirtyText.current = false;
+  };
+  const onText = (v: string) => {
+    setText(v);
+    dirtyText.current = true;
+    if (textTimer.current) clearTimeout(textTimer.current);
+    textTimer.current = setTimeout(flushText, 600);
+  };
+
+  // Click outside closes; the text is flushed first.
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) { flushText(); onClose(); }
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text]);
+
+  const person = people.find((p) => p.key === cur.owner);
+  const clientName = clients.find((c) => c.slug === cur.client)?.name;
+  const dueLabelOf = (iso: string | null) => (iso ? dueLabel(iso, null) : 'bez termínu');
 
   return (
     <div
+      ref={boxRef}
       className="bb-te"
       onKeyDown={(e) => {
-        if (e.key === 'Escape') { e.preventDefault(); onClose(); }
-        if (e.key === 'Enter' && !(e.target instanceof HTMLTextAreaElement)) { e.preventDefault(); void save(); }
+        if (e.key === 'Escape') { e.preventDefault(); flushText(); onClose(); }
+        if (e.key === 'Enter') { e.preventDefault(); flushText(); onClose(); }
       }}
     >
-      <input id={`bb-te-text-${task.id}`} className="bb-te__text" type="text" value={text} onChange={(e) => setText(e.target.value)} autoFocus placeholder="Co je potřeba udělat" />
-      <div className="bb-te__row">
-        <span className="bb-te__l">Priorita</span>
-        <div className="bb-te__opts">
+      <input id={`bb-te-text-${task.id}`} className="bb-te__text" type="text" value={text} onChange={(e) => onText(e.target.value)} onBlur={flushText} autoFocus placeholder="Co je potřeba udělat" />
+      <div className="bb-te__chips">
+        <Chip label={`P${cur.priority}`} tone={`p${cur.priority}`} open={menu === 'p'} onToggle={() => setMenu(menu === 'p' ? null : 'p')}>
           {([1, 2, 3, 4] as Task['priority'][]).map((p) => (
-            <button key={p} type="button" className={`bb-te__p bb-uk__chk--p${p}`} aria-pressed={priority === p} onClick={() => setPriority(p)} title={`P${p}`}>P{p}</button>
-          ))}
-        </div>
-      </div>
-      <div className="bb-te__row">
-        <span className="bb-te__l">Termín</span>
-        <div className="bb-te__opts">
-          {DUE_QUICK.map((q) => (
-            <button key={q.label} type="button" className="bb-pill bb-pill--sm" aria-pressed={due === q.iso()} onClick={() => setDue(q.iso())}>{q.label}</button>
-          ))}
-          <input id={`bb-te-due-${task.id}`} className="bb-te__date" type="date" value={due || ''} onChange={(e) => setDue(e.target.value || null)} aria-label="Datum" />
-        </div>
-      </div>
-      <div className="bb-te__row">
-        <span className="bb-te__l">Komu</span>
-        <div className="bb-te__opts">
-          {people.map((p) => (
-            <button key={p.key} type="button" className="bb-pill bb-pill--sm bb-pill--person" aria-pressed={owner === p.key} onClick={() => setOwner(p.key)}>
-              <Avatar person={p.key} people={people} me="" />{p.displayName}
+            <button key={p} type="button" className="bb-te__opt" data-tone={`p${p}`} aria-pressed={cur.priority === p} onClick={() => pick({ priority: p })}>
+              <i className="bb-te__flag" />P{p}{p === 1 ? ' nejvyšší' : p === 4 ? ' běžná' : ''}
             </button>
           ))}
-          <button type="button" className="bb-pill bb-pill--sm" aria-pressed={owner === 'all'} onClick={() => setOwner('all')}>Všichni</button>
-        </div>
-      </div>
-      <div className="bb-te__row">
-        <span className="bb-te__l">Klient</span>
-        <div className="bb-te__opts">
-          <select id={`bb-te-client-${task.id}`} className="bb-te__sel" value={client || ''} onChange={(e) => setClient(e.target.value || null)}>
-            <option value="">bez klienta</option>
-            {clients.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
-          </select>
-        </div>
-      </div>
-      {err && <p className="bb-fx__err">{err}</p>}
-      <div className="bb-te__acts">
-        <button type="button" className="bb-pill bb-pill--sm bb-pill--primary" disabled={busy || !text.trim()} onClick={() => void save()}>Uložit</button>
-        <button type="button" className="bb-pill bb-pill--sm" onClick={onClose}>Zrušit</button>
-        <button type="button" className="bb-uk__x" style={{ marginLeft: 'auto' }} onClick={onRemove}>smazat</button>
+        </Chip>
+        <Chip label={dueLabelOf(cur.due)} tone={cur.due ? 'due' : undefined} open={menu === 'due'} onToggle={() => setMenu(menu === 'due' ? null : 'due')}>
+          {DUE_QUICK.map((q) => (
+            <button key={q.label} type="button" className="bb-te__opt" aria-pressed={cur.due === q.iso()} onClick={() => pick({ due: q.iso() })}>{q.label}</button>
+          ))}
+          <input id={`bb-te-due-${task.id}`} className="bb-te__date" type="date" value={cur.due || ''} onChange={(e) => pick({ due: e.target.value || null })} aria-label="Datum" />
+        </Chip>
+        <Chip label={<><Avatar person={cur.owner} people={people} me="" />{cur.owner === 'all' ? 'Všichni' : person?.displayName || cur.owner}</>} open={menu === 'owner'} onToggle={() => setMenu(menu === 'owner' ? null : 'owner')}>
+          {people.map((p) => (
+            <button key={p.key} type="button" className="bb-te__opt" aria-pressed={cur.owner === p.key} onClick={() => pick({ owner: p.key })}><Avatar person={p.key} people={people} me="" />{p.displayName}</button>
+          ))}
+          <button type="button" className="bb-te__opt" aria-pressed={cur.owner === 'all'} onClick={() => pick({ owner: 'all' })}><span className="bb-uk__av bb-uk__av--all">∗</span>Všichni</button>
+        </Chip>
+        <Chip label={clientName || 'bez klienta'} open={menu === 'client'} onToggle={() => setMenu(menu === 'client' ? null : 'client')}>
+          <button type="button" className="bb-te__opt" aria-pressed={!cur.client} onClick={() => pick({ client: null })}>bez klienta</button>
+          {clients.map((c) => (
+            <button key={c.slug} type="button" className="bb-te__opt" aria-pressed={cur.client === c.slug} onClick={() => pick({ client: c.slug })}>{c.name}</button>
+          ))}
+        </Chip>
+        <button type="button" className="bb-te__del" onClick={onRemove} title="Smazat úkol">smazat</button>
+        {err && <span className="bb-fx__err">{err}</span>}
       </div>
     </div>
   );
