@@ -255,9 +255,7 @@ export default function BeyondApp() {
 
   return (
     <BeyondShell
-      selectedSlug={activeSlug}
       section={view.kind}
-      onSelectClient={handleSelectClient}
       onGoHome={handleGoHome}
       onOpenBoard={openBoard}
       onOpenCalls={openCalls}

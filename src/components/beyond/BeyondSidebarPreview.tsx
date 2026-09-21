@@ -1,13 +1,11 @@
 import { useMemo, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
 import {
   Search, Plus, Check, MessagesSquare, Trash2, Plug,
   PanelLeftClose, Settings, Sun, Moon,
   Gauge, Users, CalendarDays, MessageSquare, Bot, FolderTree,
 } from 'lucide-react';
-import { initialsFor } from './BeyondGlyph';
 import BeyondBrainMark from './BeyondBrainMark';
-import { useBeyondClients, type BeyondClient } from './useBeyondClients';
+import { useBeyondClients } from './useBeyondClients';
 import BeyondRepoStatus from './BeyondRepoStatus';
 import { useBeyondSessions, type BeyondSession } from './useBeyondSessions';
 import { persistSessionIndex, UNIVERSAL_SLUG } from './beyondSessionsApi';
@@ -17,28 +15,16 @@ import { useTheme } from '../../contexts/ThemeContext';
  * Beyond Brain — v3 Sidebar (Liquid Glass).
  *
  * Head (brand + collapse) · repo status · new chat · search · scrolling body
- * (the surfaces, a short list of recent chats, clients + their sessions) ·
+ * (the surfaces, a short list of recent chats) ·
  * pinned foot (Konektory, user, theme, settings). Everything reads the --bb-*
  * glass tokens. The chat history shows a handful like ChatGPT does and unfolds
  * on request; the file tree has its own screen (Soubory).
  */
 
-type Client = { slug: string; name: string; week: string; selected?: boolean };
-
-const FALLBACK_CLIENTS: Client[] = [
-  { slug: 'ivana-jurikova', name: 'Ivana Juříková', week: 'W18', selected: true },
-  { slug: 'jakub-bolek', name: 'Jakub Bolek', week: 'W04' },
-  { slug: 'jakub-privara', name: 'Jakub Přívara', week: 'W12' },
-  { slug: 'lukas-rusek', name: 'Lukáš Rusek', week: 'W09' },
-  { slug: 'patrik-kruntorad', name: 'Patrik Kruntorad', week: 'W22' },
-  { slug: 'pavel-sedlacek', name: 'Pavel Sedláček', week: 'W07' },
-];
 
 type Props = {
-  selectedSlug?: string | null;
   /** Which surface is open: velin | board | client | calls | chat. */
   section?: string;
-  onSelectClient?: (slug: string) => void;
   onOpenSettings?: () => void;
   onGoHome?: () => void;
   onOpenBoard?: () => void;
@@ -52,9 +38,7 @@ type Props = {
 };
 
 export default function BeyondSidebarPreview({
-  selectedSlug,
   section,
-  onSelectClient,
   onOpenSettings,
   onGoHome,
   onOpenBoard,
@@ -65,7 +49,7 @@ export default function BeyondSidebarPreview({
   onSwitchUniversalSession,
   onCollapse,
 }: Props) {
-  const { clients: apiClients, refresh: refreshClients } = useBeyondClients();
+  const { refresh: refreshClients } = useBeyondClients();
   const { isDarkMode, toggleDarkMode } = useTheme();
   const [query, setQuery] = useState('');
 
@@ -74,25 +58,7 @@ export default function BeyondSidebarPreview({
     refreshClients?.();
   };
 
-  const clients: Client[] = useMemo(() => {
-    const fromApi = (apiClients || []).map((c: BeyondClient) => ({
-      slug: c.slug,
-      name: c.name,
-      week: c.week || '',
-      selected: c.slug === selectedSlug,
-    }));
-    if (fromApi.length > 0) return fromApi;
-    return FALLBACK_CLIENTS.map((c) => ({
-      ...c,
-      selected: selectedSlug ? c.slug === selectedSlug : c.selected,
-    }));
-  }, [apiClients, selectedSlug]);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return clients;
-    return clients.filter((c) => c.name.toLowerCase().includes(q));
-  }, [clients, query]);
 
   const openSettings = () => {
     onOpenSettings?.();
@@ -223,28 +189,6 @@ export default function BeyondSidebarPreview({
 
         {onOpenUniversalChat && <UniversalSessions onSwitch={onSwitchUniversalSession} query={query} />}
 
-        <div className="bb-group__label">Klienti</div>
-        <ul className="flex flex-col gap-0.5">
-          {filtered.map((c) => (
-            <li key={c.slug}>
-              <button
-                type="button"
-                className="bb-row"
-                aria-current={c.selected ? 'true' : undefined}
-                onClick={() => onSelectClient?.(c.slug)}
-              >
-                <span className="bb-avatar">{initialsFor(c.name)}</span>
-                <span className="bb-row__label">{c.name}</span>
-                {c.week && <span className="bb-row__meta">{c.week}</span>}
-              </button>
-              {c.selected && <ClientSessions slug={c.slug} />}
-            </li>
-          ))}
-          {filtered.length === 0 && (
-            <li className="px-3 py-6 text-[13.5px]" style={{ color: 'var(--bb-ink3)' }}>Nic.</li>
-          )}
-        </ul>
-
       </nav>
 
       {/* Foot — pinned */}
@@ -287,53 +231,6 @@ export default function BeyondSidebarPreview({
         </div>
       </div>
     </div>
-  );
-}
-
-/** Inline list of chat sessions for the currently-selected client. */
-function ClientSessions({ slug }: { slug: string }) {
-  const { sessions, activeUuid } = useBeyondSessions(slug);
-
-  const handleNew = () =>
-    window.dispatchEvent(new CustomEvent('beyond:new-session', { detail: { slug } }));
-  const handleSwitch = (uuid: string) =>
-    window.dispatchEvent(new CustomEvent('beyond:switch-session', { detail: { slug, uuid } }));
-  const handleDelete = (s: BeyondSession) => {
-    if (!window.confirm(`Smazat chat „${s.title}" z indexu?\n(transkript na disku zůstane.)`)) return;
-    window.dispatchEvent(new CustomEvent('beyond:delete-session', { detail: { slug, uuid: s.uuid } }));
-  };
-
-  return (
-    <AnimatePresence initial={false}>
-      <motion.div
-        key="sessions"
-        initial={{ height: 0, opacity: 0 }}
-        animate={{ height: 'auto', opacity: 1 }}
-        exit={{ height: 0, opacity: 0 }}
-        transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-        className="overflow-hidden"
-      >
-        <div className="bb-subrail">
-          <button type="button" className="bb-subrow" onClick={handleNew}>
-            <Plus size={12} strokeWidth={2} className="flex-none" style={{ color: 'var(--bb-ink3)' }} />
-            <span className="bb-subrow__t">Nový chat</span>
-          </button>
-          {sessions.length === 0 ? (
-            <p className="px-2 py-1 text-[11.5px]" style={{ color: 'var(--bb-ink3)' }}>Žádné chaty.</p>
-          ) : (
-            sessions.map((s) => (
-              <SessionRow
-                key={s.uuid}
-                session={s}
-                active={s.uuid === activeUuid}
-                onClick={() => handleSwitch(s.uuid)}
-                onDelete={() => handleDelete(s)}
-              />
-            ))
-          )}
-        </div>
-      </motion.div>
-    </AnimatePresence>
   );
 }
 

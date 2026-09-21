@@ -31,10 +31,8 @@ function useIsDesktop() {
 }
 
 type Props = {
-  selectedSlug?: string | null;
   /** Which surface is open, so the sidebar can mark the current item. */
   section?: string;
-  onSelectClient?: (slug: string) => void;
   onGoHome?: () => void;
   onOpenBoard?: () => void;
   onOpenCalls?: () => void;
@@ -48,9 +46,7 @@ type Props = {
 };
 
 export default function BeyondShell({
-  selectedSlug,
   section,
-  onSelectClient,
   onGoHome,
   onOpenBoard,
   onOpenCalls,
@@ -85,10 +81,6 @@ export default function BeyondShell({
     if (!isDesktop) setOpen(false);
   };
 
-  const handleSelect = (slug: string) => {
-    onSelectClient?.(slug);
-    closeOnMobile();
-  };
   const handleGoHome = () => {
     onGoHome?.();
     closeOnMobile();
@@ -108,9 +100,7 @@ export default function BeyondShell({
       <aside className="bb-side" data-open={open ? 'true' : 'false'}>
         <div className="bb-side__inner">
           <BeyondSidebarPreview
-            selectedSlug={selectedSlug}
             section={section}
-            onSelectClient={handleSelect}
             onGoHome={onGoHome ? handleGoHome : undefined}
             onOpenBoard={onOpenBoard ? () => { onOpenBoard(); closeOnMobile(); } : undefined}
             onOpenCalls={onOpenCalls ? () => { onOpenCalls(); closeOnMobile(); } : undefined}
