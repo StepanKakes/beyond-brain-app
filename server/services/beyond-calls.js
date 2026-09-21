@@ -11,6 +11,8 @@
  * any calls booked, which is a far more dangerous kind of empty.
  */
 
+import { anyCalendar, calendarBookings } from './beyond-kalendar.js';
+
 const API_BASE = 'https://api.cal.com/v2';
 /** Cal.com dates the API surface; this is the version these shapes come from. */
 const API_VERSION = '2024-08-13';
@@ -23,8 +25,9 @@ function apiKey() {
   return k && k.trim() ? k.trim() : null;
 }
 
+/** Something to read calls from: Cal.com, a person's Google calendar, or both. */
 export function isConfigured() {
-  return Boolean(apiKey());
+  return Boolean(apiKey()) || anyCalendar();
 }
 
 async function callApi(pathname, params = {}) {
@@ -125,6 +128,7 @@ function shape(booking, clients, people, now) {
     attendees: (booking.attendees || []).map((a) => ({ name: a.name, email: a.email })),
     clientSlug: client?.slug ?? null,
     clientName: client?.name ?? null,
+    source: booking.source || 'calcom',
     /** Running right now, which is what makes the velín light up. */
     live: Number.isFinite(start) && Number.isFinite(end) && now >= start && now < end,
     startsInMin: Number.isFinite(start) ? Math.round((start - now) / 60_000) : null,
@@ -143,42 +147,65 @@ export async function getCalls({ clients = [], people = [], days = 14, force = f
   if (!isConfigured()) {
     return { configured: false, error: null, calls: [], live: [], fetchedAt: null };
   }
-  if (!force && cache.data && Date.now() - cache.at < CACHE_TTL_MS) {
-    return rehydrate(cache.data, clients, people);
-  }
-
   const now = Date.now();
   // Reach slightly into the past so a call that started 20 minutes ago still
   // counts as live rather than disappearing from the window.
-  const afterStart = new Date(now - 4 * 60 * 60 * 1000).toISOString();
-  const beforeEnd = new Date(now + days * 24 * 60 * 60 * 1000).toISOString();
+  const from = now - 4 * 60 * 60 * 1000;
+  const to = now + days * 24 * 60 * 60 * 1000;
+  const errors = [];
 
-  let raw;
-  try {
-    raw = await callApi('/bookings', {
-      status: 'upcoming',
-      afterStart,
-      beforeEnd,
-      sortStart: 'asc',
-      take: 100,
-    });
-  } catch (err) {
-    return {
-      configured: true,
-      error: err?.message || 'Cal.com nedostupný',
-      calls: [],
-      live: [],
-      fetchedAt: new Date().toISOString(),
-    };
+  let calcom = [];
+  if (apiKey()) {
+    if (!force && cache.data && Date.now() - cache.at < CACHE_TTL_MS) calcom = cache.data;
+    else {
+      try {
+        const raw = await callApi('/bookings', {
+          status: 'upcoming',
+          afterStart: new Date(from).toISOString(),
+          beforeEnd: new Date(to).toISOString(),
+          sortStart: 'asc',
+          take: 100,
+        });
+        calcom = Array.isArray(raw) ? raw : [];
+        cache = { at: Date.now(), data: calcom };
+      } catch (err) {
+        errors.push(err?.message || 'Cal.com nedostupný');
+        calcom = cache.data || [];
+      }
+    }
   }
 
-  const bookings = Array.isArray(raw) ? raw : [];
-  cache = { at: Date.now(), data: bookings };
-  return rehydrate(bookings, clients, people);
+  // Each person's own calendar; the module caches the feed itself.
+  const google = [];
+  const ownEmails = people.map((p) => p.calcomEmail).filter(Boolean);
+  for (const person of people) {
+    const r = await calendarBookings(person, { from, to, force, ownEmails });
+    if (r.error) errors.push(`${person.displayName}: ${r.error}`);
+    google.push(...r.events);
+  }
+
+  // The same call booked through Cal.com and sitting in the calendar shows
+  // once: Cal.com wins, a calendar event within ten minutes of it is dropped.
+  const bookings = [...calcom];
+  for (const g of google) {
+    const gs = Date.parse(g.start);
+    const twin = calcom.some((b) => Math.abs(Date.parse(b.start) - gs) < 10 * 60 * 1000 && sameParty(b, g));
+    if (!twin) bookings.push(g);
+  }
+  return rehydrate(bookings, clients, people, errors.length ? errors.join('; ') : null);
+}
+
+/** Do two bookings involve the same other person, by e-mail or by name? */
+function sameParty(a, b) {
+  const ea = new Set((a.attendees || []).map((x) => normalise(x.email)).filter(Boolean));
+  const eb = (b.attendees || []).map((x) => normalise(x.email)).filter(Boolean);
+  if (eb.some((e) => ea.has(e))) return true;
+  const na = (a.attendees || []).map((x) => normalise(x.name)).filter(Boolean).join(' ');
+  return (b.attendees || []).some((x) => x.name && na.includes(normalise(x.name)));
 }
 
 /** Re-derive the live flag and matches without refetching. */
-function rehydrate(bookings, clients, people) {
+function rehydrate(bookings, clients, people, error = null) {
   const now = Date.now();
   const calls = bookings
     .map((b) => shape(b, clients, people, now))
@@ -186,10 +213,10 @@ function rehydrate(bookings, clients, people) {
     .sort((a, b) => a.startIso.localeCompare(b.startIso));
   return {
     configured: true,
-    error: null,
+    error,
     calls,
     live: calls.filter((c) => c.live),
-    fetchedAt: new Date(cache.at || Date.now()).toISOString(),
+    fetchedAt: new Date().toISOString(),
   };
 }
 

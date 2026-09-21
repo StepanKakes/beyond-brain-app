@@ -538,3 +538,16 @@ Runner se zakládá jednorázově přes `scripts/setup-actions-runner.ps1`
 
 AGPL-3.0-or-later, dědí z claudecodeui upstreamu. Beyond Brain doplňky jsou pod
 stejnou licencí.
+
+
+## Google kalendář lidí
+
+Hovory nejsou jen z Cal.com; Tim je má často rovnou v Google Kalendáři. Každý
+z nás si na Velíně (Hovory dnes → Napojit kalendář) vloží tajnou adresu
+svého kalendáře ve formátu iCal; uloží se jako `BEYOND_ICS_<KEY>` v nastavení
+appky. `server/services/beyond-kalendar.js` feed každých pět minut stáhne,
+rozbalí jednoduchá opakování (denně, týdně s dny, interval, until, count,
+EXDATE) a jako hovor bere schůzku s dalším účastníkem nebo s odkazem na
+meet, zoom a podobně. `beyond-calls.js` je sloučí s Cal.com; stejný hovor
+z obou zdrojů se ukáže jednou, Cal.com má přednost. Žádný Google projekt ani
+OAuth, adresa nevyprší; když ji člověk v Googlu resetuje, vloží novou.

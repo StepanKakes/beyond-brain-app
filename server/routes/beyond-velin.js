@@ -10,7 +10,8 @@ import express from 'express';
 
 import { getBrainIndex, invalidateBrainIndex, daysSince } from '../services/brain-index.js';
 import { inbox, signalsForClient } from '../services/brain-signals.js';
-import { getCalls, isConfigured as callsConfigured } from '../services/beyond-calls.js';
+import { getCalls, isConfigured as callsConfigured, invalidateCallsCache } from '../services/beyond-calls.js';
+import { calendarStatus, invalidateCalendars } from '../services/beyond-kalendar.js';
 import { getPeople, personForUser } from '../services/beyond-people.js';
 import { listRuns, setJobEnabled } from '../services/beyond-runs.js';
 import { describeJobs, runJob, schedulerStatus, setPaused } from '../services/beyond-scheduler.js';
@@ -119,6 +120,7 @@ router.get('/', async (req, res) => {
         today: todaysCalls,
         live: calls.live,
         next: calls.calls.find((c) => !c.live) || null,
+        calendars: calendarStatus(),
       },
       proposals: { waiting: countPending(), canSend: wahaConfigured() },
       totals: {
@@ -650,6 +652,8 @@ router.put('/nastaveni', async (req, res) => {
     const changed = saveSettings(req.body?.values || {}, { by: req.user?.username || 'velin' });
     invalidateWahaConfig();
     invalidatePeopleCache();
+    invalidateCalendars();
+    invalidateCallsCache();
     if (changed.includes('BEYOND_TG_POLLING') && process.env.BEYOND_TG_POLLING === '1') {
       startTelegramBot().catch((err) => console.error('[tg-bot] start po uložení selhal', err?.message || err));
     }
@@ -662,7 +666,7 @@ router.put('/nastaveni', async (req, res) => {
 
 /** Whether the calendar is wired up at all, for the settings surface. */
 router.get('/status', (_req, res) => {
-  res.json({ calcom: callsConfigured() });
+  res.json({ calcom: callsConfigured(), calendars: calendarStatus() });
 });
 
 export default router;

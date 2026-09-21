@@ -113,7 +113,10 @@ function resolveDay(word, now = new Date()) {
  */
 export function parseQuick(text, { me = 'tim', clients = [], now = new Date() } = {}) {
   const people = getPeople();
-  const out = { priority: 4, due: null, client: null, owner: me, words: [] };
+  // `tokens` says which words were read as what, by their index among the
+  // whitespace-separated words, so the input can colour them as they are typed.
+  const out = { priority: 4, due: null, client: null, owner: me, words: [], tokens: [] };
+  let wi = -1;
   // Czech first names decline: Pavel → Pavlovi, Marek → Markovi, Honza →
   // Honzovi. Match on the name, the name without its last vowel, and the name
   // with the vowel before the last consonant dropped.
@@ -124,11 +127,12 @@ export function parseQuick(text, { me = 'tim', clients = [], now = new Date() } 
   });
   for (const w of String(text || '').trim().split(/\s+/)) {
     if (!w) continue;
+    wi += 1;
     const f = fold(w).replace(/[.,!?]+$/, '');
     const pm = /^(?:p|!)([1-4])$/.exec(f);
-    if (pm) { out.priority = Number(pm[1]); continue; }
+    if (pm) { out.priority = Number(pm[1]); out.tokens.push({ i: wi, word: w, kind: 'priority' }); continue; }
     const day = resolveDay(f, now);
-    if (day) { out.due = day; continue; }
+    if (day) { out.due = day; out.tokens.push({ i: wi, word: w, kind: 'due' }); continue; }
     const dm = /^(\d{1,2})\.(\d{1,2})\.?$/.exec(f);
     if (dm) {
       const d = toWall(now);
@@ -136,18 +140,19 @@ export function parseQuick(text, { me = 'tim', clients = [], now = new Date() } 
       d.setUTCMonth(Number(dm[2]) - 1, Number(dm[1]));
       if (d.getTime() < toWall(now).getTime() - 12 * 3600_000) d.setUTCFullYear(d.getUTCFullYear() + 1);
       out.due = isoDay(d);
+      out.tokens.push({ i: wi, word: w, kind: 'due' });
       continue;
     }
     if (f.startsWith('@')) {
       const a = f.slice(1);
       const person = people.find((p) => p.key === a || p.aliases.some((al) => fold(al) === a));
-      if (person) { out.owner = person.key; continue; }
+      if (person) { out.owner = person.key; out.tokens.push({ i: wi, word: w, kind: 'owner' }); continue; }
       const c = cl.find((x) => x.f === a || x.slug === a || x.stems.some((st) => a.startsWith(st)));
-      if (c) { out.client = c.slug; continue; }
+      if (c) { out.client = c.slug; out.tokens.push({ i: wi, word: w, kind: 'client' }); continue; }
     }
     if (!out.client && f.length >= 3) {
       const hit = cl.find((x) => x.stems.some((st) => f.startsWith(st)));
-      if (hit) out.client = hit.slug;
+      if (hit) { out.client = hit.slug; out.tokens.push({ i: wi, word: w, kind: 'client' }); }
     }
     out.words.push(w);
   }

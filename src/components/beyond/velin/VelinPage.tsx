@@ -13,6 +13,8 @@ import {
   prepAct,
   type BoardClient,
   type QuickParse,
+  type QuickToken,
+  saveSettings,
   type Task,
   type Ukoly,
   type Velin,
@@ -251,11 +253,52 @@ function TaskRow({ task, people, me, onState, onRemove, onReload, onOpenFile }: 
   );
 }
 
+const DAY_WORDS = new Set(['dnes', 'zitra', 'pozitri', 'pondeli', 'po', 'utery', 'ut', 'streda', 'st', 'ctvrtek', 'ct', 'patek', 'pa', 'sobota', 'so', 'nedele', 'ne']);
+const fold = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+/**
+ * What the browser can tell on its own, before the server answers: priority,
+ * day words, a date, an @person. Clients need the server (Czech declension
+ * against the client list), so their colour arrives a beat later.
+ */
+function localTokens(value: string, people: Ukoly['people']): QuickToken[] {
+  const out: QuickToken[] = [];
+  let i = -1;
+  for (const m of value.matchAll(/\S+/g)) {
+    i += 1;
+    const w = m[0];
+    const f = fold(w).replace(/[.,!?]+$/, '');
+    if (/^(?:p|!)[1-4]$/.test(f)) out.push({ i, word: w, kind: 'priority' });
+    else if (DAY_WORDS.has(f) || /^\d{1,2}\.\d{1,2}\.?$/.test(f)) out.push({ i, word: w, kind: 'due' });
+    else if (f.startsWith('@') && people.some((p) => p.key === f.slice(1) || fold(p.displayName) === f.slice(1))) out.push({ i, word: w, kind: 'owner' });
+  }
+  return out;
+}
+
+const DUE_LABEL: Record<string, string> = { dnes: 'Dnes', zitra: 'Zítra', pozitri: 'Pozítří' };
+
+function dueLabel(iso: string | null, word: string | null): string {
+  if (word) {
+    const f = fold(word).replace(/[.,!?]+$/, '');
+    if (DUE_LABEL[f]) return DUE_LABEL[f];
+  }
+  if (!iso) return '';
+  const d = new Date(`${iso}T12:00:00`);
+  return d.toLocaleDateString('cs-CZ', { weekday: 'short', day: 'numeric', month: 'numeric' });
+}
+
+/**
+ * The quick add, Todoist style: what the words mean lights up as they are
+ * typed, the chips below say the same in plain terms, an × on a chip takes
+ * the word out, Enter adds.
+ */
 function QuickAdd({ me, owner, people, onAdded }: { me: string; owner: string; people: Ukoly['people']; onAdded: () => void }) {
   const [value, setValue] = useState('');
   const [parsed, setParsed] = useState<QuickParse | null>(null);
   const [busy, setBusy] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const mirrorRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
@@ -265,11 +308,34 @@ function QuickAdd({ me, owner, people, onAdded }: { me: string; owner: string; p
     }
     timer.current = setTimeout(() => {
       parseQuick(value, owner).then(setParsed).catch(() => setParsed(null));
-    }, 180);
+    }, 90);
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
   }, [value, owner]);
+
+  // Colours: the server's reading when it matches the current text, the
+  // browser's own reading meanwhile.
+  const tokens = useMemo(() => {
+    const local = localTokens(value, people);
+    if (!parsed) return local;
+    const words = value.match(/\S+/g) || [];
+    const serverFits = parsed.tokens.every((t) => words[t.i] === t.word);
+    if (!serverFits) return local;
+    const byIndex = new Map(parsed.tokens.map((t) => [t.i, t]));
+    for (const t of local) if (!byIndex.has(t.i)) byIndex.set(t.i, t);
+    return [...byIndex.values()].sort((a, b) => a.i - b.i);
+  }, [value, parsed, people]);
+
+  const tokenOf = (kind: QuickToken['kind']) => tokens.find((t) => t.kind === kind) || null;
+
+  /** Take a word out of the text, by its index among the words. */
+  const removeWord = (index: number) => {
+    let i = -1;
+    const next = value.replace(/\S+\s*/g, (m) => { i += 1; return i === index ? '' : m; }).replace(/\s{2,}/g, ' ').trimStart();
+    setValue(next);
+    inputRef.current?.focus();
+  };
 
   const submit = async () => {
     if (!value.trim() || busy) return;
@@ -279,40 +345,99 @@ function QuickAdd({ me, owner, people, onAdded }: { me: string; owner: string; p
       setValue('');
       setParsed(null);
       onAdded();
+      inputRef.current?.focus();
     } finally {
       setBusy(false);
     }
   };
 
+  // The coloured mirror sits under the input and must scroll with it.
+  const syncScroll = () => {
+    if (mirrorRef.current && inputRef.current) mirrorRef.current.scrollLeft = inputRef.current.scrollLeft;
+  };
+
   const ownerName = (key: string) => people.find((p) => p.key === key)?.displayName || key;
+  const priorityTok = tokenOf('priority');
+  const dueTok = tokenOf('due');
+  const ownerTok = tokenOf('owner');
+  const clientTok = tokenOf('client');
+  const priority = priorityTok ? Number(priorityTok.word.replace(/\D/g, '')) : parsed?.priority || 4;
+  const hasText = value.trim().length > 0;
+
+  // The text with each recognised word wrapped, whitespace kept as typed.
+  const pieces: { text: string; kind: QuickToken['kind'] | null }[] = [];
+  {
+    const byIndex = new Map(tokens.map((t) => [t.i, t.kind]));
+    let i = -1;
+    let last = 0;
+    for (const m of value.matchAll(/\S+/g)) {
+      i += 1;
+      const at = m.index ?? 0;
+      if (at > last) pieces.push({ text: value.slice(last, at), kind: null });
+      pieces.push({ text: m[0], kind: byIndex.get(i) ?? null });
+      last = at + m[0].length;
+    }
+    if (last < value.length) pieces.push({ text: value.slice(last), kind: null });
+  }
+
   return (
-    <div className="bb-uk__add">
-      <label className="bb-uk__field" htmlFor="bb-quick">
-        <span className="bb-uk__plus" aria-hidden="true">+</span>
+    <div className="bb-qa" data-active={hasText ? 'true' : undefined}>
+      <div className="bb-qa__line">
+        <div ref={mirrorRef} className="bb-qa__mirror" aria-hidden="true">
+          {pieces.map((pc, idx) => pc.kind ? (
+            <mark key={idx} className="bb-qa__tok" data-kind={pc.kind} data-p={pc.kind === 'priority' ? pc.text.replace(/\D/g, '') : undefined}>{pc.text}</mark>
+          ) : (
+            <span key={idx}>{pc.text}</span>
+          ))}
+        </div>
         <input
+          ref={inputRef}
           id="bb-quick"
+          className="bb-qa__input"
           type="text"
           value={value}
-          placeholder="Přidej úkol, třeba: p1 dnes zavolat Pavlovi"
+          placeholder="Přidej úkol, třeba: dnes vlog p1"
           autoComplete="off"
+          spellCheck={false}
           onChange={(e) => setValue(e.target.value)}
+          onScroll={syncScroll}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') void submit();
+            if (e.key === 'Enter') { e.preventDefault(); void submit(); }
+            if (e.key === 'Escape') setValue('');
           }}
         />
-      </label>
-      <div className="bb-uk__parsed">
-        {parsed ? (
-          <>
-            <span className={`bb-uk__tag bb-uk__tag--p${parsed.priority}`}>P{parsed.priority}</span>
-            {parsed.due && <span className="bb-uk__tag">{parsed.due}</span>}
-            {parsed.clientName && <span className="bb-uk__tag">{parsed.clientName}</span>}
-            <span className="bb-uk__tag">{ownerName(parsed.owner)}</span>
-            <span>{parsed.text || '…'}</span>
-          </>
-        ) : (
+      </div>
+      <div className="bb-qa__chips">
+        <button type="button" className="bb-qa__go" onClick={() => void submit()} disabled={!hasText || busy} aria-label="Přidat úkol" title="Přidat (Enter)">+</button>
+        <span className="bb-qa__chip" data-kind="client" title={parsed?.clientName ? 'Klient' : 'Bez klienta'}>
+          <span className="bb-qa__ico" aria-hidden="true">{parsed?.clientName ? '◎' : '▢'}</span>
+          {parsed?.clientName || 'Schránka'}
+          {clientTok && <button type="button" className="bb-qa__x" onClick={() => removeWord(clientTok.i)} aria-label="Odebrat klienta">×</button>}
+        </span>
+        {dueTok && (
+          <span className="bb-qa__chip" data-kind="due">
+            <span className="bb-qa__ico" aria-hidden="true">▣</span>
+            {dueLabel(parsed?.due ?? null, dueTok.word)}
+            <button type="button" className="bb-qa__x" onClick={() => removeWord(dueTok.i)} aria-label="Odebrat termín">×</button>
+          </span>
+        )}
+        {priorityTok && (
+          <span className="bb-qa__chip" data-kind="priority" data-p={priority}>
+            <span className="bb-qa__ico" aria-hidden="true">⚑</span>
+            P{priority}
+            <button type="button" className="bb-qa__x" onClick={() => removeWord(priorityTok.i)} aria-label="Odebrat prioritu">×</button>
+          </span>
+        )}
+        {ownerTok && (
+          <span className="bb-qa__chip" data-kind="owner">
+            <span className="bb-qa__ico" aria-hidden="true">@</span>
+            {ownerName(parsed?.owner || ownerTok.word.slice(1))}
+            <button type="button" className="bb-qa__x" onClick={() => removeWord(ownerTok.i)} aria-label="Odebrat osobu">×</button>
+          </span>
+        )}
+        {!hasText && (
           <span className="bb-uk__hint">
-            Levým hotovo, pravým pracuje se. Rozumí <code>p1</code> až <code>p4</code>, <code>dnes</code>, <code>zítra</code>, <code>pátek</code>, jménům klientů a <code>@{ownerName(people.find((p) => p.key !== owner)?.key || me).toLowerCase()}</code>
+            Rozumí <code>p1</code> až <code>p4</code>, <code>dnes</code>, <code>zítra</code>, <code>pátek</code>, <code>24.9.</code>, jménům klientů a <code>@{ownerName(people.find((p) => p.key !== owner)?.key || me).toLowerCase()}</code>
           </span>
         )}
       </div>
@@ -329,6 +454,8 @@ export default function VelinPage({ onOpenClient, onOpenCalls, onOpenChat }: Pro
   const board = usePolled<{ builtAt: string; clients: BoardClient[] }>(loadBoard, 180_000);
   // Whose list: a person's key, everyone, or only what the brain prepared.
   const [view, setView] = useState<string>('me');
+  // Whose Google calendar is being wired, when the dialog is open.
+  const [calFor, setCalFor] = useState<string | null>(null);
   const [showDone, setShowDone] = useState(false);
   const [local, setLocal] = useState<Task[] | null>(null);
 
@@ -466,6 +593,23 @@ export default function VelinPage({ onOpenClient, onOpenCalls, onOpenChat }: Pro
               {calls?.configured && !calls.error && (
                 <button type="button" className="bb-uk__more" onClick={onOpenCalls}>všechny hovory</button>
               )}
+              {calls && (
+                <div className="bb-cal">
+                  {people.map((p) => (
+                    <div key={p.key} className="bb-cal__row">
+                      <span className="bb-cal__who">{p.displayName}</span>
+                      {calls.calendars?.[p.key] ? (
+                        <>
+                          <span className="bb-cal__ok">Google kalendář</span>
+                          <button type="button" className="bb-cal__btn" onClick={() => setCalFor(p.key)}>změnit</button>
+                        </>
+                      ) : (
+                        <button type="button" className="bb-pill bb-pill--sm" onClick={() => setCalFor(p.key)}>Napojit kalendář</button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <div>
               <p className="bb-uk__h">Pozor</p>
@@ -510,6 +654,66 @@ export default function VelinPage({ onOpenClient, onOpenCalls, onOpenChat }: Pro
             );
           })}
         </section>
+      </div>
+      {calFor && (
+        <CalendarDialog
+          person={people.find((p) => p.key === calFor) || { key: calFor, displayName: calFor }}
+          onClose={() => setCalFor(null)}
+          onSaved={() => { setCalFor(null); void velin.reload(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Wire a person's Google calendar: one secret iCal address, pasted once.
+ * No Google project, no consent screen, nothing that expires.
+ */
+function CalendarDialog({ person, onClose, onSaved }: { person: { key: string; displayName: string }; onClose: () => void; onSaved: () => void }) {
+  const [url, setUrl] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const key = `BEYOND_ICS_${person.key.toUpperCase().replace(/[^A-Z0-9]/g, '_')}`;
+  const save = async (value: string) => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await saveSettings({ [key]: value });
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Uložení selhalo.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const valid = /^https?:\/\/\S+\.ics(\?\S*)?$/i.test(url.trim()) || /^https:\/\/calendar\.google\.com\/calendar\/ical\//i.test(url.trim());
+  return (
+    <div className="bb-dialog__scrim" onClick={onClose} role="presentation">
+      <div className="bb-dialog" role="dialog" aria-modal="true" aria-labelledby="bb-cal-title" onClick={(e) => e.stopPropagation()}>
+        <div className="bb-dialog__head" id="bb-cal-title">Kalendář: {person.displayName}</div>
+        <div className="bb-dialog__body">
+          <ol className="bb-cal__steps">
+            <li>Otevři <a href="https://calendar.google.com/calendar/r/settings" target="_blank" rel="noreferrer">nastavení Google Kalendáře</a> a vlevo vyber kalendář, ve kterém máš hovory.</li>
+            <li>Sjeď na „Integrace kalendáře" a zkopíruj <strong>Tajná adresa ve formátu iCal</strong>.</li>
+            <li>Vlož ji sem. Hovory se ukážou do pár minut vedle těch z Cal.com; jako hovor bereme schůzku s dalším účastníkem nebo s odkazem na meet.</li>
+          </ol>
+          <input
+            id="bb-cal-url"
+            className="bb-set__in"
+            type="url"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://calendar.google.com/calendar/ical/…/private-…/basic.ics"
+            autoFocus
+          />
+          {err && <p className="bb-fx__err">{err}</p>}
+          <div className="bb-set__acts">
+            <button type="button" className="bb-pill bb-pill--primary" disabled={busy || !valid} onClick={() => void save(url.trim())}>Napojit</button>
+            <button type="button" className="bb-pill" onClick={onClose}>Zrušit</button>
+            <button type="button" className="bb-uk__more" style={{ marginLeft: 'auto' }} disabled={busy} onClick={() => void save('')}>odpojit</button>
+          </div>
+        </div>
       </div>
     </div>
   );

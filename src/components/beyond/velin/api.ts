@@ -70,6 +70,8 @@ export type Velin = {
     today: Call[];
     live: Call[];
     next: Call | null;
+    /** Which of us has a Google calendar wired, by person key. */
+    calendars: Record<string, boolean>;
   };
   totals: { clients: number; finished: number; critical: number; needsUs: number };
 };
@@ -197,7 +199,8 @@ export type Ukoly = {
   tasks: Task[];
 };
 
-export type QuickParse = { priority: number; due: string | null; client: string | null; clientName: string | null; owner: string; text: string };
+export type QuickToken = { i: number; word: string; kind: 'priority' | 'due' | 'owner' | 'client' };
+export type QuickParse = { priority: number; due: string | null; client: string | null; clientName: string | null; owner: string; text: string; tokens: QuickToken[] };
 
 async function get<T>(pathname: string): Promise<T> {
   const res = await authenticatedFetch(`/api/beyond/velin${pathname}`);
@@ -239,6 +242,7 @@ export const patchTask = (id: string, patch: Partial<Pick<Task, 'state' | 'prior
 export const deleteTask = (id: string) => send<{ ok: boolean }>(`/ukoly/${encodeURIComponent(id)}`, 'DELETE');
 export const prepAct = (path: string, body?: unknown) => send<{ ok: boolean; error?: string }>(path, 'POST', body);
 export const editProposal = (id: number, body: string) => send<{ ok: boolean }>(`/navrhy/${id}`, 'PATCH', { body });
+export const saveSettings = (values: Record<string, string>) => send<{ ok: boolean; changed: string[] }>('/nastaveni', 'PUT', { values });
 export const fetchMozekItem = async (id: number) => {
   const r = await get<{ items: { id: number; before: string | null; after: string }[] }>('/agent/mozek');
   return r.items.find((m) => m.id === id) || null;
