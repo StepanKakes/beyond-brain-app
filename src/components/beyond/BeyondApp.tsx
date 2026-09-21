@@ -250,6 +250,17 @@ export default function BeyondApp() {
             ? `universal:${routeUuid}`
             : `universal:fresh:${location.key}`;
 
+  // The chat stays mounted while another screen is open, so a reply that
+  // is still arriving keeps arriving and the spinner, the streamed words
+  // and the composer draft are all there on return. It only remounts when
+  // the person opens a different chat.
+  const chatKey = view.kind === 'chat' && activeClient ? viewKey : null;
+  const [mountedChat, setMountedChat] = useState<{ key: string; client: NonNullable<typeof activeClient>; sessionOverride: typeof sessionOverride; initialPrompt: string | undefined } | null>(null);
+  useEffect(() => {
+    if (chatKey && activeClient) setMountedChat({ key: chatKey, client: activeClient, sessionOverride, initialPrompt });
+  }, [chatKey, activeClient, sessionOverride, initialPrompt]);
+  const chatVisible = view.kind === 'chat' && Boolean(activeClient);
+
   const openClient = useCallback((slug: string) => navigate(`/klient/${encodeURIComponent(slug)}`), [navigate]);
   const openBoard = useCallback(() => navigate('/klienti'), [navigate]);
   const openCalls = useCallback(() => navigate('/hovory'), [navigate]);
@@ -274,7 +285,18 @@ export default function BeyondApp() {
       onOpenUniversalChat={handleOpenUniversalChat}
       onSwitchUniversalSession={handleSwitchUniversalSession}
     >
+      {mountedChat && (
+        <div className="h-full w-full" hidden={!chatVisible}>
+          <BeyondChat
+            key={mountedChat.key}
+            client={mountedChat.client}
+            initialPrompt={mountedChat.initialPrompt}
+            sessionOverride={mountedChat.sessionOverride}
+          />
+        </div>
+      )}
       <AnimatePresence mode="wait">
+        {!chatVisible && (
         <motion.div
           key={viewKey}
           initial={{ opacity: 0, filter: 'blur(6px)' }}
@@ -299,12 +321,6 @@ export default function BeyondApp() {
             <ObsahPage onOpenStudio={openStudio} onOpenClient={openClient} />
           ) : view.kind === 'studio' ? (
             <StudioPage />
-          ) : activeClient ? (
-            <BeyondChat
-              client={activeClient}
-              initialPrompt={initialPrompt}
-              sessionOverride={sessionOverride}
-            />
           ) : (
             <BeyondWelcome
               onSubmit={(message) => handleWelcomePrompt(message)}
@@ -312,6 +328,7 @@ export default function BeyondApp() {
             />
           )}
         </motion.div>
+        )}
       </AnimatePresence>
 
       <AnimatePresence>

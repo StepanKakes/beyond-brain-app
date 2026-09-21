@@ -286,7 +286,16 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
         .catch(() => {
           /* silent */
         })
-        .finally(() => setLoadingHistory(false));
+        .finally(() => {
+          setLoadingHistory(false);
+          // A turn may still be running server side (the chat was opened
+          // from another screen, or the page was reloaded mid-reply). Ask,
+          // and re-attach: the spinner comes back and the rest streams in.
+          if (isConnectedRef.current) {
+            recoveredRef.current = true;
+            sendMessage({ type: 'check-session-status', sessionId: uuid, provider: 'claude' });
+          }
+        });
 
       // Backfill context budget from JSONL so the chip shows the resumed size
       // immediately, before the next turn's token_budget WS event arrives. Use
@@ -601,6 +610,10 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
         const data = await res.json();
         if (cancelled) return;
         setMessages(rebuildHistory(data.messages || []));
+        if (isConnectedRef.current) {
+          recoveredRef.current = true;
+          sendMessage({ type: 'check-session-status', sessionId: resumeUuid, provider: 'claude' });
+        }
 
         // Same backfill as in loadSession: fetch the last JSONL usage so the
         // chip shows real numbers immediately on resume.
