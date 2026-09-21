@@ -1387,6 +1387,11 @@ const learningReview = {
     const corrections = edited.map((p) =>
       [`### ${p.clientName || p.clientSlug || '?'} · ${p.kind} · ${p.title}`, 'NAVRHL AGENT:', p.originalBody, '', 'ODESLAL TIM:', p.body].join('\n'),
     );
+    // Content Tim threw away, with his reason when he gave one.
+    const discarded = listObsah().filter((i) => i.state === 'zahozeno' && i.updatedAt >= since).map((i) =>
+      `- ${i.kind} „${i.title || i.hook}"${i.zdroj ? ` (${i.zdroj})` : ''}: ${i.note ? i.note.replace(/^zahozeno:\s*/, '') : 'bez důvodu'}`,
+    );
+    const approved = listObsah().filter((i) => i.state !== 'navrh' && i.state !== 'zahozeno' && i.updatedAt >= since).map((i) => `- ${i.kind} „${i.title || i.hook}"`);
     const runNotes = runs.map((r) =>
       `- ${r.job} (${r.status}${r.error ? `: ${r.error.slice(0, 200)}` : ''}): ${String(r.summary || '').replace(/\s+/g, ' ').slice(0, 300)}`,
     );
@@ -1401,6 +1406,11 @@ const learningReview = {
         '## Dnešní běhy agenta',
         ...(runNotes.length ? runNotes : ['- žádné']),
         '',
+        '## Obsah, který Tim zahodil (a proč)',
+        ...(discarded.length ? discarded : ['- nic']),
+        '## Obsah, který Tim schválil',
+        ...(approved.length ? approved : ['- nic']),
+        '',
         'Úkol:',
         '1. Z oprav odvoď, CO Tim mění (tón, délka, oslovení, konkrétnost, co vynechává).',
         '   Jednotlivá oprava nic neznamená. Vzorec, který vidíš dvakrát nebo víc, ano.',
@@ -1410,6 +1420,7 @@ const learningReview = {
         '3. Kde jde o trvalé pravidlo práce nebo fakt o lidech, zapiš ho nástrojem `pamet`',
         '   (target agent nebo tim). Krátce.',
         '4. Kde běh selhal na tom samém jako dřív (viz paměť), navrhni opravu skillu.',
+        '   Zahozený obsah s důvodem je oprava skillu obsah-momenty nebo obsah-stories, když se důvod opakuje.',
         '5. Když nic nevidíš, nenavrhuj nic. Prázdno je správná odpověď.',
         '',
         'Nic jiného v brainu neměň. Na konci napiš tři věty: co ses naučil, co jsi navrhl, co nechal být.',

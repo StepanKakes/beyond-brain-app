@@ -52,6 +52,14 @@ export default function ObsahPage({ onOpenStudio, onOpenClient }: { onOpenStudio
     await patchObsah(item.id, { state: to, ...(to === 'zverejneno' ? { publishedAt: new Date().toISOString() } : {}) });
     void data.reload();
   };
+  // Not good: say why in a word or two, the brain reads the reasons in the
+  // evening and proposes better next time. Empty is allowed.
+  const discard = async (item: ObsahItem) => {
+    const why = window.prompt('Proč to není dobré? (nepovinné, brain se z toho učí)', '');
+    if (why === null) return;
+    await patchObsah(item.id, { state: 'zahozeno', ...(why.trim() ? { note: `zahozeno: ${why.trim()}` } : {}) });
+    void data.reload();
+  };
   const remove = async (item: ObsahItem) => {
     if (!window.confirm('Smazat z osy? Nejde vrátit.')) return;
     await deleteObsah(item.id);
@@ -94,6 +102,7 @@ export default function ObsahPage({ onOpenStudio, onOpenClient }: { onOpenStudio
                     onToggle={() => setOpen(open === item.id ? null : item.id)}
                     onMove={(to) => void move(item, to)}
                     onRemove={() => void remove(item)}
+                    onDiscard={() => void discard(item)}
                     onOpenClient={onOpenClient}
                     onRefresh={() => void data.reload()}
                   />
@@ -126,12 +135,13 @@ export default function ObsahPage({ onOpenStudio, onOpenClient }: { onOpenStudio
   );
 }
 
-function Card({ item, open, onToggle, onMove, onRemove, onOpenClient, onRefresh }: {
+function Card({ item, open, onToggle, onMove, onRemove, onDiscard, onOpenClient, onRefresh }: {
   item: ObsahItem;
   open: boolean;
   onToggle: () => void;
   onMove: (to: ObsahItem['state']) => void;
   onRemove: () => void;
+  onDiscard: () => void;
   onOpenClient: (slug: string) => void;
   onRefresh: () => void;
 }) {
@@ -191,7 +201,7 @@ function Card({ item, open, onToggle, onMove, onRemove, onOpenClient, onRefresh 
           <div className="bb-ob__acts">
             {next && <button type="button" className="bb-pill bb-pill--sm bb-pill--primary" onClick={() => onMove(next.to)}>{next.label}</button>}
             {link && <a className="bb-pill bb-pill--sm" href={link} target="_blank" rel="noreferrer">{isReel ? 'Přehrát' : 'Upravit'}</a>}
-            {item.state !== 'zahozeno' && <button type="button" className="bb-uk__x" onClick={() => onMove('zahozeno')}>zahodit</button>}
+            {item.state !== 'zahozeno' && <button type="button" className="bb-pill bb-pill--sm bb-pill--danger" onClick={onDiscard}>Zahodit</button>}
           </div>
         </div>
       </div>

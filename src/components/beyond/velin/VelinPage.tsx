@@ -121,7 +121,11 @@ function Prep({ task, onDone, onOpenFile }: { task: Task; onDone: () => void; on
     try {
       const id = Number(prep.ref);
       if (action === 'obsah-schvalit') await patchObsah(String(prep.ref), { state: 'schvaleno' });
-      else if (action === 'obsah-zahodit') await patchObsah(String(prep.ref), { state: 'zahozeno' });
+      else if (action === 'obsah-zahodit') {
+        const why = window.prompt('Proč to není dobré? (nepovinné, brain se z toho učí)', '');
+        if (why === null) { setBusy(null); return; }
+        await patchObsah(String(prep.ref), { state: 'zahozeno', ...(why.trim() ? { note: `zahozeno: ${why.trim()}` } : {}) });
+      }
       else if (action === 'navrh-odeslat') await prepAct(`/navrhy/${id}/odeslat`);
       else if (action === 'navrh-zahodit') await prepAct(`/navrhy/${id}/zahodit`);
       else if (action === 'navrh-upravit') {

@@ -1013,3 +1013,5 @@ details.bb-set__group .bb-set__row:focus-within .bb-set__h { display: block; }
 .bb-ob__cliprow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; color: var(--bb-ink2); font-variant-numeric: tabular-nums; }
 .bb-ob__player { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 .bb-ob__player video { max-width: 100%; width: 420px; border-radius: 10px; border: 1px solid var(--bb-line); background: #000; }
+.bb-pill--danger { color: var(--bb-danger); border-color: color-mix(in srgb, var(--bb-danger) 35%, transparent); }
+.bb-pill--danger:hover { background: var(--bb-danger-soft); border-color: var(--bb-danger); }
