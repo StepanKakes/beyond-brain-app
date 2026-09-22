@@ -246,6 +246,17 @@ app.use('/api/beyond', authenticateToken, beyondRoutes);
 app.use('/api/beyond-agent/usage', authenticateAgentToken, beyondUsageIngestRoutes);
 app.use('/api/beyond-agent', authenticateAgent, beyondAgentRoutes);
 
+// A connector's login that could only redirect to loopback (Meta accepts
+// only http://127.0.0.1:3001/callback) lands on whatever copy of the app runs
+// on that machine: production on Tim's box, a dev copy on a Mac. The page is
+// served straight from the server, without login and without depending on a
+// fresh client build, and hands the address back to the window that started
+// the login.
+app.get('/callback', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.sendFile(path.join(APP_ROOT, 'public', 'loopback-callback.html'));
+});
+
 // Serve public files (like api-docs.html)
 app.use(express.static(path.join(APP_ROOT, 'public')));
 
