@@ -1,0 +1,23 @@
+name: Users
+
+# Create or reset logins on the box from the repository secret BEYOND_USERS
+# ("name:password,name:password"). Run by hand from the Actions tab.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  users:
+    runs-on: [self-hosted, windows, beyond-brain]
+    timeout-minutes: 5
+    env:
+      USERS: ${{ secrets.BEYOND_USERS }}
+    steps:
+      - name: Set users
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $app = if ($env:BEYOND_APP_DIR) { $env:BEYOND_APP_DIR } else { 'C:\Users\Vlast\beyond\beyond-brain-app' }
+          Set-Location $app
+          if (-not $env:USERS) { throw 'secret BEYOND_USERS is empty' }
+          node scripts\set-users.cjs
