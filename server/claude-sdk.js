@@ -1098,7 +1098,7 @@ async function startNewBeyondStream(command, options, ws) {
   }
   await attachBeyondLayer(sdkOptions, {
     source: 'chat',
-    actor: ws?.username || ws?.userId || 'chat',
+    actor: ws?.username || (ws?.userId != null ? String(ws.userId) : 'chat'),
     label: options.sessionSummary || null,
   });
   entry.historyUser = ws?.username || null;

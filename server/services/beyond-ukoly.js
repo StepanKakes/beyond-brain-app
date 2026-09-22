@@ -183,7 +183,7 @@ export async function createTask({ text, priority = 4, client = null, owner, cre
     state: STATES.has(state) ? state : 'none',
     client: client || null,
     owner: owner || getPeople()[0]?.key || 'tim',
-    createdBy: createdBy || 'app',
+    createdBy: String(createdBy || 'app'),
     due: due || null,
     note: note ? String(note).slice(0, 200) : null,
     prep: prep || null,
