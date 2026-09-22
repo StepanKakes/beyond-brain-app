@@ -31,7 +31,7 @@ function timingSafeEqual(a, b) {
   return mismatch === 0;
 }
 
-export const authenticateAgent = (req, res, next) => {
+export const authenticateAgentToken = (req, res, next) => {
   const expected = process.env.BEYOND_AGENT_TOKEN;
   if (!expected) {
     return res.status(503).json({
@@ -45,18 +45,6 @@ export const authenticateAgent = (req, res, next) => {
     return res.status(401).json({ error: 'Invalid agent token' });
   }
 
-  const allowed = parseAllowedTgUsers();
-  if (allowed.length > 0) {
-    const meta = req.body && typeof req.body === 'object' ? req.body.meta : null;
-    const tgUserId = meta && meta.telegramUserId != null ? String(meta.telegramUserId) : null;
-    if (!tgUserId || !allowed.includes(tgUserId)) {
-      return res.status(403).json({
-        error: 'Telegram user not in allow-list',
-        detail: tgUserId ? `User ${tgUserId} is not allowed.` : 'meta.telegramUserId missing.',
-      });
-    }
-  }
-
   // Attach a minimal "agent identity" so downstream handlers can log it
   // without re-parsing the request.
   req.agent = {
@@ -68,4 +56,21 @@ export const authenticateAgent = (req, res, next) => {
   };
 
   next();
+};
+
+export const authenticateAgent = (req, res, next) => {
+  authenticateAgentToken(req, res, () => {
+    const allowed = parseAllowedTgUsers();
+    if (allowed.length > 0) {
+      const meta = req.body && typeof req.body === 'object' ? req.body.meta : null;
+      const tgUserId = meta && meta.telegramUserId != null ? String(meta.telegramUserId) : null;
+      if (!tgUserId || !allowed.includes(tgUserId)) {
+        return res.status(403).json({
+          error: 'Telegram user not in allow-list',
+          detail: tgUserId ? `User ${tgUserId} is not allowed.` : 'meta.telegramUserId missing.',
+        });
+      }
+    }
+    next();
+  });
 };

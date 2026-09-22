@@ -82,7 +82,8 @@ import { applyToEnv as applyBeyondSettings } from './services/beyond-settings.js
 import beyondMcpRoutes, { oauthCallbackRouter as beyondMcpOauthCallbackRouter } from './routes/beyond-mcp.js';
 // Beyond Brain — agent endpoints for Telegram bot / scheduled callers
 import beyondAgentRoutes from './routes/beyond-agent.js';
-import { authenticateAgent } from './middleware/agent-auth.js';
+import beyondUsageIngestRoutes from './routes/beyond-usage-ingest.js';
+import { authenticateAgent, authenticateAgentToken } from './middleware/agent-auth.js';
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
 import { initializeDatabase, projectsDb } from './modules/database/index.js';
 import { configureWebPush } from './services/vapid-keys.js';
@@ -242,6 +243,7 @@ app.use('/api/beyond', authenticateToken, beyondRoutes);
 // in order — the `/agent/*` sub-path won't match `/api/beyond` exact-prefix
 // rules, but we mount it explicitly under its own path to keep the JWT
 // middleware off this surface.
+app.use('/api/beyond-agent/usage', authenticateAgentToken, beyondUsageIngestRoutes);
 app.use('/api/beyond-agent', authenticateAgent, beyondAgentRoutes);
 
 // Serve public files (like api-docs.html)

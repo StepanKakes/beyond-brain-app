@@ -86,15 +86,23 @@ type SettingItem = {
 type UsageSum = { runs: number; input: number; output: number; cache_read: number; cache_write: number; cost_usd: number; errors: number };
 type Usage = {
   periods: { today: UsageSum; week: UsageSum; month: UsageSum };
-  bySource: (UsageSum & { source: string; label: string | null })[];
+  bySource: (UsageSum & { source: string; label: string | null; share: number | null })[];
   byModel: (UsageSum & { model: string | null })[];
   byDay: (UsageSum & { day: string })[];
   recent: { ts: string; source: string; label: string | null; actor: string | null; model: string | null; input: number; output: number; cache_read: number; cache_write: number; cost_usd: number; duration_ms: number | null; turns: number | null; is_error: number }[];
+  /** Usage of the account that is not the brain: your own Claude Code, reported in. */
+  external: {
+    periods: { today: UsageSum; week: UsageSum; month: UsageSum };
+    byMachine: (UsageSum & { machine: string | null })[];
+    byModel: (UsageSum & { model: string | null })[];
+  };
+  /** Calibrated percent-per-dollar of the weekly window, from the meter. */
+  week: { rate: number | null; samples: number; cleanSamples: number };
   limits:
     | { available: true; subscription: string | null; fetchedAt: string; windows: { kind: string; label: string; percent: number; severity: string; resetsAt: string | null }[]; extra: { used: number | null; limit: number | null; currency: string | null } | null }
     | { available: false; reason: string };
   /** The brain's own spend inside each window and its estimated share of the meter. */
-  brain?: { kind: string; brainCostUsd: number; brainRuns: number; share: number | null; calibrated: number }[];
+  brain?: { kind: string; brainCostUsd: number; brainRuns: number; youCostUsd: number; youRuns: number; share: number | null; youShare: number | null; otherShare: number | null; calibrated: number; cleanSamples: number; rate: number | null; bySource: (UsageSum & { source: string; label: string | null; share: number | null })[]; byModel: (UsageSum & { model: string | null; share: number | null })[] }[];
 };
 
 const fmtK = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
@@ -149,27 +157,63 @@ function UsageSection() {
               {d.limits.windows.map((w) => {
                 const b = d.brain?.find((x) => x.kind === w.kind);
                 const share = b?.share ?? null;
+                const youShare = b?.youShare ?? null;
+                const otherShare = b?.otherShare ?? null;
+                const seg = share != null ? Math.min(100, share) : 0;
+                const segYou = youShare != null ? Math.min(100 - seg, youShare) : 0;
                 return (
                   <div key={w.kind} className="bb-us__win" data-sev={w.severity}>
                     <div className="bb-us__wl">
                       <span>{w.label}</span>
                       <b>
                         {w.percent} %
-                        {b && (share != null ? <em> z toho brain ~{share} %</em> : <em> brain {fmtUsd(b.brainCostUsd)}, podíl měřím</em>)}
+                        {b && (share != null
+                          ? <em title={otherShare != null ? `Zbytek (${otherShare} %) je použití, které appka nevidí — Claude web/app, jiný stroj bez reportéru.` : undefined}> · brain ~{share} %{segYou > 0 ? ` · ty ~${youShare} %` : ''}{otherShare ? ` · ostatní ${otherShare} %` : ''}</em>
+                          : <em> brain {fmtUsd(b.brainCostUsd)}, podíl měřím</em>)}
                       </b>
                     </div>
                     <div className="bb-us__bar">
                       <i style={{ width: `${Math.min(100, w.percent)}%` }} />
-                      {share != null && <u style={{ width: `${Math.min(100, share)}%` }} title="Podíl brainu (úlohy, chat, Telegram)" />}
+                      {share != null && <u style={{ width: `${seg}%` }} title="Podíl brainu (úlohy, chat, Telegram)" />}
+                      {segYou > 0 && <span className="bb-us__you" style={{ left: `${seg}%`, width: `${segYou}%` }} title={`Tvoje Claude Code mimo brain ~${youShare} %`} />}
                     </div>
                     <div className="bb-us__wr">
                       {resetIn(w.resetsAt)}
-                      {b && b.brainRuns > 0 && <> · brain v tomhle okně {b.brainRuns} běhů za {fmtUsd(b.brainCostUsd)}{share == null && b.calibrated === 0 ? ', odhad podílu bude po pár hodinách měření' : ''}</>}
+                      {b && b.brainRuns > 0 && <> · brain {b.brainRuns} běhů za {fmtUsd(b.brainCostUsd)}{b.youRuns > 0 ? ` · ty ${b.youRuns} běhů za ${fmtUsd(b.youCostUsd)}` : ''}{share == null ? (b.calibrated === 0 ? ', odhad podílu bude po pár hodinách měření' : `, kalibruji (${b.cleanSamples} čistých vzorků)`) : ''}</>}
                     </div>
+                    {b && b.bySource?.length > 0 && (
+                      <details className="bb-us__bd">
+                        <summary>Rozpad brainu v tomhle okně</summary>
+                        <div className="bb-us__bdcols">
+                          <table className="bb-us__t">
+                            <tbody>
+                              {b.bySource.map((r, i) => (
+                                <tr key={i}>
+                                  <td>{sourceName(r)}</td>
+                                  <td className="bb-us__num">{r.runs}×</td>
+                                  <td className="bb-us__num" title="Podíl na tomhle limitu (nebo cena, dokud se nezkalibruje)"><b>{r.share != null ? `${r.share} %` : fmtUsd(r.cost_usd || 0)}</b></td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                          <table className="bb-us__t">
+                            <tbody>
+                              {b.byModel.map((r, i) => (
+                                <tr key={i}>
+                                  <td>{r.model || 'neznámý'}</td>
+                                  <td className="bb-us__num">{r.runs}×</td>
+                                  <td className="bb-us__num"><b>{r.share != null ? `${r.share} %` : fmtUsd(r.cost_usd || 0)}</b></td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </details>
+                    )}
                   </div>
                 );
               })}
-              <p className="bb-us__note">Účet Claude {d.limits.subscription ? `(${d.limits.subscription})` : ''} na stroji, stejné číslo jako /usage v Claude Code.{d.limits.extra ? ` Extra kredit: ${d.limits.extra.used ?? 0} z ${d.limits.extra.limit ?? '?'} ${d.limits.extra.currency || ''}.` : ''}</p>
+              <p className="bb-us__note">Účet Claude {d.limits.subscription ? `(${d.limits.subscription})` : ''} na stroji, stejné číslo jako /usage v Claude Code.{d.limits.extra ? ` Extra kredit: ${d.limits.extra.used ?? 0} z ${d.limits.extra.limit ?? '?'} ${d.limits.extra.currency || ''}.` : ''}{d.external && d.external.periods.week.cost_usd > 0 ? ` Tvoje Claude Code mimo brain (reportéři): ${fmtUsd(d.external.periods.week.cost_usd)} za 7 dní z ${d.external.byMachine.length} stroj${d.external.byMachine.length === 1 ? 'e' : 'ů'}.` : ' Bez reportéru na tvém stroji appka vidí jen brain; zbytek limitu je tvoje použití, které se nedá rozdělit.'}</p>
             </>
           ) : (
             <Empty>Limity účtu nejdou přečíst: {d.limits.reason}</Empty>
@@ -210,10 +254,11 @@ function UsageSection() {
                     <td className="bb-us__num" title="Nové tokeny dovnitř">{fmtK((r.input || 0) + (r.cache_write || 0))} in</td>
                     <td className="bb-us__num" title="Z cache, desetina ceny; každý krok agenta si znovu čte celý kontext">{fmtK(r.cache_read || 0)} cache</td>
                     <td className="bb-us__num">{fmtK(r.output || 0)} out</td>
-                    <td className="bb-us__num"><b>{fmtUsd(r.cost_usd || 0)}</b></td>
+                    <td className="bb-us__num" title="Cena, jakoby to jelo na API"><b>{fmtUsd(r.cost_usd || 0)}</b></td>
+                    <td className="bb-us__num" title="Podíl na týdenním limitu účtu">{r.share != null ? `${r.share} %` : '—'}</td>
                   </tr>
                 ))}
-                {d.bySource.length === 0 && <tr><td colSpan={6} className="bb-us__empty">Zatím nic zaznamenaného; sbírá se od teď.</td></tr>}
+                {d.bySource.length === 0 && <tr><td colSpan={7} className="bb-us__empty">Zatím nic zaznamenaného; sbírá se od teď.</td></tr>}
               </tbody>
             </table>
           </div>

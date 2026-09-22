@@ -202,11 +202,39 @@ async function fetchFeed(url) {
   const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
   try {
     const res = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'BeyondBrain/1.0' } });
-    if (!res.ok) throw new Error(`kalendář ${res.status}`);
-    return await res.text();
+    if (!res.ok) throw new Error(explainStatus(res.status));
+    const text = await res.text();
+    if (!/BEGIN:VCALENDAR/i.test(text)) throw new Error('adresa nevrací kalendář (žádné BEGIN:VCALENDAR), zkontroluj odkaz');
+    return text;
+  } catch (err) {
+    if (err?.name === 'AbortError') throw new Error('kalendář neodpověděl do 10 s');
+    throw err;
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * What a bad answer from Google usually means, in words a person can act
+ * on. 404 is almost always the public address of a calendar that is not
+ * published, or a secret address that was reset; both fixes are the same.
+ */
+function explainStatus(status) {
+  if (status === 404) return 'Google vrací 404: odkaz už neplatí nebo je to veřejná adresa nepublikovaného kalendáře. Zkopíruj znovu Tajnou adresu ve formátu iCal (končí na private-…/basic.ics)';
+  if (status === 401 || status === 403) return `Google odmítl přístup (${status}): použij Tajnou adresu ve formátu iCal, ne veřejnou`;
+  return `kalendář vrací ${status}`;
+}
+
+/**
+ * Try the address once before it is saved, so a wrong link is refused on
+ * the spot instead of failing quietly every five minutes.
+ */
+export async function testIcsUrl(url) {
+  const u = String(url || '').trim();
+  if (!/^https?:\/\//i.test(u)) throw new Error('adresa musí začínat https://');
+  const text = await fetchFeed(u);
+  const events = parseIcs(text);
+  return { events: events.length };
 }
 
 /**

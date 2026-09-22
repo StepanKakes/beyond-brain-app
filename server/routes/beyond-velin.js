@@ -11,7 +11,7 @@ import express from 'express';
 import { getBrainIndex, invalidateBrainIndex, daysSince } from '../services/brain-index.js';
 import { inbox, signalsForClient } from '../services/brain-signals.js';
 import { getCalls, isConfigured as callsConfigured, invalidateCallsCache } from '../services/beyond-calls.js';
-import { calendarStatus, invalidateCalendars } from '../services/beyond-kalendar.js';
+import { calendarStatus, invalidateCalendars, testIcsUrl } from '../services/beyond-kalendar.js';
 import { usageReport, subscriptionLimits, brainShare } from '../services/beyond-usage.js';
 import { getPeople, personForUser } from '../services/beyond-people.js';
 import { listRuns, setJobEnabled } from '../services/beyond-runs.js';
@@ -121,6 +121,7 @@ router.get('/', async (req, res) => {
       calls: {
         configured: calls.configured,
         error: calls.error,
+        calendarErrors: calls.calendarErrors || {},
         today: todaysCalls,
         live: calls.live,
         next: calls.calls.find((c) => !c.live) || null,
@@ -234,6 +235,7 @@ router.get('/calls', async (req, res) => {
     res.json({
       configured: full.configured,
       error: full.error,
+      calendarErrors: full.calendarErrors || {},
       fetchedAt: full.fetchedAt,
       live: full.live,
       days: [...byDay.entries()].map(([day, items]) => ({ day, calls: items })),
@@ -785,6 +787,12 @@ router.get('/nastaveni', (_req, res) => {
 
 router.put('/nastaveni', async (req, res) => {
   try {
+    const values = req.body?.values || {};
+    // A calendar address is tried before it is kept: a wrong link is told
+    // to the person now, not to the log every five minutes.
+    for (const [k, v] of Object.entries(values)) {
+      if (/^BEYOND_ICS_/.test(k) && String(v || '').trim()) await testIcsUrl(v);
+    }
     const changed = saveSettings(req.body?.values || {}, { by: req.user?.username || 'velin' });
     invalidateWahaConfig();
     invalidatePeopleCache();

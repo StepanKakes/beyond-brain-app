@@ -145,7 +145,7 @@ function shape(booking, clients, people, now) {
  */
 export async function getCalls({ clients = [], people = [], days = 14, force = false } = {}) {
   if (!isConfigured()) {
-    return { configured: false, error: null, calls: [], live: [], fetchedAt: null };
+    return { configured: false, error: null, calendarErrors: {}, calls: [], live: [], fetchedAt: null };
   }
   const now = Date.now();
   // Reach slightly into the past so a call that started 20 minutes ago still
@@ -153,6 +153,7 @@ export async function getCalls({ clients = [], people = [], days = 14, force = f
   const from = now - 4 * 60 * 60 * 1000;
   const to = now + days * 24 * 60 * 60 * 1000;
   const errors = [];
+  const calendarErrors = {};
 
   let calcom = [];
   if (apiKey()) {
@@ -180,7 +181,7 @@ export async function getCalls({ clients = [], people = [], days = 14, force = f
   const ownEmails = people.map((p) => p.calcomEmail).filter(Boolean);
   for (const person of people) {
     const r = await calendarBookings(person, { from, to, force, ownEmails });
-    if (r.error) errors.push(`${person.displayName}: ${r.error}`);
+    if (r.error) calendarErrors[person.key] = r.error;
     google.push(...r.events);
   }
 
@@ -192,7 +193,7 @@ export async function getCalls({ clients = [], people = [], days = 14, force = f
     const twin = calcom.some((b) => Math.abs(Date.parse(b.start) - gs) < 10 * 60 * 1000 && sameParty(b, g));
     if (!twin) bookings.push(g);
   }
-  return rehydrate(bookings, clients, people, errors.length ? errors.join('; ') : null);
+  return rehydrate(bookings, clients, people, errors.length ? errors.join('; ') : null, calendarErrors);
 }
 
 /** Do two bookings involve the same other person, by e-mail or by name? */
@@ -205,7 +206,7 @@ function sameParty(a, b) {
 }
 
 /** Re-derive the live flag and matches without refetching. */
-function rehydrate(bookings, clients, people, error = null) {
+function rehydrate(bookings, clients, people, error = null, calendarErrors = {}) {
   const now = Date.now();
   const calls = bookings
     .map((b) => shape(b, clients, people, now))
@@ -213,7 +214,10 @@ function rehydrate(bookings, clients, people, error = null) {
     .sort((a, b) => a.startIso.localeCompare(b.startIso));
   return {
     configured: true,
+    // Cal.com trouble; a person's own calendar failing is reported per person
+    // so the calls that did load still show.
     error,
+    calendarErrors,
     calls,
     live: calls.filter((c) => c.live),
     fetchedAt: new Date().toISOString(),

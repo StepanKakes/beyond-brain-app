@@ -482,6 +482,34 @@ hodnoty se do prohlížeče vrací zkrácené. Dvě věci chtějí restart služ
 `BEYOND_TG_POLLING` (bot se sice po uložení spustí, ale vypnutí platí až po
 restartu) a `BEYOND_SCHEDULER`.
 
+## Spotřeba a podíl brainu
+
+Obrazovka **Spotřeba** stojí na dvou zdrojích. „Kam šly tokeny" je z SDK: každý
+tah zapíše řádek do `beyond_usage` s cenou, jakoby jel na API, a s tím, odkud
+běžel (chat, úloha, Telegram). „Kolik zbývá z účtu" je z účtového endpointu
+Claude, stejné číslo jako `/usage`.
+
+Procenta na účtu jsou ale **celý subscription**, ne jen brain — vedle brainu
+tam běží i tvůj vlastní Claude Code a Claude app. Appka si proto z metru učí
+`% za dolar` (kalibrace v `server/services/beyond-usage.js`): z pětiminutových
+vzorků hledá intervaly, kdy běžel jen brain, a z nich odhadne, jaký kus
+procent patří brainu. `ostatní` v panelu je zbytek, který appka nevidí
+(Claude web/app, stroj bez reportéru).
+
+Aby se tvůj Claude Code dal odečíst, běží na každém stroji, kde ho používáš,
+malý reportér [`scripts/claude-usage-reporter.mjs`](scripts/claude-usage-reporter.mjs):
+posčítá usage z lokálních transcriptů v `~/.claude/projects` a pošle ho na
+`POST /api/beyond-agent/usage` (autorizace `x-beyond-agent-token`, tedy
+`BEYOND_AGENT_TOKEN`). Tam se uloží do `beyond_external_usage` a panel ho
+ukáže jako „ty". Bez reportéru se kalibrace pořád snaží, ale brain se může
+jevit vyšší, protože se do „čistých" intervalů počítá i tvoje souběžné použití.
+
+Reportér se pouští z `launchd` (macOS) nebo Task Scheduleru (Windows) každých
+5 minut; návod je v hlavičce skriptu. Proměnné `BEYOND_URL`, `BEYOND_AGENT_TOKEN`
+a volitelně `BEYOND_MACHINE` (jméno stroje v panelu).
+
+---
+
 ## Env
 
 Kompletní seznam je v [`.env.example`](.env.example), tohle jsou ty, na kterých
@@ -491,7 +519,7 @@ záleží:
 |---|---|
 | `SERVER_PORT`, `VITE_PORT`, `HOST` | porty a bind |
 | `BEYOND_BRAIN_PATH` | cesta k brain repu; bez ní `~/Documents/GitHub/beyond-brain` |
-| `BEYOND_AGENT_TOKEN` | sdílený secret pro `/api/beyond-agent`, je to credential |
+| `BEYOND_AGENT_TOKEN` | sdílený secret pro `/api/beyond-agent` (dotazy i ingest usage z reportéru), je to credential |
 | `BEYOND_AGENT_ALLOWED_TG_USERS` | allow list Telegram ID, prázdné = kdokoli s tokenem |
 | `BEYOND_TG_BOT_TOKEN` | doručení odpovědi a průběhu do Telegramu |
 | `BEYOND_TG_CHAT_ID`, `BEYOND_TG_ERROR_CHAT_ID` | kam chodí briefy a připomínky, kam chyby |

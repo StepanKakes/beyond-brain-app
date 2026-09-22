@@ -66,7 +66,10 @@ export type Velin = {
   systemic: SystemicCondition[];
   calls: {
     configured: boolean;
+    /** Cal.com trouble; the calendars report separately. */
     error: string | null;
+    /** A person's Google calendar that could not be read, by person key. */
+    calendarErrors: Record<string, string>;
     today: Call[];
     live: Call[];
     next: Call | null;
@@ -157,6 +160,7 @@ export type ClientDetail = {
 export type CallsPage = {
   configured: boolean;
   error: string | null;
+  calendarErrors: Record<string, string>;
   fetchedAt: string | null;
   live: Call[];
   days: { day: string; calls: Call[] }[];

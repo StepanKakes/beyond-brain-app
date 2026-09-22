@@ -753,7 +753,7 @@ export default function VelinPage({ onOpenClient, onOpenCalls, onOpenChat }: Pro
               <p className="bb-uk__h">Hovory dnes {calls?.today.length ? <span>{calls.today.length}</span> : null}</p>
               {!calls ? null : !calls.configured ? (
                 <Empty>Kalendář není napojený.</Empty>
-              ) : calls.error ? (
+              ) : calls.error && calls.today.length === 0 ? (
                 <Empty>Cal.com neodpovídá: {calls.error}</Empty>
               ) : calls.today.length === 0 ? (
                 <Empty>
@@ -777,7 +777,10 @@ export default function VelinPage({ onOpenClient, onOpenCalls, onOpenChat }: Pro
                   </div>
                 ))
               )}
-              {calls?.configured && !calls.error && (
+              {calls?.configured && calls.error && calls.today.length > 0 && (
+                <Empty>Cal.com neodpovídá: {calls.error}</Empty>
+              )}
+              {calls?.configured && (
                 <button type="button" className="bb-uk__more" onClick={onOpenCalls}>všechny hovory</button>
               )}
               {calls && (
@@ -785,7 +788,12 @@ export default function VelinPage({ onOpenClient, onOpenCalls, onOpenChat }: Pro
                   {people.map((p) => (
                     <div key={p.key} className="bb-cal__row">
                       <span className="bb-cal__who">{p.displayName}</span>
-                      {calls.calendars?.[p.key] ? (
+                      {calls.calendars?.[p.key] && calls.calendarErrors?.[p.key] ? (
+                        <>
+                          <span className="bb-cal__bad" title={calls.calendarErrors[p.key]}>kalendář nejde načíst</span>
+                          <button type="button" className="bb-cal__btn" onClick={() => setCalFor(p.key)}>napojit znovu</button>
+                        </>
+                      ) : calls.calendars?.[p.key] ? (
                         <>
                           <span className="bb-cal__ok">Google kalendář</span>
                           <button type="button" className="bb-cal__btn" onClick={() => setCalFor(p.key)}>změnit</button>
@@ -845,6 +853,7 @@ export default function VelinPage({ onOpenClient, onOpenCalls, onOpenChat }: Pro
       {calFor && (
         <CalendarDialog
           person={people.find((p) => p.key === calFor) || { key: calFor, displayName: calFor }}
+          problem={calls?.calendarErrors?.[calFor] || null}
           onClose={() => setCalFor(null)}
           onSaved={() => { setCalFor(null); void velin.reload(); }}
         />
@@ -857,10 +866,10 @@ export default function VelinPage({ onOpenClient, onOpenCalls, onOpenChat }: Pro
  * Wire a person's Google calendar: one secret iCal address, pasted once.
  * No Google project, no consent screen, nothing that expires.
  */
-function CalendarDialog({ person, onClose, onSaved }: { person: { key: string; displayName: string }; onClose: () => void; onSaved: () => void }) {
+function CalendarDialog({ person, problem, onClose, onSaved }: { person: { key: string; displayName: string }; problem?: string | null; onClose: () => void; onSaved: () => void }) {
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(problem || null);
   const key = `BEYOND_ICS_${person.key.toUpperCase().replace(/[^A-Z0-9]/g, '_')}`;
   const save = async (value: string) => {
     setBusy(true);
@@ -869,7 +878,7 @@ function CalendarDialog({ person, onClose, onSaved }: { person: { key: string; d
       await saveSettings({ [key]: value });
       onSaved();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Uložení selhalo.');
+      setErr(e instanceof Error ? e.message : 'Uložení selhalo');
     } finally {
       setBusy(false);
     }

@@ -44,6 +44,21 @@ CREATE TABLE IF NOT EXISTS beyond_limits (
   resets_at  TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_beyond_limits_ts ON beyond_limits(kind, ts DESC);
+CREATE TABLE IF NOT EXISTS beyond_external_usage (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts           TEXT NOT NULL,
+  machine      TEXT,
+  source       TEXT,
+  session_id   TEXT,
+  model        TEXT,
+  input        INTEGER NOT NULL DEFAULT 0,
+  output       INTEGER NOT NULL DEFAULT 0,
+  cache_read   INTEGER NOT NULL DEFAULT 0,
+  cache_write  INTEGER NOT NULL DEFAULT 0,
+  cost_usd     REAL NOT NULL DEFAULT 0,
+  dedupe_key   TEXT UNIQUE
+);
+CREATE INDEX IF NOT EXISTS idx_beyond_external_ts ON beyond_external_usage(ts DESC);
 `;
 
 let ready = false;
@@ -91,6 +106,85 @@ export function recordUsage(result, ctx = {}) {
   }
 }
 
+/**
+ * Usage that is the account's but NOT the brain's: your own Claude Code on
+ * whatever machine reports in. The brain cannot see those transcripts (they
+ * live elsewhere), so a small reporter on each machine sums them and POSTs
+ * here. One row per turn, keyed so a re-sent batch cannot double count.
+ */
+export function recordExternalUsage(events, { machine = 'unknown', source = 'claude-code' } = {}) {
+  if (!Array.isArray(events) || !events.length) return 0;
+  const conn = db();
+  // Never let a machine that also runs the brain count brain turns as "you":
+  // drop any session id the app already recorded as its own.
+  const sids = [...new Set(events.map((e) => e && (e.sessionId || e.session_id)).filter(Boolean))];
+  const own = new Set();
+  if (sids.length) {
+    const placeholders = sids.map(() => '?').join(',');
+    for (const r of conn.prepare(`SELECT DISTINCT session_id FROM beyond_usage WHERE session_id IN (${placeholders})`).all(...sids)) {
+      if (r.session_id) own.add(r.session_id);
+    }
+  }
+  const ins = conn.prepare(
+    `INSERT OR IGNORE INTO beyond_external_usage (ts, machine, source, session_id, model, input, output, cache_read, cache_write, cost_usd, dedupe_key)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const insertAll = conn.transaction((rows) => {
+    let n = 0;
+    for (const e of rows) {
+      if (!e || typeof e !== 'object') continue;
+      const ts = String(e.ts || e.timestamp || new Date().toISOString());
+      const sid = e.sessionId || e.session_id || null;
+      if (sid && own.has(sid)) continue;
+      const model = e.model || null;
+      const input = Number(e.input || 0);
+      const output = Number(e.output || 0);
+      const key = e.dedupeKey || [machine, sid || '-', ts, model || '-', input, output].join('|');
+      const r = ins.run(
+        ts,
+        machine,
+        e.source || source,
+        sid,
+        model,
+        input,
+        output,
+        Number(e.cacheRead ?? e.cache_read ?? 0),
+        Number(e.cacheWrite ?? e.cache_write ?? 0),
+        Number(e.costUsd ?? e.cost_usd ?? 0) || 0,
+        key,
+      );
+      n += r.changes || 0;
+    }
+    return n;
+  });
+  try {
+    return insertAll(events);
+  } catch (err) {
+    console.warn('[usage] externí záznam selhal', err?.message || err);
+    return 0;
+  }
+}
+
+/** External (non-brain) usage for today / 7d / 30d, plus by machine. */
+export function externalUsageReport() {
+  const conn = db();
+  const EXT = 'COUNT(*) AS runs, SUM(input) AS input, SUM(output) AS output, SUM(cache_read) AS cache_read, SUM(cache_write) AS cache_write, SUM(cost_usd) AS cost_usd, 0 AS errors';
+  const [y, m, d] = todayIso().split('-').map(Number);
+  const startOfToday = fromWall(new Date(Date.UTC(y, m - 1, d))).toISOString();
+  const periods = {
+    today: conn.prepare(`SELECT ${EXT} FROM beyond_external_usage WHERE ts >= ?`).get(startOfToday),
+    week: conn.prepare(`SELECT ${EXT} FROM beyond_external_usage WHERE ts >= ?`).get(since(7)),
+    month: conn.prepare(`SELECT ${EXT} FROM beyond_external_usage WHERE ts >= ?`).get(since(30)),
+  };
+  const byMachine = conn.prepare(
+    `SELECT machine, ${EXT} FROM beyond_external_usage WHERE ts >= ? GROUP BY machine ORDER BY cost_usd DESC`,
+  ).all(since(30));
+  const byModel = conn.prepare(
+    `SELECT model, ${EXT} FROM beyond_external_usage WHERE ts >= ? GROUP BY model ORDER BY cost_usd DESC`,
+  ).all(since(7));
+  return { periods, byMachine, byModel };
+}
+
 const SUM = 'COUNT(*) AS runs, SUM(input) AS input, SUM(output) AS output, SUM(cache_read) AS cache_read, SUM(cache_write) AS cache_write, SUM(cost_usd) AS cost_usd, SUM(is_error) AS errors';
 
 function since(days) {
@@ -120,7 +214,20 @@ export function usageReport() {
   const recent = conn.prepare(
     'SELECT ts, source, label, actor, model, input, output, cache_read, cache_write, cost_usd, duration_ms, turns, is_error FROM beyond_usage ORDER BY id DESC LIMIT 40',
   ).all();
-  return { periods, bySource, byModel, byDay, recent };
+  // Percent of a window per dollar of brain work, learned from the meter.
+  // Same in every row, so the activity table can say "% of the week" too.
+  const weekCal = calibrate('weekly_all');
+  const weekShare = (usd) => (weekCal.rate != null ? Math.round(usd * weekCal.rate * 10) / 10 : null);
+  const bySourceShared = bySource.map((r) => ({ ...r, share: weekShare(r.cost_usd || 0) }));
+  return {
+    periods,
+    bySource: bySourceShared,
+    byModel,
+    byDay,
+    recent,
+    external: externalUsageReport(),
+    week: { rate: weekCal.rate, samples: weekCal.samples, cleanSamples: weekCal.cleanSamples },
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -242,47 +349,87 @@ function median(xs) {
 }
 
 /**
- * Percent points of a window per dollar of brain work: from intervals
- * between two samples of the same window where the brain spent something
- * and the meter moved. Other use of the account in the same minutes makes
- * a single interval read high; the median over many intervals, most of
- * them with only the brain running, settles on the brain's real rate.
+ * Percent points of a window per dollar of work: from intervals between two
+ * samples of the same window where the meter moved. Only the brain is visible
+ * to this app, so an interval where the brain ran alone ("clean") gives the
+ * brain's true rate; one where your own Claude Code also ran (reported in and
+ * therefore known) is usable too, with both in the denominator. What remains
+ * mixed with unreported usage (Claude web/app) is median-ed out. `rate` is
+ * null until there is anything to learn from.
  */
 function calibrate(kind) {
   const conn = db();
   const rows = conn.prepare('SELECT ts, percent, resets_at FROM beyond_limits WHERE kind = ? ORDER BY ts ASC').all(kind);
-  const spend = conn.prepare('SELECT COALESCE(SUM(cost_usd), 0) AS c FROM beyond_usage WHERE ts > ? AND ts <= ?');
-  const rates = [];
+  const brain = conn.prepare('SELECT COALESCE(SUM(cost_usd), 0) AS c FROM beyond_usage WHERE ts > ? AND ts <= ?');
+  const ext = conn.prepare('SELECT COALESCE(SUM(cost_usd), 0) AS c FROM beyond_external_usage WHERE ts > ? AND ts <= ?');
+  const clean = [];
+  const mixed = [];
   for (let i = 1; i < rows.length; i += 1) {
     const a = rows[i - 1];
     const b = rows[i];
     if (a.resets_at !== b.resets_at) continue; // the window reset in between
     const dp = b.percent - a.percent;
     if (dp <= 0) continue;
-    const c = spend.get(a.ts, b.ts).c;
-    if (c < 0.2) continue;
-    rates.push(dp / c);
+    const bc = brain.get(a.ts, b.ts).c;
+    const ec = ext.get(a.ts, b.ts).c;
+    if (bc < 0.2 && ec < 0.2) continue;
+    if (ec < 0.05 && bc >= 0.2) clean.push(dp / bc);
+    else mixed.push(dp / (bc + ec));
   }
-  return { rate: median(rates), samples: rates.length };
+  // Clean intervals are the honest ones; use mixed only while they are scarce.
+  const pool = clean.length >= 5 ? clean : [...clean, ...mixed];
+  return { rate: median(pool), samples: clean.length + mixed.length, cleanSamples: clean.length };
 }
 
 /**
- * For each window the account reports: what the brain spent inside it and
- * the share of the meter that is, by the calibrated rate. `share` is null
- * until there is something to calibrate on.
+ * For each window the account reports: what the brain spent inside it, what
+ * your own reported Claude Code spent, and the shares of the meter those are,
+ * by the calibrated rate. `other` is what is left — usage this app cannot see
+ * (Claude web/app, other machines that don't report). `share` is null until
+ * there is something to calibrate on.
  */
 export function brainShare(limits) {
   if (!limits?.available) return [];
   const conn = db();
   const out = [];
+  const round1 = (x) => Math.round(x * 10) / 10;
   for (const w of limits.windows) {
     const len = WINDOW_MS[w.kind] || WINDOW_MS.session;
     const resetAt = w.resetsAt ? Date.parse(w.resetsAt) : NaN;
     const start = Number.isFinite(resetAt) ? new Date(resetAt - len).toISOString() : since(len / 86_400_000);
     const row = conn.prepare(`SELECT ${SUM} FROM beyond_usage WHERE ts >= ?`).get(start);
+    const ext = conn.prepare('SELECT COALESCE(SUM(cost_usd), 0) AS c, COUNT(*) AS runs FROM beyond_external_usage WHERE ts >= ?').get(start);
     const cal = calibrate(w.kind === 'weekly_scoped' ? 'weekly_all' : w.kind);
-    const share = cal.rate != null ? Math.min(w.percent, Math.round((row.cost_usd || 0) * cal.rate * 10) / 10) : null;
-    out.push({ kind: w.kind, brainCostUsd: Math.round((row.cost_usd || 0) * 100) / 100, brainRuns: row.runs || 0, share, calibrated: cal.samples });
+    const rate = cal.rate;
+    const brainCostUsd = Math.round((row.cost_usd || 0) * 100) / 100;
+    const youCostUsd = Math.round((ext.c || 0) * 100) / 100;
+    const share = rate != null ? Math.min(w.percent, round1(brainCostUsd * rate)) : null;
+    const youShare = rate != null ? Math.min(w.percent, round1(youCostUsd * rate)) : null;
+    const otherShare = share != null ? Math.max(0, round1(w.percent - share - (youShare || 0))) : null;
+    // Which activity and which model ate the brain's slice of THIS window.
+    const withShare = (rows) =>
+      rows.map((r) => ({ ...r, share: rate != null ? Math.min(w.percent, round1((r.cost_usd || 0) * rate)) : null }));
+    const bySource = withShare(
+      conn.prepare(`SELECT source, label, ${SUM} FROM beyond_usage WHERE ts >= ? GROUP BY source, label ORDER BY cost_usd DESC`).all(start),
+    );
+    const byModel = withShare(
+      conn.prepare(`SELECT model, ${SUM} FROM beyond_usage WHERE ts >= ? GROUP BY model ORDER BY cost_usd DESC`).all(start),
+    );
+    out.push({
+      kind: w.kind,
+      brainCostUsd,
+      brainRuns: row.runs || 0,
+      youCostUsd,
+      youRuns: ext.runs || 0,
+      share,
+      youShare,
+      otherShare,
+      calibrated: cal.samples,
+      cleanSamples: cal.cleanSamples,
+      rate: rate != null ? Math.round(rate * 1000) / 1000 : null,
+      bySource,
+      byModel,
+    });
   }
   return out;
 }

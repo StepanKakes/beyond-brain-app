@@ -864,6 +864,7 @@ html.dark .bb-uk__wa, .dark .bb-uk__wa { background: #005C4B; color: #E9EDEF; }
 .bb-cal__row { display: flex; align-items: center; gap: 8px; min-height: 26px; font-size: 12.5px; color: var(--bb-ink2); }
 .bb-cal__who { min-width: 52px; color: var(--bb-ink); font-weight: 500; }
 .bb-cal__ok { color: var(--bb-work); }
+.bb-cal__bad { color: var(--bb-danger); cursor: help; }
 .bb-cal__btn { border: 0; background: none; padding: 0; font: inherit; font-size: 12px; color: var(--bb-ink3); cursor: pointer; }
 .bb-cal__btn:hover { color: var(--bb-ink); }
 .bb-cal__steps { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; line-height: 1.5; color: var(--bb-ink2); }
@@ -905,10 +906,15 @@ html.dark .bb-uk__wa, .dark .bb-uk__wa { background: #005C4B; color: #E9EDEF; }
 .bb-us__bar i { display: block; height: 100%; border-radius: 5px; background: var(--bb-ink3); transition: width .5s var(--bb-spring); }
 /* the brain's own slice of the meter, drawn over the total from the left */
 .bb-us__bar u { position: absolute; left: 0; top: 0; height: 100%; border-radius: 5px; background: var(--bb-p3); text-decoration: none; transition: width .5s var(--bb-spring); }
+/* your own Claude Code on top of the brain's slice, drawn just right of it */
+.bb-us__bar .bb-us__you { position: absolute; top: 0; height: 100%; border-radius: 5px; background: var(--bb-ink3); opacity: .5; transition: width .5s var(--bb-spring), left .5s var(--bb-spring); }
 .bb-us__wl em { font-style: normal; font-weight: 500; color: var(--bb-p3); margin-left: 8px; font-size: 12px; }
 .bb-us__win[data-sev="warning"] .bb-us__bar i { background: var(--bb-warn); }
 .bb-us__win[data-sev="critical"] .bb-us__bar i, .bb-us__win[data-sev="exceeded"] .bb-us__bar i { background: var(--bb-danger); }
 .bb-us__wr { font-size: 11.5px; color: var(--bb-ink3); }
+.bb-us__bd { margin-top: 2px; }
+.bb-us__bd > summary { font-size: 11.5px; color: var(--bb-ink3); cursor: pointer; }
+.bb-us__bdcols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 6px; }
 .bb-us__note { margin: 0; font-size: 11.5px; color: var(--bb-ink3); }
 .bb-us__periods { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .bb-us__period { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border: 1px solid var(--bb-line2); border-radius: 10px; }
