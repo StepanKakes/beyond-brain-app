@@ -93,6 +93,8 @@ type Usage = {
   limits:
     | { available: true; subscription: string | null; fetchedAt: string; windows: { kind: string; label: string; percent: number; severity: string; resetsAt: string | null }[]; extra: { used: number | null; limit: number | null; currency: string | null } | null }
     | { available: false; reason: string };
+  /** The brain's own spend inside each window and its estimated share of the meter. */
+  brain?: { kind: string; brainCostUsd: number; brainRuns: number; share: number | null; calibrated: number }[];
 };
 
 const fmtK = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
@@ -144,13 +146,29 @@ function UsageSection() {
         <div className="bb-us__limits">
           {d.limits.available ? (
             <>
-              {d.limits.windows.map((w) => (
-                <div key={w.kind} className="bb-us__win" data-sev={w.severity}>
-                  <div className="bb-us__wl"><span>{w.label}</span><b>{w.percent} %</b></div>
-                  <div className="bb-us__bar"><i style={{ width: `${Math.min(100, w.percent)}%` }} /></div>
-                  <div className="bb-us__wr">{resetIn(w.resetsAt)}</div>
-                </div>
-              ))}
+              {d.limits.windows.map((w) => {
+                const b = d.brain?.find((x) => x.kind === w.kind);
+                const share = b?.share ?? null;
+                return (
+                  <div key={w.kind} className="bb-us__win" data-sev={w.severity}>
+                    <div className="bb-us__wl">
+                      <span>{w.label}</span>
+                      <b>
+                        {w.percent} %
+                        {b && (share != null ? <em> z toho brain ~{share} %</em> : <em> brain {fmtUsd(b.brainCostUsd)}, podíl měřím</em>)}
+                      </b>
+                    </div>
+                    <div className="bb-us__bar">
+                      <i style={{ width: `${Math.min(100, w.percent)}%` }} />
+                      {share != null && <u style={{ width: `${Math.min(100, share)}%` }} title="Podíl brainu (úlohy, chat, Telegram)" />}
+                    </div>
+                    <div className="bb-us__wr">
+                      {resetIn(w.resetsAt)}
+                      {b && b.brainRuns > 0 && <> · brain v tomhle okně {b.brainRuns} běhů za {fmtUsd(b.brainCostUsd)}{share == null && b.calibrated === 0 ? ', odhad podílu bude po pár hodinách měření' : ''}</>}
+                    </div>
+                  </div>
+                );
+              })}
               <p className="bb-us__note">Účet Claude {d.limits.subscription ? `(${d.limits.subscription})` : ''} na stroji, stejné číslo jako /usage v Claude Code.{d.limits.extra ? ` Extra kredit: ${d.limits.extra.used ?? 0} z ${d.limits.extra.limit ?? '?'} ${d.limits.extra.currency || ''}.` : ''}</p>
             </>
           ) : (

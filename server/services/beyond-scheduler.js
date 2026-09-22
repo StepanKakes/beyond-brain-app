@@ -91,11 +91,16 @@ export async function runJob(name, { triggerKind = 'manual', triggerDetail = nul
   if (pulled.note) jobLog(pulled.note);
   const run = await startRun({ job: name, triggerKind, triggerDetail, context });
 
+  // The slot is spent the moment the run starts, however it ends. A run
+  // that throws (a delivery that failed, a commit that did not go) must not
+  // come up as due on the next tick and fire again every minute until the
+  // window closes; the failure streak and the incident report cover it.
+  markJobRan(name);
+  if (job.custom) await noteTaskRan(name).catch((err) => jobLog(`stav úlohy se neuložil: ${err?.message || err}`));
+
   let outcome;
   try {
     const result = await job.run({ log: jobLog, context: context || {} });
-    markJobRan(name);
-    if (job.custom) await noteTaskRan(name).catch((err) => jobLog(`stav úlohy se neuložil: ${err?.message || err}`));
 
     const gitNote = await commitAfterRun(job);
     if (gitNote) jobLog(gitNote);
