@@ -40,6 +40,7 @@ import { broadcast as tgBroadcast, sendTo as tgSendTo } from './beyond-telegram.
 import { pruneHistory } from './beyond-history.js';
 import { invalidateBrainIndex } from './brain-index.js';
 import { pruneOsa } from './beyond-obsah.js';
+import { applyToEnv as applyStoredSettings } from './beyond-settings.js';
 import { removeClipFile } from './beyond-clip.js';
 
 /** How often to look at the clock. Jobs decide their own cadence. */
@@ -185,6 +186,14 @@ async function runEvent(ev) {
 
 async function tick() {
   if (paused || running) return;
+
+  // Settings written straight into the database (a workflow, a script) take
+  // effect without a restart: re-apply them every tick, it is one query.
+  try {
+    applyStoredSettings();
+  } catch (err) {
+    log('nastavení se nepodařilo načíst', err?.message || err);
+  }
 
   // Keep the working copy current even when no job has work, so the velín
   // and the timeline show what n8n or a colleague committed minutes ago.

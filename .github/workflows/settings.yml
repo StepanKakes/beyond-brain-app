@@ -1,0 +1,23 @@
+name: Settings
+
+# Write app settings on the box from the repository secret BEYOND_SETTINGS
+# ("KEY=value;KEY=value"). Applied by the running app within a minute.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  settings:
+    runs-on: [self-hosted, windows, beyond-brain]
+    timeout-minutes: 5
+    env:
+      SETTINGS: ${{ secrets.BEYOND_SETTINGS }}
+    steps:
+      - name: Write settings
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $app = if ($env:BEYOND_APP_DIR) { $env:BEYOND_APP_DIR } else { 'C:\Users\Vlast\beyond\beyond-brain-app' }
+          Set-Location $app
+          if (-not $env:SETTINGS) { throw 'secret BEYOND_SETTINGS is empty' }
+          node scripts\set-settings.cjs

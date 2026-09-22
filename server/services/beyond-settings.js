@@ -98,7 +98,10 @@ export function applyToEnv() {
     process.env[key] = row.value;
     n += 1;
   }
-  if (n) console.log(`[settings] ${n} hodnot z databáze přebilo .env`);
+  if (n && !applyToEnv.announced) {
+    applyToEnv.announced = true;
+    console.log(`[settings] ${n} hodnot z databáze přebilo .env`);
+  }
   return n;
 }
 
