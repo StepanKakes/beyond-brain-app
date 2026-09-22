@@ -216,9 +216,25 @@ export async function connectOAuth(id: string): Promise<ConnectResult> {
   if (start.manual) {
     // The server could only register a loopback redirect, so the window will
     // end on an address nobody serves. Leave it open for the person to copy
-    // the address from; the panel takes it from there.
+    // the address from; the panel takes it from there. If a copy of the app
+    // happens to answer on loopback, it posts the address back and the flow
+    // finishes on its own.
     if (popup) popup.location.replace(authorizationUrl);
     else window.open(authorizationUrl, 'beyond-mcp-oauth');
+    const auto = await new Promise<string | null>((resolve) => {
+      const onMessage = (e: MessageEvent) => {
+        const d = e.data as { type?: string; url?: string } | null;
+        if (d?.type === 'beyond-mcp-oauth-loopback' && typeof d.url === 'string') { cleanup(); resolve(d.url); }
+      };
+      const poll = setInterval(() => { if (popup && popup.closed) { cleanup(); resolve(null); } }, 800);
+      const timer = setTimeout(() => { cleanup(); resolve(null); }, 3 * 60 * 1000);
+      const cleanup = () => { window.removeEventListener('message', onMessage); clearInterval(poll); clearTimeout(timer); };
+      window.addEventListener('message', onMessage);
+    });
+    if (auto) {
+      const r = await finishOAuth(id, auto);
+      return { ok: Boolean(r.ok), manual: false };
+    }
     return { ok: false, manual: true, redirectUri: start.redirectUri };
   }
   if (!popup) {
