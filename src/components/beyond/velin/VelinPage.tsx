@@ -253,7 +253,8 @@ function TaskRow({ task, people, clients, me, onState, onRemove, onReload, onOpe
 }) {
   const [pop, setPop] = useState(false);
   const [editing, setEditing] = useState(false);
-  const by = task.createdBy === 'agent' || task.createdBy.includes('-') ? 'od brainu' : task.createdBy !== task.owner ? `zadal ${people.find((p) => p.key === task.createdBy)?.displayName || task.createdBy}` : null;
+  const createdBy = String(task.createdBy || '');
+  const by = createdBy === 'agent' || createdBy.includes('-') ? 'od brainu' : createdBy && createdBy !== task.owner ? `zadal ${people.find((p) => p.key === createdBy)?.displayName || createdBy}` : null;
   const fire = (next: Task['state']) => {
     setPop(true);
     setTimeout(() => setPop(false), 400);

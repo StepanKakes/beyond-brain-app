@@ -41,6 +41,7 @@ import { pruneHistory } from './beyond-history.js';
 import { invalidateBrainIndex } from './brain-index.js';
 import { pruneOsa } from './beyond-obsah.js';
 import { applyToEnv as applyStoredSettings } from './beyond-settings.js';
+import { sampleLimits } from './beyond-usage.js';
 import { removeClipFile } from './beyond-clip.js';
 
 /** How often to look at the clock. Jobs decide their own cadence. */
@@ -57,6 +58,7 @@ let running = null; // name of the job currently in flight, or null
 let paused = false;
 let lastPrune = 0;
 let lastPull = 0;
+let lastLimits = 0;
 /** n8n and other machines commit to origin; without this the box only saw them before a run. */
 const PULL_EVERY_MS = 5 * 60 * 1000;
 
@@ -205,6 +207,13 @@ async function tick() {
       invalidateBrainIndex();
       log('brain se posunul na originu, index přestavěn');
     }
+  }
+
+  // A reading of the account's meters every five minutes, so the brain's own
+  // spend can be measured against them.
+  if (Date.now() - lastLimits > 5 * 60 * 1000) {
+    lastLimits = Date.now();
+    sampleLimits().catch((err) => log('vzorek limitů selhal', err?.message || err));
   }
 
   // The doorbell first.

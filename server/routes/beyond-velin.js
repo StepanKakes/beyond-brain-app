@@ -12,7 +12,7 @@ import { getBrainIndex, invalidateBrainIndex, daysSince } from '../services/brai
 import { inbox, signalsForClient } from '../services/brain-signals.js';
 import { getCalls, isConfigured as callsConfigured, invalidateCallsCache } from '../services/beyond-calls.js';
 import { calendarStatus, invalidateCalendars } from '../services/beyond-kalendar.js';
-import { usageReport, subscriptionLimits } from '../services/beyond-usage.js';
+import { usageReport, subscriptionLimits, brainShare } from '../services/beyond-usage.js';
 import { getPeople, personForUser } from '../services/beyond-people.js';
 import { listRuns, setJobEnabled } from '../services/beyond-runs.js';
 import { describeJobs, runJob, schedulerStatus, setPaused } from '../services/beyond-scheduler.js';
@@ -661,7 +661,7 @@ router.get('/spotreba', async (req, res) => {
       Promise.resolve(usageReport()),
       subscriptionLimits({ force: req.query.force === '1' }),
     ]);
-    res.json({ ...report, limits });
+    res.json({ ...report, limits, brain: brainShare(limits) });
   } catch (err) {
     res.status(500).json({ error: err?.message || 'spotřeba selhala' });
   }

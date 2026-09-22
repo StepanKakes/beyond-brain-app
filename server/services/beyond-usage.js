@@ -36,6 +36,14 @@ CREATE TABLE IF NOT EXISTS beyond_usage (
   is_error     INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_beyond_usage_ts ON beyond_usage(ts DESC);
+CREATE TABLE IF NOT EXISTS beyond_limits (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts         TEXT NOT NULL,
+  kind       TEXT NOT NULL,
+  percent    REAL NOT NULL,
+  resets_at  TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_beyond_limits_ts ON beyond_limits(kind, ts DESC);
 `;
 
 let ready = false;
@@ -202,4 +210,79 @@ export async function subscriptionLimits({ force = false } = {}) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* how much of the account the brain itself ate                        */
+/* ------------------------------------------------------------------ */
+
+const WINDOW_MS = { session: 5 * 60 * 60 * 1000, weekly_all: 7 * 24 * 60 * 60 * 1000, weekly_scoped: 7 * 24 * 60 * 60 * 1000 };
+
+/**
+ * Remember what the account reports, so the brain's own spend can be set
+ * against the movement of the meter. Called from the scheduler every few
+ * minutes; one row per window kind.
+ */
+export async function sampleLimits() {
+  const lim = await subscriptionLimits();
+  if (!lim.available) return 0;
+  const ins = db().prepare('INSERT INTO beyond_limits (ts, kind, percent, resets_at) VALUES (?, ?, ?, ?)');
+  const now = new Date().toISOString();
+  for (const w of lim.windows) ins.run(now, w.kind, Number(w.percent) || 0, w.resetsAt);
+  // Keep three weeks of samples.
+  db().prepare('DELETE FROM beyond_limits WHERE ts < ?').run(since(21));
+  return lim.windows.length;
+}
+
+function median(xs) {
+  if (!xs.length) return null;
+  const a = [...xs].sort((x, y) => x - y);
+  const m = Math.floor(a.length / 2);
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+}
+
+/**
+ * Percent points of a window per dollar of brain work: from intervals
+ * between two samples of the same window where the brain spent something
+ * and the meter moved. Other use of the account in the same minutes makes
+ * a single interval read high; the median over many intervals, most of
+ * them with only the brain running, settles on the brain's real rate.
+ */
+function calibrate(kind) {
+  const conn = db();
+  const rows = conn.prepare('SELECT ts, percent, resets_at FROM beyond_limits WHERE kind = ? ORDER BY ts ASC').all(kind);
+  const spend = conn.prepare('SELECT COALESCE(SUM(cost_usd), 0) AS c FROM beyond_usage WHERE ts > ? AND ts <= ?');
+  const rates = [];
+  for (let i = 1; i < rows.length; i += 1) {
+    const a = rows[i - 1];
+    const b = rows[i];
+    if (a.resets_at !== b.resets_at) continue; // the window reset in between
+    const dp = b.percent - a.percent;
+    if (dp <= 0) continue;
+    const c = spend.get(a.ts, b.ts).c;
+    if (c < 0.2) continue;
+    rates.push(dp / c);
+  }
+  return { rate: median(rates), samples: rates.length };
+}
+
+/**
+ * For each window the account reports: what the brain spent inside it and
+ * the share of the meter that is, by the calibrated rate. `share` is null
+ * until there is something to calibrate on.
+ */
+export function brainShare(limits) {
+  if (!limits?.available) return [];
+  const conn = db();
+  const out = [];
+  for (const w of limits.windows) {
+    const len = WINDOW_MS[w.kind] || WINDOW_MS.session;
+    const resetAt = w.resetsAt ? Date.parse(w.resetsAt) : NaN;
+    const start = Number.isFinite(resetAt) ? new Date(resetAt - len).toISOString() : since(len / 86_400_000);
+    const row = conn.prepare(`SELECT ${SUM} FROM beyond_usage WHERE ts >= ?`).get(start);
+    const cal = calibrate(w.kind === 'weekly_scoped' ? 'weekly_all' : w.kind);
+    const share = cal.rate != null ? Math.min(w.percent, Math.round((row.cost_usd || 0) * cal.rate * 10) / 10) : null;
+    out.push({ kind: w.kind, brainCostUsd: Math.round((row.cost_usd || 0) * 100) / 100, brainRuns: row.runs || 0, share, calibrated: cal.samples });
+  }
+  return out;
 }

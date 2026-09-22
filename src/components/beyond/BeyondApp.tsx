@@ -14,6 +14,7 @@ import ClientDetail from './velin/ClientDetail';
 import CallsPage from './velin/CallsPage';
 import AgentPage from './velin/AgentPage';
 import FilesPage from './files/FilesPage';
+import ScreenBoundary from './ScreenBoundary';
 import ObsahPage from './velin/ObsahPage';
 import StudioPage from './velin/StudioPage';
 import { useBeyondClients, type BeyondClient } from './useBeyondClients';
@@ -287,12 +288,14 @@ export default function BeyondApp() {
     >
       {mountedChat && (
         <div className="h-full w-full" hidden={!chatVisible}>
+          <ScreenBoundary name="chat">
           <BeyondChat
             key={mountedChat.key}
             client={mountedChat.client}
             initialPrompt={mountedChat.initialPrompt}
             sessionOverride={mountedChat.sessionOverride}
           />
+          </ScreenBoundary>
         </div>
       )}
       <AnimatePresence mode="wait">
@@ -305,6 +308,7 @@ export default function BeyondApp() {
           transition={{ duration: 0.22, ease: 'easeOut' }}
           className="h-full w-full"
         >
+          <ScreenBoundary name={view.kind}>
           {view.kind === 'velin' ? (
             <VelinPage onOpenClient={openClient} onOpenCalls={openCalls} onOpenChat={handleOpenUniversalChat} />
           ) : view.kind === 'board' ? (
@@ -327,6 +331,7 @@ export default function BeyondApp() {
               onNewChat={handleOpenUniversalChat}
             />
           )}
+          </ScreenBoundary>
         </motion.div>
         )}
       </AnimatePresence>
