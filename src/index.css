@@ -958,13 +958,11 @@
 /* ============================================================ */
 /*  BEYOND BRAIN DESIGN SYSTEM — v2                              */
 /*  Hyperminimal. White surfaces, generous space,                */
-/*  Helvetica primary, Instrument Serif for moments,             */
+/*  Figtree primary, one family for the whole app,               */
 /*  one soft powder-blue → cream gradient (hero only).           */
 /* ============================================================ */
 
 @layer base {
-  /* Load Instrument Serif from Google — only used for hero greetings. */
-  @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap');
 
   :root {
     /* Beyond v2 surface tokens. They alias the glass tokens from
@@ -1023,10 +1021,10 @@
   /* ---------------------------------------------------------- */
 
   /* Special-moment serif. Use sparingly: greetings, hero lines. */
+  /* Was a serif; the app has one family now. */
   .font-hero {
-    font-family: 'Instrument Serif', ui-serif, Georgia, serif;
-    font-weight: 400;
-    letter-spacing: -0.01em;
+    font-weight: 600;
+    letter-spacing: -0.025em;
     line-height: 1.08;
   }
 
@@ -1116,9 +1114,8 @@
   .beyond-chip:hover { background: var(--beyond-pill-bg-hover); }
 
   .text-hero {
-    font-family: 'Instrument Serif', ui-serif, Georgia, serif;
-    font-weight: 400;
-    letter-spacing: -0.01em;
+    font-weight: 600;
+    letter-spacing: -0.025em;
     line-height: 1.1;
   }
 

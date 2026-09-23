@@ -83,7 +83,7 @@ export default function ClientBoard({ onOpenClient }: { onOpenClient: (slug: str
                 <th scope="col">Klient</th>
                 <th scope="col">Týden</th>
                 <th scope="col">Do konce</th>
-                <th scope="col">Páteř</th>
+                <th scope="col">Hlavní metrika</th>
                 <th scope="col" className="num">Dlužíme</th>
                 <th scope="col" className="num">Dluží</th>
                 <th scope="col">Poslední zpráva</th>
@@ -126,9 +126,10 @@ export default function ClientBoard({ onOpenClient }: { onOpenClient: (slug: str
         <section>
           <SectionHead title="Jak číst tabulku" />
           <Empty>
-            Pomlčka znamená nevíme, nula znamená dělal a nevyšlo. Páteř je vlastní měřená metrika
-            každého klienta, proto se sloupec u každého jmenuje jinak. Přerušená čára v grafu je
-            týden, kdy se čísla nesebrala.
+            Hlavní metrika je to jedno číslo, na kterém stojí program daného klienta, proto je
+            u každého jiné (přihlášky, návštěvy, tržby) a jeho název je vedle čísla. Pomlčka
+            znamená nevíme, nula znamená dělal a nevyšlo, přerušená čára v grafu je týden, kdy se
+            čísla nesebrala.
           </Empty>
         </section>
       </div>
@@ -174,9 +175,12 @@ function ClientRow({ client: c, onOpen }: { client: BoardClient; onOpen: () => v
             {/* One week of data cannot be a trend, so the chart is simply
                 absent rather than drawn as a stray dash beside the number. */}
             {c.history.length > 1 && <Spark history={c.history} metric={topMetric} />}
-            <span className="num" title={topMetric}>
+            <span className="num">
               <Metric value={c.latestWeek?.values[topMetric]} />
             </span>
+            {/* The number means nothing without its name, and every client's
+                name here is different. */}
+            <span className="dim bb-tbl__metric">{topMetric}</span>
           </span>
         )}
       </td>

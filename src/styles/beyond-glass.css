@@ -64,10 +64,12 @@
   --bb-shadow-lift: 0 2px 6px rgba(30, 27, 23, .06), 0 20px 44px -20px rgba(30, 27, 23, .2);
   --bb-shadow-pop:  0 12px 34px -12px rgba(30, 27, 23, .2);
 
-  /* Type — Figtree for UI, Newsreader for the editorial display */
+  /* Type — one family. A serif display line belongs to a magazine, not to a
+     screen someone works in every morning; the titles carry weight and
+     tighter tracking instead. */
   --bb-font:    "Figtree", system-ui, -apple-system, "Helvetica Neue", sans-serif;
-  --bb-display: "Newsreader", Georgia, serif;
-  --bb-serif:   "Newsreader", Georgia, serif;
+  --bb-display: var(--bb-font);
+  --bb-serif:   var(--bb-font);
   --bb-mono:    "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* Motion — one spring for everything that moves, one ease for fades */
@@ -484,7 +486,7 @@ body { background: var(--bb-bg) !important; color: var(--bb-ink); font-family: v
 
 /* ------------------------------------------------------------- empty state - */
 .bb-empty { max-width: 720px; width: 100%; margin: 0 auto; padding: 40px 0 20px; text-align: center; animation: bbUp .6s var(--bb-spring); }
-.bb-empty h1 { margin: 0; font-family: var(--bb-display); font-weight: 300; font-size: 38px; line-height: 1.15; letter-spacing: -.02em; color: var(--bb-ink); }
+.bb-empty h1 { margin: 0; font-family: var(--bb-display); font-weight: 500; font-size: 32px; line-height: 1.15; letter-spacing: -.025em; color: var(--bb-ink); }
 .bb-empty p { margin: 12px auto 30px; max-width: 440px; color: var(--bb-ink2); font-size: 15px; text-wrap: pretty; }
 .bb-suggests { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; text-align: left; }
 .bb-suggest { padding: 14px 16px; cursor: pointer; border: 1px solid var(--bb-line); background: var(--bb-raise); border-radius: 14px; color: var(--bb-ink);
@@ -531,7 +533,7 @@ body { background: var(--bb-bg) !important; color: var(--bb-ink); font-family: v
 @media (max-width: 720px) { .bb-vel__in { padding: 16px 14px 72px; gap: 20px; } }
 
 .bb-vel__head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-.bb-vel__title { font-family: var(--bb-display); font-size: 27px; line-height: 1.12; letter-spacing: -.012em; color: var(--bb-ink); margin: 0; }
+.bb-vel__title { font-family: var(--bb-display); font-size: 24px; font-weight: 600; line-height: 1.15; letter-spacing: -.022em; color: var(--bb-ink); margin: 0; }
 .bb-vel__title em { font-style: italic; }
 .bb-vel__sub { font-size: 13px; color: var(--bb-ink3); margin-top: 3px; font-variant-numeric: tabular-nums; }
 
@@ -577,6 +579,7 @@ body { background: var(--bb-bg) !important; color: var(--bb-ink); font-family: v
 /* --- dense client table --------------------------------------------------- */
 .bb-tblwrap { border: 1px solid var(--bb-line); border-radius: var(--bb-rc); background: var(--bb-raise); overflow-x: auto; }
 .bb-tbl { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; min-width: 760px; }
+.bb-tbl__metric { max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .bb-tbl th { text-align: left; font-size: 12px; font-weight: 500; color: var(--bb-ink3); padding: 10px 12px; border-bottom: 1px solid var(--bb-line2); white-space: nowrap; }
 .bb-tbl td { padding: 11px 12px; border-bottom: 1px solid var(--bb-line2); color: var(--bb-ink2); vertical-align: middle; }
 .bb-tbl tbody tr:last-child td { border-bottom: none; }
