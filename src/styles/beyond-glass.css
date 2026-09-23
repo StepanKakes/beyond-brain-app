@@ -1038,6 +1038,17 @@ details.bb-set__group .bb-set__row:focus-within .bb-set__h { display: block; }
 .bb-ob__peek { margin-top: 5px; font-size: 13px; line-height: 1.45; color: var(--bb-ink2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .bb-ob__side { display: flex; align-items: center; gap: 12px; flex: none; }
 .bb-ob__strip { display: flex; gap: 5px; }
+.bb-ob__strip button { position: relative; border: 0; padding: 0; background: none; cursor: pointer; line-height: 0; }
+.bb-ob__more { position: absolute; inset: 0; display: grid; place-items: center; border-radius: 6px;
+  background: rgba(10, 11, 13, .55); color: #fff; font-size: 12px; font-weight: 600; }
+/* The slides of an open story, as the pictures they are. */
+.bb-ob__reel { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+.bb-ob__slidebtn { position: relative; flex: none; border: 0; padding: 0; background: none; cursor: pointer; line-height: 0; }
+.bb-ob__slidebtn img { height: 190px; width: auto; aspect-ratio: 9 / 16; object-fit: cover; border-radius: 10px;
+  border: 1px solid var(--bb-line2); display: block; transition: transform var(--bb-t-fast) var(--bb-spring); }
+.bb-ob__slidebtn:hover img { transform: translateY(-2px); }
+.bb-ob__slidebtn i { position: absolute; left: 7px; top: 7px; padding: 1px 6px; border-radius: 999px;
+  background: rgba(10, 11, 13, .55); color: #fff; font-size: 10.5px; font-style: normal; font-weight: 600; line-height: 1.5; }
 .bb-ob__strip img { height: 64px; width: auto; aspect-ratio: 9 / 16; object-fit: cover; border-radius: 6px; border: 1px solid var(--bb-line2); display: block; }
 .bb-ob__acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .bb-ob__acts a.bb-pill { text-decoration: none; }
@@ -1063,6 +1074,7 @@ details.bb-set__group .bb-set__row:focus-within .bb-set__h { display: block; }
 
 /* prepared images and links on the velín */
 .bb-uk__imgs { grid-column: 1 / -1; display: flex; gap: 6px; overflow-x: auto; padding: 2px 0; }
+.bb-uk__img { border: 0; padding: 0; background: none; cursor: pointer; line-height: 0; }
 .bb-uk__img img { height: 76px; width: auto; aspect-ratio: 9 / 16; object-fit: cover; border-radius: 7px; border: 1px solid var(--bb-line2); display: block; }
 .bb-uk__link { grid-column: 1 / -1; justify-self: start; text-decoration: none; }
 

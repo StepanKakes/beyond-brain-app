@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Empty, ago, usePolled } from './bits';
 import { Tabs } from '../ui';
+import StoryViewer from './StoryViewer';
 import { cutObsah, deleteObsah, fetchObsah, patchObsah, type ObsahItem } from './api';
 import { authenticatedFetch } from '../../../utils/api';
 
@@ -150,6 +151,8 @@ function Card({ item, open, onToggle, onMove, onRemove, onDiscard, onOpenClient,
   const next = NEXT[item.state];
   const link = isReel ? fathomAt(item) : item.studio?.url || null;
   const renders = !isReel ? item.studio?.renders || [] : [];
+  // Which slide the viewer opens on; null means it is closed.
+  const [viewAt, setViewAt] = useState<number | null>(null);
   const [showText, setShowText] = useState(false);
   const [range, setRange] = useState<{ a: string; b: string } | null>(null);
   const [clipUrl, setClipUrl] = useState<string | null>(null);
@@ -200,8 +203,11 @@ function Card({ item, open, onToggle, onMove, onRemove, onDiscard, onOpenClient,
         <div className="bb-ob__side">
           {renders.length > 0 && (
             <div className="bb-ob__strip">
-              {renders.map((src, i) => (
-                <a key={src} href={src} target="_blank" rel="noreferrer" title={`Slide ${i + 1}, plná velikost`}><img src={src} alt={`Slide ${i + 1}`} loading="lazy" /></a>
+              {renders.slice(0, 3).map((src, i) => (
+                <button key={src} type="button" title={`Slide ${i + 1} z ${renders.length}`} onClick={(e) => { e.stopPropagation(); setViewAt(i); }}>
+                  <img src={src} alt={`Slide ${i + 1}`} loading="lazy" />
+                  {i === 2 && renders.length > 3 && <span className="bb-ob__more">+{renders.length - 3}</span>}
+                </button>
               ))}
             </div>
           )}
@@ -216,6 +222,16 @@ function Card({ item, open, onToggle, onMove, onRemove, onDiscard, onOpenClient,
         <div className="bb-ob__body">
           <div className="bb-ob__cols">
             <div className="bb-ob__main">
+              {renders.length > 0 && (
+                <div className="bb-ob__reel">
+                  {renders.map((src, i) => (
+                    <button key={src} type="button" className="bb-ob__slidebtn" onClick={() => setViewAt(i)} title={`Otevřít jako stories, slide ${i + 1}`}>
+                      <img src={src} alt={`Slide ${i + 1}`} loading="lazy" />
+                      <i>{i + 1}</i>
+                    </button>
+                  ))}
+                </div>
+              )}
               {item.hook && item.title && <p className="bb-ob__hook">{item.hook}</p>}
               {isReel && item.quote && <blockquote className="bb-ob__quote">{item.quote}</blockquote>}
               {isReel && (
@@ -289,6 +305,9 @@ function Card({ item, open, onToggle, onMove, onRemove, onDiscard, onOpenClient,
             </div>
           </div>
         </div>
+      )}
+      {viewAt != null && renders.length > 0 && (
+        <StoryViewer images={renders} startAt={viewAt} when={ago(item.createdAt)} onClose={() => setViewAt(null)} />
       )}
     </article>
   );

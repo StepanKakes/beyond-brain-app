@@ -169,3 +169,26 @@
 .bb-dot--none { background: var(--bb-ink3); }
 .bb-dot--work { background: var(--bb-work); }
 .bb-dot--done { background: var(--bb-p3); }
+
+/* --- story viewer --------------------------------------------------------- */
+.bb-sv { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 24px;
+  background: rgba(10, 11, 13, .82); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); animation: bbFade .2s ease; }
+.bb-sv__frame { position: relative; height: min(88vh, 940px); aspect-ratio: 9 / 16; max-width: 100%;
+  border-radius: 14px; overflow: hidden; background: #000; box-shadow: 0 30px 80px -30px rgba(0, 0, 0, .8); }
+.bb-sv__img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.bb-sv__bars { position: absolute; top: 8px; left: 8px; right: 8px; z-index: 3; display: flex; gap: 3px; }
+.bb-sv__bars i { flex: 1; height: 2.5px; border-radius: 2px; background: rgba(255, 255, 255, .34); }
+.bb-sv__bars i[data-on="true"] { background: #fff; }
+.bb-sv__head { position: absolute; top: 18px; left: 10px; right: 8px; z-index: 3; display: flex; align-items: center; gap: 9px; color: #fff; }
+.bb-sv__av { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; border: 1.5px solid rgba(255, 255, 255, .85); }
+.bb-sv__who { font-size: 13.5px; font-weight: 600; text-shadow: 0 1px 3px rgba(0, 0, 0, .5); }
+.bb-sv__when { font-size: 12.5px; opacity: .75; text-shadow: 0 1px 3px rgba(0, 0, 0, .5); }
+.bb-sv__x { margin-left: auto; width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 50%;
+  background: rgba(0, 0, 0, .28); color: #fff; cursor: pointer; }
+.bb-sv__x:hover { background: rgba(0, 0, 0, .5); }
+.bb-sv__zone { position: absolute; top: 0; bottom: 0; width: 42%; z-index: 2; display: flex; align-items: center;
+  border: 0; background: none; color: rgba(255, 255, 255, .0); cursor: pointer; transition: color .18s ease; }
+.bb-sv__zone--l { left: 0; justify-content: flex-start; padding-left: 10px; }
+.bb-sv__zone--r { right: 0; justify-content: flex-end; padding-right: 10px; }
+.bb-sv__frame:hover .bb-sv__zone:not(:disabled) { color: rgba(255, 255, 255, .75); }
+.bb-sv__zone:disabled { cursor: default; }

@@ -25,6 +25,7 @@ import {
 } from './api';
 import { Empty, LiveCall, ago, formatTime, usePolled } from './bits';
 import { Tabs } from '../ui';
+import StoryViewer from './StoryViewer';
 import BoardPage from '../board/BoardPage';
 
 /**
@@ -119,6 +120,8 @@ function prepKind(kind: string, prep: { images?: string[] | null; clip?: string 
 function Prep({ task, onDone, onOpenFile }: { task: Task; onDone: () => void; onOpenFile: (path: string) => void }) {
   const prep = task.prep;
   const [busy, setBusy] = useState<string | null>(null);
+  // Which slide the story opens on; null means the viewer is closed.
+  const [viewAt, setViewAt] = useState<number | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(prep?.body || '');
@@ -219,11 +222,14 @@ function Prep({ task, onDone, onOpenFile }: { task: Task; onDone: () => void; on
       {prep.images && prep.images.length > 0 && (
         <div className="bb-uk__imgs">
           {prep.images.map((src, i) => (
-            <a key={src} href={src} target="_blank" rel="noreferrer" className="bb-uk__img" title={`Slide ${i + 1}, otevřít v plné velikosti`}>
+            <button key={src} type="button" className="bb-uk__img" title={`Slide ${i + 1} z ${prep.images!.length}, otevřít jako stories`} onClick={() => setViewAt(i)}>
               <img src={src} alt={`Slide ${i + 1}`} loading="lazy" />
-            </a>
+            </button>
           ))}
         </div>
+      )}
+      {viewAt != null && prep.images && prep.images.length > 0 && (
+        <StoryViewer images={prep.images} startAt={viewAt} when="teď" onClose={() => setViewAt(null)} />
       )}
       {diff && (
         <pre className="bb-uk__diff">
