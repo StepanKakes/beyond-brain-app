@@ -67,7 +67,12 @@ jobs:
           # missing) — a clean `npm ci` every push would rebuild native modules
           # (node-pty) each time and is slow.
           $depsChanged = git diff --name-only $before $after -- package.json package-lock.json
-          if ($depsChanged -or -not (Test-Path 'node_modules')) {
+          # "node_modules exists" is not the same as "node_modules is usable":
+          # an install that died halfway leaves the folder there and the tools
+          # gone, and every later deploy then skips the install and fails the
+          # typecheck instead. Check for what the build actually needs.
+          $depsOk = (Test-Path 'node_modules\vite') -and (Test-Path 'node_modules\typescript') -and (Test-Path 'node_modules\.package-lock.json')
+          if ($depsChanged -or -not $depsOk) {
             # The running service holds the native modules open (bcrypt,
             # node-pty, better-sqlite3), and `npm ci` empties node_modules
             # first, so Windows refuses with EPERM. Stop it for the install and
