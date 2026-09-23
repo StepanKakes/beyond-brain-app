@@ -9,8 +9,8 @@
 .bb-c {
   background: var(--bb-raise);
   border: 1px solid var(--bb-line2);
-  border-radius: var(--bb-rc);
-  padding: 12px 13px;
+  border-radius: 12px;
+  padding: 10px 11px;
   box-shadow: 0 1px 2px rgba(20, 22, 26, .04);
   transition: box-shadow var(--bb-t-fast) var(--bb-spring), border-color var(--bb-t-fast) var(--bb-spring), transform var(--bb-t-fast) var(--bb-spring);
 }
@@ -62,7 +62,7 @@
   grid-auto-flow: column;
   /* A column is a column, not a stretched panel: it keeps its width however
      few of them there are. */
-  grid-auto-columns: minmax(280px, 330px);
+  grid-auto-columns: 300px;
   justify-content: start;
   gap: 14px;
   align-items: stretch;
@@ -107,11 +107,17 @@
 .bb-scr__f { display: flex; gap: 8px; padding-top: 2px; }
 
 /* --- task card ------------------------------------------------------------ */
+.bb-tc__head { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; font-size: 11.5px; color: var(--bb-ink3); }
+.bb-tc__from { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bb-tc__due { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.bb-tc__due--today { color: var(--bb-warn); }
+.bb-tc__due--over { color: var(--bb-danger); }
+/* The dot a tag carries, so a label is read by colour before it is read. */
+.bb-tag { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
 .bb-tc__top { display: flex; align-items: flex-start; gap: 9px; }
-.bb-tc__t { margin: 0; font-size: 13.5px; font-weight: 500; line-height: 1.35; color: var(--bb-ink); }
+.bb-tc__t { margin: 0; font-size: 13px; font-weight: 500; line-height: 1.38; color: var(--bb-ink); }
 .bb-tc__t--done { color: var(--bb-ink3); text-decoration: line-through; }
-.bb-tc__sub { margin: 4px 0 0 25px; font-size: 12px; color: var(--bb-ink3); }
-.bb-tc__meta { display: flex; flex-wrap: wrap; gap: 5px; margin: 9px 0 0 25px; }
+.bb-tc__meta { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0 0 25px; }
 .bb-tc__meta:empty { display: none; }
 .bb-tc__chk {
   flex: none; width: 16px; height: 16px; margin-top: 1px;

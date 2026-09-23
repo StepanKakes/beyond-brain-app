@@ -187,11 +187,27 @@ body { background: var(--bb-bg) !important; color: var(--bb-ink); font-family: v
 .bb-side[data-open="false"] { width: 0; min-width: 0; }
 .bb-side__inner { width: 300px; height: 100%; display: flex; flex-direction: column; opacity: 1; transition: opacity .3s ease; }
 .bb-side[data-open="false"] .bb-side__inner { opacity: 0; }
-.bb-side__head { display: flex; align-items: center; justify-content: space-between; padding: 18px 16px 10px 20px; }
+.bb-side__head { display: flex; align-items: center; justify-content: space-between; padding: 16px 14px 8px 16px; }
 .bb-brand { font-weight: 600; font-size: 14.5px; letter-spacing: -.01em; padding-left: 2px; color: var(--bb-ink); }
 .bb-brand em { font-style: normal; }
-.bb-side__body { flex: 1; overflow-y: auto; padding: 6px 10px 10px; }
-.bb-side__foot { padding: 10px 14px 16px; border-top: 1px solid var(--bb-line2); }
+.bb-side__body { flex: 1; overflow-y: auto; padding: 10px 10px 10px; display: flex; flex-direction: column; gap: 1px; }
+.bb-side__foot { padding: 10px 12px 14px; border-top: 1px solid var(--bb-line2); display: flex; flex-direction: column; gap: 8px; }
+.bb-side__tools { display: flex; align-items: center; gap: 4px; }
+.bb-side__tool { flex: 1; display: flex; align-items: center; gap: 9px; padding: 7px 9px; border: 0; border-radius: 10px; background: none;
+  font: inherit; font-size: 13px; color: var(--bb-ink2); cursor: pointer; transition: background var(--bb-t-fast) ease, color var(--bb-t-fast) ease; }
+.bb-side__tool:hover { background: var(--bb-panel2); color: var(--bb-ink); }
+.bb-side__lbl { margin: 16px 0 4px; padding: 0 10px; font-size: 11.5px; font-weight: 500; color: var(--bb-ink3); }
+
+/* Who is signed in, at the top where a person looks for it. */
+.bb-me { display: flex; align-items: center; gap: 10px; width: calc(100% - 24px); margin: 2px 12px 0; padding: 8px 10px;
+  border: 1px solid var(--bb-line2); border-radius: 12px; background: var(--bb-panel2); cursor: pointer; text-align: left;
+  color: var(--bb-ink3); transition: border-color var(--bb-t-fast) ease, background var(--bb-t-fast) ease; }
+.bb-me:hover { border-color: var(--bb-line); background: var(--bb-raise); }
+.bb-me__av { flex: none; width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center;
+  background: var(--bb-accent); color: var(--bb-on-accent); font-size: 12.5px; font-weight: 600; }
+.bb-me__t { min-width: 0; flex: 1; display: block; line-height: 1.25; }
+.bb-me__t b { display: block; font-size: 13px; font-weight: 600; color: var(--bb-ink); }
+.bb-me__t small { display: block; font-size: 11.5px; color: var(--bb-ink3); }
 
 .bb-newchat { width: 100%; display: flex; align-items: center; gap: 10px; padding: 9px 12px; cursor: pointer; color: var(--bb-ink);
   border: 1px solid var(--bb-line); background: var(--bb-raise); border-radius: var(--bb-rs); font-size: 14px; font-weight: 500;
@@ -206,21 +222,28 @@ body { background: var(--bb-bg) !important; color: var(--bb-ink); font-family: v
 .bb-search input::placeholder { color: var(--bb-ink3); }
 
 .bb-group__label { padding: 6px 10px; font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--bb-ink3); }
-.bb-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border-radius: 10px; cursor: pointer;
+.bb-row { display: flex; align-items: center; gap: 11px; width: 100%; padding: 8px 10px; border-radius: 10px; cursor: pointer;
   font-size: 13.5px; color: var(--bb-ink2); background: transparent; border: none; text-align: left; transition: background .18s ease, color .18s ease; }
-.bb-row:hover { background: var(--bb-panel2); }
-.bb-row[aria-current="true"] { background: var(--bb-panel2); color: var(--bb-ink); font-weight: 500; }
+.bb-row__i { flex: none; color: var(--bb-ink3); transition: color .18s ease; }
+.bb-row:hover { background: var(--bb-panel2); color: var(--bb-ink); }
+.bb-row:hover .bb-row__i { color: var(--bb-ink2); }
+/* The open surface is one solid shape, the way a selected row reads at a
+   glance. Everything else in the panel is quiet. */
+.bb-row[aria-current="true"] { background: var(--bb-accent); color: var(--bb-on-accent); font-weight: 500; }
+.bb-row[aria-current="true"] .bb-row__i { color: var(--bb-on-accent); }
+.bb-row[aria-current="true"] .bb-row__n { color: var(--bb-on-accent); opacity: .7; }
 .bb-row__label { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bb-row__n { flex: none; font-size: 12px; color: var(--bb-ink3); font-variant-numeric: tabular-nums; }
 .bb-row__meta { flex: none; font-size: 11px; color: var(--bb-ink3); }
 
 .bb-avatar { width: 28px; height: 28px; border-radius: 50%; flex: none; display: grid; place-items: center;
   background: var(--bb-accent-soft); color: var(--bb-accent); font-size: 12px; font-weight: 600; }
 
-.bb-subrail { margin: 2px 0 2px 9px; padding-left: 10px; border-left: 1.5px solid var(--bb-line2); display: flex; flex-direction: column; gap: 2px; }
-.bb-subrow { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 8px; cursor: pointer; color: var(--bb-ink2); background: transparent; border: none; transition: background var(--bb-t-fast) ease; }
+.bb-subrail { display: flex; flex-direction: column; gap: 1px; }
+.bb-subrow { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 9px; cursor: pointer; color: var(--bb-ink2); background: transparent; border: none; transition: background var(--bb-t-fast) ease, color var(--bb-t-fast) ease; }
 .bb-subrow:hover { background: var(--bb-panel2); }
 .bb-subrow[aria-current="true"] { background: var(--bb-panel2); color: var(--bb-ink); }
-.bb-subrow__t { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; line-height: 1.3; }
+.bb-subrow__t { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; line-height: 1.35; text-align: left; }
 
 /* ------------------------------------------------------------ icon buttons - */
 .bb-ib { width: 30px; height: 30px; display: grid; place-items: center; border: none; background: transparent; border-radius: 9px; cursor: pointer;
@@ -372,25 +395,28 @@ body { background: var(--bb-bg) !important; color: var(--bb-ink); font-family: v
 
 /* ---------------------------------------------------------------- composer - */
 .bb-composer__wrap { padding: 8px 20px 22px; z-index: 15; background: linear-gradient(to top, var(--bb-bg) 55%, transparent); }
-.bb-composer { position: relative; max-width: 760px; margin: 0 auto; border: 1px solid var(--bb-line); background: var(--bb-raise); border-radius: var(--bb-r);
+.bb-composer { position: relative; max-width: 760px; margin: 0 auto; border: 1px solid var(--bb-line); background: var(--bb-raise); border-radius: 26px;
   backdrop-filter: var(--bb-blur); -webkit-backdrop-filter: var(--bb-blur);
   box-shadow: 0 1px 2px rgba(18,21,27,.05), 0 10px 24px -16px rgba(18,21,27,.2);
   transition: box-shadow var(--bb-t-mid) var(--bb-spring), border-color var(--bb-t-mid) ease, transform var(--bb-t-mid) var(--bb-spring); }
 .bb-composer[data-focus="true"], .bb-composer:focus-within { border-color: var(--bb-accent); transform: translateY(-3px); box-shadow: var(--bb-shadow-lift); }
-.bb-composer textarea { width: 100%; border: none; background: transparent; resize: none; padding: 16px 18px 6px; font-size: 15.5px; line-height: 1.55; min-height: 54px; max-height: 240px; color: var(--bb-ink); transition: min-height .3s var(--bb-spring); }
+.bb-composer textarea { width: 100%; border: none; background: transparent; resize: none; padding: 18px 22px 6px; font-size: 15.5px; line-height: 1.55; min-height: 54px; max-height: 240px; color: var(--bb-ink); transition: min-height .3s var(--bb-spring); }
 .bb-composer textarea::placeholder { color: var(--bb-ink3); }
 .bb-composer[data-focus="true"] textarea, .bb-composer:focus-within textarea { min-height: 72px; }
-.bb-composer__bar { display: flex; align-items: center; gap: 6px; padding: 6px 10px 10px 12px; }
+.bb-composer__bar { display: flex; align-items: center; gap: 7px; padding: 6px 12px 12px 14px; }
 .bb-composer__hint { flex: 1; min-width: 0; display: flex; justify-content: flex-end; overflow: hidden; font-size: 12px; color: var(--bb-ink3); white-space: nowrap; opacity: 0; transition: opacity .3s ease; }
 .bb-composer[data-focus="true"] .bb-composer__hint, .bb-composer:focus-within .bb-composer__hint { opacity: 1; }
-.bb-ib--tool { width: 32px; height: 32px; border-radius: 10px; }
+/* The round grey buttons of a composer: one shape for attach, dictate and
+   anything else that sits on that row. */
+.bb-ib--tool { width: 34px; height: 34px; border-radius: 50%; background: var(--bb-panel2); color: var(--bb-ink2); }
+.bb-ib--tool:hover { background: var(--bb-bubble); color: var(--bb-ink); }
 .bb-ib--tool[aria-pressed="true"] { background: var(--bb-accent); color: var(--bb-on-accent); }
-.bb-send { width: 34px; height: 34px; flex: none; display: flex; align-items: center; justify-content: center; border: none; border-radius: 11px; cursor: pointer;
+.bb-send { width: 34px; height: 34px; flex: none; display: flex; align-items: center; justify-content: center; border: none; border-radius: 50%; cursor: pointer;
   background: var(--bb-panel2); color: var(--bb-ink3); opacity: .7; transition: background var(--bb-t-fast) ease, opacity var(--bb-t-fast) ease, transform var(--bb-t-fast) var(--bb-spring); }
 .bb-send[data-active="true"] { background: var(--bb-accent); color: var(--bb-on-accent); opacity: 1; }
 .bb-send[data-active="true"]:hover { transform: translateY(-1px) scale(1.03); }
 .bb-send:active { transform: scale(.94); }
-.bb-modelbtn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--bb-line); background: transparent; color: var(--bb-ink); font-size: 13px; font-weight: 500; cursor: pointer; transition: background var(--bb-t-fast) ease; }
+.bb-modelbtn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 999px; border: 1px solid var(--bb-line); background: transparent; color: var(--bb-ink); font-size: 13px; font-weight: 500; cursor: pointer; transition: background var(--bb-t-fast) ease; }
 .bb-modelbtn:hover { background: var(--bb-panel2); }
 .bb-disclaimer { text-align: center; margin-top: 10px; font-size: 11.5px; color: var(--bb-ink3); }
 .bb-mic { display: flex; align-items: center; gap: 12px; padding: 16px 18px 4px; animation: bbFade .3s ease; }

@@ -7,20 +7,17 @@
  * stays there until someone moves it back.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, RotateCw } from 'lucide-react';
-
-import { Column, Empty, Tabs, Avatar } from '../ui';
+import { Column, Empty, Avatar } from '../ui';
 import { TaskCard } from './TaskCard';
 import { ClientCard } from './ClientCard';
 import { fetchBoard, moveClient, type BoardData } from './api';
 import { patchTask } from '../velin/api';
 import type { Task } from '../velin/api';
 
-const TAB_KEY = 'beyond:board-tab';
 const UNASSIGNED = '__nikdo__';
 
-export default function BoardPage({ onOpenClient, onOpenTask }: { onOpenClient: (slug: string) => void; onOpenTask: () => void }) {
-  const [tab, setTab] = useState<string>(() => localStorage.getItem(TAB_KEY) || 'lide');
+/** The board itself; the velín owns the switch between its two faces. */
+export default function BoardPage({ mode, onOpenClient }: { mode: 'lide' | 'klienti'; onOpenClient: (slug: string) => void }) {
   const [data, setData] = useState<BoardData | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -41,35 +38,12 @@ export default function BoardPage({ onOpenClient, onOpenTask }: { onOpenClient: 
     return () => { if (timer.current) window.clearInterval(timer.current); };
   }, [load]);
 
-  useEffect(() => { localStorage.setItem(TAB_KEY, tab); }, [tab]);
+  if (err && !data) return <Empty>Nepovedlo se načíst: {err}</Empty>;
+  if (!data) return <Empty>Načítám…</Empty>;
 
-  if (err && !data) {
-    return (
-      <div className="bb-scr">
-        <header className="bb-scr__h"><h1>Tabule</h1></header>
-        <Empty>Nepovedlo se načíst: {err}</Empty>
-      </div>
-    );
-  }
-
-  return (
-    <div className="bb-scr">
-      <header className="bb-scr__h">
-        <h1>Tabule</h1>
-        <Tabs items={[{ key: 'lide', label: 'Tým' }, { key: 'klienti', label: 'Klienti' }]} value={tab} onChange={setTab} />
-        <button type="button" className="bb-ib" title="Načíst znovu" aria-label="Načíst znovu" disabled={busy} onClick={() => void load()}>
-          <RotateCw size={15} strokeWidth={1.9} />
-        </button>
-      </header>
-      {!data ? (
-        <Empty>Načítám…</Empty>
-      ) : tab === 'lide' ? (
-        <TeamBoard data={data} onReload={load} onOpenTask={onOpenTask} setBusy={setBusy} />
-      ) : (
-        <ClientPipeline data={data} onReload={load} onOpenClient={onOpenClient} setBusy={setBusy} />
-      )}
-    </div>
-  );
+  return mode === 'lide'
+    ? <TeamBoard data={data} onReload={load} setBusy={setBusy} />
+    : <ClientPipeline data={data} onReload={load} onOpenClient={onOpenClient} setBusy={setBusy} />;
 }
 
 /* ------------------------------------------------------------------ */
@@ -82,7 +56,7 @@ const ORDER = (t: Task) => {
   return `${state}${t.priority}${over}${t.due || '9999'}`;
 };
 
-function TeamBoard({ data, onReload, onOpenTask, setBusy }: { data: BoardData; onReload: () => Promise<void>; onOpenTask: () => void; setBusy: (b: boolean) => void }) {
+function TeamBoard({ data, onReload, setBusy }: { data: BoardData; onReload: () => Promise<void>; setBusy: (b: boolean) => void }) {
   const [drag, setDrag] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const [showDone, setShowDone] = useState(false);
@@ -149,7 +123,7 @@ function TeamBoard({ data, onReload, onOpenTask, setBusy }: { data: BoardData; o
                   key={t.id}
                   task={t}
                   dragging={drag === t.id}
-                  onOpen={onOpenTask}
+                  onOpen={() => { /* the card opens where it lives, in the list */ }}
                   onToggle={(next) => void toggle(t, next)}
                   onDragStart={(e) => { e.dataTransfer.setData('text/beyond-task', t.id); e.dataTransfer.effectAllowed = 'move'; setDrag(t.id); }}
                   onDragEnd={() => setDrag(null)}
@@ -162,9 +136,6 @@ function TeamBoard({ data, onReload, onOpenTask, setBusy }: { data: BoardData; o
       <div className="bb-scr__f">
         <button type="button" className="bb-pill bb-pill--sm" onClick={() => setShowDone((v) => !v)}>
           {showDone ? 'Skrýt hotové' : 'Ukázat hotové'}
-        </button>
-        <button type="button" className="bb-pill bb-pill--sm" onClick={onOpenTask}>
-          <Plus size={13} strokeWidth={2} /> Úkol
         </button>
       </div>
     </>

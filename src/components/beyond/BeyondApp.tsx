@@ -17,7 +17,6 @@ import FilesPage from './files/FilesPage';
 import ScreenBoundary from './ScreenBoundary';
 import ObsahPage from './velin/ObsahPage';
 import StudioPage from './velin/StudioPage';
-import BoardPage from './board/BoardPage';
 import { useBeyondClients, type BeyondClient } from './useBeyondClients';
 import { UNIVERSAL_SLUG } from './beyondSessionsApi';
 
@@ -54,7 +53,6 @@ type ParsedRoute = { slug: string | null; uuid: string | null };
 type View =
   | { kind: 'velin' }
   | { kind: 'board' }
-  | { kind: 'tabule' }
   | { kind: 'client'; slug: string }
   | { kind: 'calls' }
   | { kind: 'agent' }
@@ -67,7 +65,6 @@ function parseView(pathname: string): View {
   const parts = pathname.split('/').filter(Boolean);
   if (parts.length === 0) return { kind: 'velin' };
   if (parts[0] === 'klienti') return { kind: 'board' };
-  if (parts[0] === 'tabule') return { kind: 'tabule' };
   if (parts[0] === 'hovory') return { kind: 'calls' };
   if (parts[0] === 'agent') return { kind: 'agent' };
   if (parts[0] === 'obsah') return { kind: 'obsah' };
@@ -313,7 +310,6 @@ export default function BeyondApp() {
   const openCalls = useCallback(() => navigate('/hovory'), [navigate]);
   const openAgent = useCallback(() => navigate('/agent'), [navigate]);
   const openObsah = useCallback(() => navigate('/obsah'), [navigate]);
-  const openTabule = useCallback(() => navigate('/tabule'), [navigate]);
   const openStudio = useCallback(() => navigate('/stories'), [navigate]);
   const openFiles = useCallback(
     (p?: string | null) => navigate(p ? `/soubory/${p.split('/').map(encodeURIComponent).join('/')}` : '/soubory'),
@@ -327,7 +323,6 @@ export default function BeyondApp() {
       onOpenBoard={openBoard}
       onOpenCalls={openCalls}
       onOpenAgent={openAgent}
-      onOpenTabule={openTabule}
       onOpenFiles={() => openFiles(null)}
       onOpenObsah={openObsah}
       onOpenStudio={openStudio}
@@ -363,8 +358,6 @@ export default function BeyondApp() {
             <VelinPage onOpenClient={openClient} onOpenCalls={openCalls} onOpenChat={handleOpenUniversalChat} />
           ) : view.kind === 'board' ? (
             <ClientBoard onOpenClient={openClient} />
-          ) : view.kind === 'tabule' ? (
-            <BoardPage onOpenClient={openClient} onOpenTask={handleGoHome} />
           ) : view.kind === 'client' ? (
             <ClientDetail slug={view.slug} onBack={openBoard} onOpenChat={handleSelectClient} />
           ) : view.kind === 'calls' ? (

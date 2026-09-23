@@ -533,6 +533,27 @@ router.get('/tabule', async (req, res) => {
   }
 });
 
+/**
+ * The few numbers the left panel shows next to its items. Cheap on purpose:
+ * it runs on every screen, so it reads the cached index and nothing else.
+ */
+router.get('/pocty', async (req, res) => {
+  try {
+    const index = await getBrainIndex();
+    const me = personForUser(req.user)?.key || DEFAULT_OWNER();
+    const today = todayIso();
+    const tasks = ukoly.listTasks().filter((t) => t.state !== 'done');
+    res.json({
+      velin: tasks.filter((t) => (t.owner === me || t.owner === 'all') && t.due && t.due <= today).length,
+      klienti: index.clients.filter((c) => c.isActive !== false).length,
+      obsah: obsah.pending().length,
+      navrhy: countPending(),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err?.message || 'počty selhaly' });
+  }
+});
+
 /** Move a client's card, or (stage: null) hand it back to the signals. */
 router.patch('/tabule/klient/:slug', async (req, res) => {
   try {

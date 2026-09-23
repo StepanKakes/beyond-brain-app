@@ -37,7 +37,6 @@ type Props = {
   onOpenBoard?: () => void;
   onOpenCalls?: () => void;
   onOpenAgent?: () => void;
-  onOpenTabule?: () => void;
   onOpenFiles?: () => void;
   onOpenObsah?: () => void;
   onOpenStudio?: () => void;
@@ -58,7 +57,6 @@ export default function BeyondShell({
   onOpenBoard,
   onOpenCalls,
   onOpenAgent,
-  onOpenTabule,
   onOpenFiles,
   onOpenObsah,
   onOpenStudio,
@@ -121,7 +119,6 @@ export default function BeyondShell({
             onOpenBoard={onOpenBoard ? () => { onOpenBoard(); closeOnMobile(); } : undefined}
             onOpenCalls={onOpenCalls ? () => { onOpenCalls(); closeOnMobile(); } : undefined}
             onOpenAgent={onOpenAgent ? () => { onOpenAgent(); closeOnMobile(); } : undefined}
-            onOpenTabule={onOpenTabule ? () => { onOpenTabule(); closeOnMobile(); } : undefined}
             onOpenFiles={onOpenFiles ? () => { onOpenFiles(); closeOnMobile(); } : undefined}
             onOpenObsah={onOpenObsah ? () => { onOpenObsah(); closeOnMobile(); } : undefined}
             onOpenStudio={onOpenStudio ? () => { onOpenStudio(); closeOnMobile(); } : undefined}

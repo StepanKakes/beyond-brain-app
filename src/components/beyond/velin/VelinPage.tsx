@@ -24,6 +24,8 @@ import {
   type Velin,
 } from './api';
 import { Empty, LiveCall, ago, formatTime, usePolled } from './bits';
+import { Tabs } from '../ui';
+import BoardPage from '../board/BoardPage';
 
 /**
  * Beyond Brain — the morning screen.
@@ -701,6 +703,13 @@ function QuickAdd({ me, owner, people, onAdded }: { me: string; owner: string; p
   );
 }
 
+const MODE_KEY = 'beyond:velin-mode';
+const MODES = [
+  { key: 'dnes', label: 'Dnes' },
+  { key: 'tym', label: 'Tým' },
+  { key: 'klienti', label: 'Klienti' },
+];
+
 export default function VelinPage({ onOpenClient, onOpenCalls, onOpenChat }: Props) {
   const loadVelin = useCallback(() => fetchVelin(), []);
   const loadUkoly = useCallback(() => fetchUkoly(), []);
@@ -710,6 +719,9 @@ export default function VelinPage({ onOpenClient, onOpenCalls, onOpenChat }: Pro
   const board = usePolled<{ builtAt: string; clients: BoardClient[] }>(loadBoard, 180_000);
   // Whose list: a person's key, everyone, or only what the brain prepared.
   const [view, setView] = useState<string>('me');
+  // Dnes (the list) | Tým | Klienti — remembered between visits.
+  const [mode, setMode] = useState<string>(() => localStorage.getItem(MODE_KEY) || 'dnes');
+  useEffect(() => { localStorage.setItem(MODE_KEY, mode); }, [mode]);
   // Whose Google calendar is being wired, when the dialog is open.
   const [calFor, setCalFor] = useState<string | null>(null);
   const [showDone, setShowDone] = useState(false);
@@ -757,11 +769,29 @@ export default function VelinPage({ onOpenClient, onOpenCalls, onOpenChat }: Pro
 
   const rowProps = { people, clients: ukoly.data?.clients || [], me, onState: setState, onRemove: remove, onReload: () => void ukoly.reload(), onOpenFile: openFile, onOpenClient };
 
+  // Three ways of looking at the same day: the list, the team's board, the
+  // clients' board. One screen, one switch, no separate place to go.
+  if (mode !== 'dnes') {
+    return (
+      <div className="bb-vel">
+        <div className="bb-vel__in bb-uk">
+          <header className="bb-vel__head">
+            <h1 className="bb-vel__title">{today[0].toUpperCase() + today.slice(1)}</h1>
+            <Tabs items={MODES} value={mode} onChange={setMode} />
+            <button type="button" className="bb-pill" onClick={onOpenChat}>Řekni agentovi</button>
+          </header>
+          <BoardPage mode={mode === 'tym' ? 'lide' : 'klienti'} onOpenClient={onOpenClient} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="bb-vel">
       <div className="bb-vel__in bb-uk">
         <header className="bb-vel__head">
           <h1 className="bb-vel__title">{today[0].toUpperCase() + today.slice(1)}</h1>
+          <Tabs items={MODES} value={mode} onChange={setMode} />
           <button type="button" className="bb-pill" onClick={onOpenChat}>
             Řekni agentovi
           </button>
