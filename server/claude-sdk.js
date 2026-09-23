@@ -735,6 +735,60 @@ async function refreshLiveMcpIfNeeded(entry) {
   }
 }
 
+
+/* ------------------------------------------------------------------ */
+/* connectors the agent reaches for itself                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The connectors that exist, as names and nothing else.
+ *
+ * A name costs a few tokens; a connector's tool list costs tens of thousands
+ * and is re-sent every turn. So a run starts with the names only and asks for
+ * the tools when it actually has a reason to.
+ */
+export async function listConnectorNames() {
+  try {
+    const all = await listBeyondConnectors();
+    const taken = new Set();
+    return all
+      .filter((c) => c.enabled)
+      .map((c) => {
+        const key = connectorKey(c.name, c.id, taken);
+        taken.add(key);
+        return { key, name: c.name, url: c.url || null };
+      });
+  } catch (err) {
+    console.warn('[beyond-mcp] connector names failed:', err?.message || err);
+    return [];
+  }
+}
+
+/**
+ * Hand a live run the tools of one connector, now.
+ *
+ * `setMcpServers` on the running query adds the server to the session, so the
+ * next request in this very turn carries its tools. Returns the tool prefix so
+ * the agent knows what it just gained.
+ */
+export async function enableConnectorForRun(entry, wanted) {
+  const inst = entry?.queryInstance;
+  if (!inst || typeof inst.setMcpServers !== 'function') throw new Error('tenhle běh neumí konektory přidávat za chodu');
+  const want = String(wanted || '').trim().toLowerCase();
+  if (!want) throw new Error('název konektoru chybí');
+  const all = await loadMcpConfig(entry.initialOptions?.cwd || entry.cwd);
+  const match = pickMcpServers(all, [want]);
+  if (!match) throw new Error(`konektor ${wanted} neznám nebo je vypnutý`);
+  const current = pickMcpServers(all, entry.mcpAllow) || {};
+  const servers = { ...current, ...match };
+  await inst.setMcpServers(servers);
+  entry.mcpAllow = [...new Set([...(entry.mcpAllow || []), ...Object.keys(match)])];
+  entry.mcpAuthFingerprint = mcpAuthFingerprint(servers);
+  const keys = Object.keys(match);
+  console.log(`[beyond-mcp] běh si vyžádal konektor ${keys.join(', ')}`);
+  return keys;
+}
+
 /**
  * Slugify a connector display name into a stable MCP server key (which becomes
  * the `mcp__<key>__<tool>` tool prefix). Keeps it URL/identifier-safe and
@@ -1139,6 +1193,12 @@ async function startNewBeyondStream(command, options, ws) {
     source: 'chat',
     actor: ws?.username || (ws?.userId != null ? String(ws.userId) : 'chat'),
     label: options.sessionSummary || null,
+    // The run can fetch a connector's tools itself, when it has a reason to.
+    connectors: {
+      list: () => listConnectorNames(),
+      enable: (name) => enableConnectorForRun(entry, name),
+      active: () => entry.mcpAllow || [],
+    },
   });
   entry.historyUser = ws?.username || null;
   entry.pendingHistoryUser = [];
@@ -2102,7 +2162,20 @@ async function runSdkOneShot({
 
   // The Beyond layer: app tools + agent memory + history. Callers that only
   // want a bare model turn (a chat title) pass nothing and get nothing.
-  if (beyond) await attachBeyondLayer(sdkOptions, beyond);
+  // `runEntry` is filled in below, once the query exists: the connector tool
+  // closes over it so a job can reach for a connector mid-run, the same way a
+  // chat does.
+  const runEntry = { mcpAllow: Array.isArray(beyond?.mcp) ? [...beyond.mcp] : [], cwd: resolvedCwd, queryInstance: null };
+  if (beyond) {
+    await attachBeyondLayer(sdkOptions, {
+      ...beyond,
+      connectors: {
+        list: () => listConnectorNames(),
+        enable: (name) => enableConnectorForRun(runEntry, name),
+        active: () => runEntry.mcpAllow,
+      },
+    });
+  }
 
   const startedAt = Date.now();
   let capturedSessionId = sessionId || null;
@@ -2123,6 +2196,7 @@ async function runSdkOneShot({
   };
 
   const queryInstance = query({ prompt: command, options: sdkOptions });
+  runEntry.queryInstance = queryInstance;
 
   // Fire the progress "start" event right away — callers (Telegram emitter)
   // can immediately tell the user we're on it, well before the first SDK

@@ -429,8 +429,45 @@ export function buildBeyondToolsServer(ctx = {}) {
     },
   );
 
-  return createSdkMcpServer({ name: 'beyond', version: '1.0.0', tools: [schedule, history, pamet, skillManage, tasks, content, message] });
+  /**
+   * The connectors, on demand.
+   *
+   * Their tool lists are the most expensive thing a run can carry and most
+   * runs never touch them, so a run starts with names only and asks for the
+   * one it needs. After `zapni` the tools are in this very turn, named
+   * `mcp__<klic>__*`.
+   */
+  const connectors = tool(
+    'konektory',
+    [
+      'Vnější nástroje (Notion, Beo, Story Studio, WhatsApp, Meta Ads). Akce: list, zapni.',
+      'list vrátí, co je k dispozici, jen jména. zapni s klíčem konektoru ti jeho nástroje přidá do tohohle běhu, hned, a pak je voláš jako mcp__<klic>__<nastroj>.',
+      'Zapínej až ve chvíli, kdy je opravdu potřebuješ, a jen ten jeden. Každý konektor posílá celý svůj seznam nástrojů do každého dalšího tahu, takže zbytečně zapnutý konektor stojí kontext po zbytek rozhovoru.',
+    ].join(' '),
+    {
+      action: z.enum(['list', 'zapni']),
+      klic: z.string().optional().describe('klíč konektoru ze seznamu, např. notion, beo, story-studio'),
+    },
+    async (args) => {
+      const api = ctx.connectors;
+      if (!api) return fail('v tomhle běhu konektory zapínat nejdou');
+      try {
+        if (args.action === 'list') {
+          const all = await api.list();
+          const active = new Set((api.active?.() || []).map((k) => String(k).toLowerCase()));
+          return text(all.map((c) => ({ klic: c.key, nazev: c.name, zapnuty: active.has(c.key.toLowerCase()) })));
+        }
+        if (!args.klic) return fail('klic chybí');
+        const keys = await api.enable(args.klic);
+        return text({ ok: true, zapnuto: keys, jak: `nástroje jsou v tomhle běhu jako mcp__${keys[0]}__*` });
+      } catch (err) {
+        return fail(err?.message || String(err));
+      }
+    },
+  );
+
+  return createSdkMcpServer({ name: 'beyond', version: '1.0.0', tools: [schedule, history, pamet, skillManage, tasks, content, message, connectors] });
 }
 
 /** Tool names as the SDK exposes them, for allow lists. */
-export const BEYOND_TOOL_NAMES = ['mcp__beyond__beyond_schedule', 'mcp__beyond__hledej_historii', 'mcp__beyond__pamet', 'mcp__beyond__skill_manage', 'mcp__beyond__ukoly', 'mcp__beyond__obsah', 'mcp__beyond__zprava'];
+export const BEYOND_TOOL_NAMES = ['mcp__beyond__beyond_schedule', 'mcp__beyond__hledej_historii', 'mcp__beyond__pamet', 'mcp__beyond__skill_manage', 'mcp__beyond__ukoly', 'mcp__beyond__obsah', 'mcp__beyond__zprava', 'mcp__beyond__konektory'];

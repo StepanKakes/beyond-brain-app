@@ -27,7 +27,9 @@ export default function ToolsPicker({ value, onChange }: { value: string[]; onCh
   }, [open]);
 
   const usable = (connectors || []).filter((c) => c.enabled);
-  const label = value.length === 0 ? 'Bez konektorů' : value.length === 1 ? nameOf(usable, value[0]) : `${value.length} konektory`;
+  // Empty is not "no tools": the brain fetches a connector itself when it
+  // needs one. This picker is for forcing one on from the start.
+  const label = value.length === 0 ? 'Konektory podle potřeby' : value.length === 1 ? nameOf(usable, value[0]) : `${value.length} konektory`;
 
   const toggle = (key: string) => {
     onChange(value.includes(key) ? value.filter((k) => k !== key) : [...value, key]);
@@ -45,6 +47,9 @@ export default function ToolsPicker({ value, onChange }: { value: string[]; onCh
           className="bb-glass absolute bottom-full left-0 z-20 mb-2 max-h-[300px] min-w-[260px] overflow-y-auto rounded-[14px] p-1.5"
           style={{ boxShadow: 'var(--bb-shadow-pop), inset 0 1px 0 0 var(--bb-rim)' }}
         >
+          <p className="px-2.5 pb-1.5 pt-1 text-[11.5px]" style={{ color: 'var(--bb-ink3)' }}>
+            Brain si konektor vezme sám, až ho bude potřebovat. Tady ho můžeš mít od začátku.
+          </p>
           {usable.length === 0 && <p className="px-2.5 py-2 text-[12.5px]" style={{ color: 'var(--bb-ink3)' }}>Žádný zapnutý konektor.</p>}
           {usable.map((c) => {
             const key = slug(c.name);
@@ -64,7 +69,7 @@ export default function ToolsPicker({ value, onChange }: { value: string[]; onCh
           })}
           {value.length > 0 && (
             <button type="button" className="mt-1 w-full rounded-[10px] px-2.5 py-2 text-left text-[12px]" style={{ color: 'var(--bb-ink3)' }} onClick={() => onChange([])}>
-              Žádný, jen brain
+              Zpět na podle potřeby
             </button>
           )}
         </div>
