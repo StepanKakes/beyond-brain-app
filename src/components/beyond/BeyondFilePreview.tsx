@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, ArrowUpRight, FileText, Loader2, Download, Copy, Check, PanelRight } from 'lucide-react';
+import { X, ArrowUpRight, FileText, Loader2, Download, Copy, Check, PanelRight } from './icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { authenticatedFetch } from '../../utils/api';

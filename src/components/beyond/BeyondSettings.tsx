@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, Sun, Moon, Monitor, Plug, Check } from 'lucide-react';
+import { X, Sun, Moon, Monitor, Plug, Check } from './icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import BeyondLoader, { LOADER_KINDS, LOADER_STORAGE_KEY, readLoaderKind, type LoaderKind } from './BeyondLoader';
 import { fetchBeyondModels, fallbackModelOptions, type BeyondModelOption } from './beyondModels';

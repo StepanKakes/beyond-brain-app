@@ -1,6 +1,6 @@
 import { useMemo, useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowUp, Mic } from 'lucide-react';
+import { ArrowUp, Mic } from './icons';
 import { useBeyondSpeech } from './useBeyondSpeech';
 
 /**

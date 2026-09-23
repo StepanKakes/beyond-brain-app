@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Check, Copy, Download, PanelRight } from 'lucide-react';
+import { Check, Copy, Download, PanelRight } from './icons';
 import { copyTextToClipboard } from '../../utils/clipboard';
 
 /**

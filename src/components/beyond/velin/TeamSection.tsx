@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { UserPlus } from 'lucide-react';
+import { UserPlus } from '../icons';
 
 import { authenticatedFetch } from '../../../utils/api';
 

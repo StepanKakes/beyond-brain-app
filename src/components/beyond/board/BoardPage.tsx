@@ -11,13 +11,13 @@ import { Column, Empty, Avatar } from '../ui';
 import { TaskCard } from './TaskCard';
 import { ClientCard } from './ClientCard';
 import { fetchBoard, moveClient, type BoardData } from './api';
-import { patchTask } from '../velin/api';
+import { patchTask, createQuick } from '../velin/api';
 import type { Task } from '../velin/api';
 
 const UNASSIGNED = '__nikdo__';
 
-/** The board itself; the velín owns the switch between its two faces. */
-export default function BoardPage({ mode, onOpenClient }: { mode: 'lide' | 'klienti'; onOpenClient: (slug: string) => void }) {
+/** The board itself; the velín owns the switch between its faces. */
+export default function BoardPage({ mode, onOpenClient }: { mode: 'lide' | 'stav' | 'klienti'; onOpenClient: (slug: string) => void }) {
   const [data, setData] = useState<BoardData | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -41,9 +41,9 @@ export default function BoardPage({ mode, onOpenClient }: { mode: 'lide' | 'klie
   if (err && !data) return <Empty>Nepovedlo se načíst: {err}</Empty>;
   if (!data) return <Empty>Načítám…</Empty>;
 
-  return mode === 'lide'
-    ? <TeamBoard data={data} onReload={load} setBusy={setBusy} />
-    : <ClientPipeline data={data} onReload={load} onOpenClient={onOpenClient} setBusy={setBusy} />;
+  if (mode === 'lide') return <TeamBoard data={data} onReload={load} setBusy={setBusy} />;
+  if (mode === 'stav') return <StateBoard data={data} onReload={load} setBusy={setBusy} />;
+  return <ClientPipeline data={data} onReload={load} onOpenClient={onOpenClient} setBusy={setBusy} />;
 }
 
 /* ------------------------------------------------------------------ */
@@ -60,6 +60,7 @@ function TeamBoard({ data, onReload, setBusy }: { data: BoardData; onReload: () 
   const [drag, setDrag] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const [showDone, setShowDone] = useState(false);
+  const [adding, setAdding] = useState<string | null>(null);
 
   const columns = useMemo(() => {
     const cols = data.people.map((p) => ({ key: p.key, person: p, tasks: [] as Task[] }));
@@ -106,6 +107,8 @@ function TeamBoard({ data, onReload, setBusy }: { data: BoardData; onReload: () 
             count={col.tasks.length}
             accent={col.person ? <Avatar name={col.person.displayName} src={col.person.avatar} size={22} dim={col.person.key !== data.me} /> : undefined}
             dropActive={over === col.key}
+            onAdd={col.person ? () => setAdding(col.key) : undefined}
+            addLabel="Úkol"
             onDragOver={(e) => { e.preventDefault(); setOver(col.key); }}
             onDragLeave={() => setOver((o) => (o === col.key ? null : o))}
             onDrop={(e) => {
@@ -115,6 +118,9 @@ function TeamBoard({ data, onReload, setBusy }: { data: BoardData; onReload: () 
               if (id && col.person) void assign(id, col.person.key);
             }}
           >
+            {adding === col.key && col.person && (
+              <AddCard owner={col.person.key} onDone={async () => { setAdding(null); await onReload(); }} onCancel={() => setAdding(null)} />
+            )}
             {col.tasks.length === 0 ? (
               <Empty>Nic tu není.</Empty>
             ) : (
@@ -139,6 +145,114 @@ function TeamBoard({ data, onReload, setBusy }: { data: BoardData; onReload: () 
         </button>
       </div>
     </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* by state                                                            */
+/* ------------------------------------------------------------------ */
+
+const STATES: { key: Task['state']; label: string; hint: string }[] = [
+  { key: 'none', label: 'Čeká', hint: 'Co se ještě nezačalo' },
+  { key: 'work', label: 'Dělá se', hint: 'Co je rozdělané' },
+  { key: 'done', label: 'Hotovo', hint: 'Co je za námi' },
+];
+
+/** The same tasks read the other way: what waits, what runs, what is done. */
+function StateBoard({ data, onReload, setBusy }: { data: BoardData; onReload: () => Promise<void>; setBusy: (b: boolean) => void }) {
+  const [drag, setDrag] = useState<string | null>(null);
+  const [over, setOver] = useState<string | null>(null);
+  const [adding, setAdding] = useState<string | null>(null);
+  const byPerson = useMemo(() => new Map(data.people.map((p) => [p.key, p])), [data.people]);
+
+  const move = async (id: string, state: Task['state']) => {
+    setBusy(true);
+    try {
+      await patchTask(id, { state });
+      await onReload();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="bb-board">
+      {STATES.map((st) => {
+        const cards = data.tasks.filter((t) => t.state === st.key).sort((a, b) => ORDER(a).localeCompare(ORDER(b)));
+        return (
+          <Column
+            key={st.key}
+            title={st.label}
+            count={cards.length}
+            accent={<span className={`bb-dot bb-dot--${st.key}`} aria-hidden="true" />}
+            dropActive={over === st.key}
+            onAdd={st.key === 'none' ? () => setAdding(st.key) : undefined}
+            addLabel="Úkol"
+            onDragOver={(e) => { e.preventDefault(); setOver(st.key); }}
+            onDragLeave={() => setOver((o) => (o === st.key ? null : o))}
+            onDrop={(e) => {
+              e.preventDefault();
+              setOver(null);
+              const id = e.dataTransfer.getData('text/beyond-task');
+              if (id) void move(id, st.key);
+            }}
+          >
+            {adding === st.key && (
+              <AddCard owner={data.me} onDone={async () => { setAdding(null); await onReload(); }} onCancel={() => setAdding(null)} />
+            )}
+            {cards.length === 0 ? (
+              <Empty>{st.hint}</Empty>
+            ) : (
+              cards.map((t) => (
+                <TaskCard
+                  key={t.id}
+                  task={t}
+                  person={byPerson.get(t.owner)}
+                  dragging={drag === t.id}
+                  onOpen={() => { /* the card opens where it lives, in the list */ }}
+                  onToggle={(next) => void move(t.id, next)}
+                  onDragStart={(e) => { e.dataTransfer.setData('text/beyond-task', t.id); e.dataTransfer.effectAllowed = 'move'; setDrag(t.id); }}
+                  onDragEnd={() => setDrag(null)}
+                />
+              ))
+            )}
+          </Column>
+        );
+      })}
+    </div>
+  );
+}
+
+/** One line, Enter adds it. The same words the velín's quick add understands. */
+function AddCard({ owner, onDone, onCancel }: { owner: string; onDone: () => Promise<void>; onCancel: () => void }) {
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    const q = text.trim();
+    if (!q || busy) return;
+    setBusy(true);
+    try {
+      await createQuick(q, owner);
+      await onDone();
+    } catch {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="bb-c bb-addc">
+      <input
+        autoFocus
+        value={text}
+        disabled={busy}
+        placeholder="Co je potřeba, třeba: zítra zavolat Kubovi p1"
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); void submit(); }
+          if (e.key === 'Escape') onCancel();
+        }}
+        onBlur={() => { if (!text.trim()) onCancel(); }}
+      />
+    </div>
   );
 }
 

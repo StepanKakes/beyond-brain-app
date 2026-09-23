@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronRight, Copy, Check, ExternalLink, FileText, Folder, FolderOpen, Search } from 'lucide-react';
+import { ChevronRight, Copy, Check, ExternalLink, FileText, Folder, FolderOpen, Search } from '../icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 

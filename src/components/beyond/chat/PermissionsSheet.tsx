@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Trash2 } from 'lucide-react';
+import { Trash2 } from '../icons';
 
 /**
  * Permissions sheet — list and revoke the saved allowlist entries that let the

@@ -13,7 +13,7 @@ import {
   Sparkles,
   PanelRight,
   Mic,
-} from 'lucide-react';
+} from './icons';
 
 import { CLAUDE_MODELS } from '../../../shared/modelConstants';
 import { useWebSocket } from '../../contexts/WebSocketContext';

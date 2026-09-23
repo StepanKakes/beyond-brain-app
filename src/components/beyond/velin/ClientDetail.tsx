@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { ArrowLeft, ExternalLink, MessageSquare } from 'lucide-react';
+import { ArrowLeft, ExternalLink, MessageSquare } from '../icons';
 
 import { fetchClient, type ClientDetail as Detail, type Promise_, type TimelineItem } from './api';
 import {

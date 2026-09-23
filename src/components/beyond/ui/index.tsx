@@ -8,6 +8,8 @@
  */
 import type { ReactNode } from 'react';
 
+import { Plus } from '../icons';
+
 type Tone = 'plain' | 'urgent' | 'watch' | 'work' | 'done' | 'p1' | 'p2' | 'p3' | 'p4';
 
 /** A raised surface. `onClick` makes the whole thing the target, not its text. */
@@ -58,15 +60,19 @@ export function Avatar({ name, src, size = 24, dim }: { name: string; src?: stri
   );
 }
 
-/** One column of a board: a heading that counts, a body that scrolls. */
+/**
+ * One column of a board: a heading that counts, a body that scrolls, and a
+ * quiet row at the bottom for adding to it.
+ */
 export function Column({
-  title, count, accent, children, footer, onDrop, dropActive, onDragOver, onDragLeave,
+  title, count, accent, children, onAdd, addLabel = 'Přidat', onDrop, dropActive, onDragOver, onDragLeave,
 }: {
   title: ReactNode;
   count?: number;
   accent?: ReactNode;
   children: ReactNode;
-  footer?: ReactNode;
+  onAdd?: () => void;
+  addLabel?: string;
   onDrop?: (e: React.DragEvent) => void;
   dropActive?: boolean;
   onDragOver?: (e: React.DragEvent) => void;
@@ -78,9 +84,19 @@ export function Column({
         {accent}
         <h3>{title}</h3>
         {count != null && <span className="bb-col__n">{count}</span>}
+        {onAdd && (
+          <button type="button" className="bb-col__add" onClick={onAdd} aria-label={addLabel} title={addLabel}>
+            <Plus size={14} />
+          </button>
+        )}
       </header>
       <div className="bb-col__b">{children}</div>
-      {footer && <div className="bb-col__f">{footer}</div>}
+      {onAdd && (
+        <button type="button" className="bb-col__f" onClick={onAdd}>
+          <Plus size={14} />
+          <span>{addLabel}</span>
+        </button>
+      )}
     </section>
   );
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { PanelLeft } from 'lucide-react';
+import { PanelLeft } from './icons';
 import BeyondSidebarPreview from './BeyondSidebarPreview';
 
 /**

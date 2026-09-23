@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 import {
-  Search, Plus, Check, MessagesSquare, Trash2, Plug,
+  Search, Plus, Trash2, Plug,
   PanelLeftClose, Settings, Sun, Moon,
   Gauge, Users, CalendarDays, MessageSquare, Bot, FolderTree, Clapperboard, Images, ChevronsUpDown,
-} from 'lucide-react';
+} from './icons';
 import BeyondBrainMark from './BeyondBrainMark';
 import { useBeyondClients } from './useBeyondClients';
 import BeyondRepoStatus from './BeyondRepoStatus';
@@ -259,11 +259,6 @@ function SessionRow({
         onClick={onClick}
         title={session.title}
       >
-        {active ? (
-          <Check size={12} strokeWidth={2.2} className="flex-none" style={{ color: 'var(--bb-ink)' }} />
-        ) : (
-          <MessagesSquare size={12} strokeWidth={1.8} className="flex-none" style={{ color: 'var(--bb-ink3)' }} />
-        )}
         <span className="bb-subrow__t" style={active ? { color: 'var(--bb-ink)', fontWeight: 500 } : undefined}>
           {session.title}
         </span>

@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Check, Pencil, X } from 'lucide-react';
+import { Check, Pencil, X } from '../icons';
 
 import { authenticatedFetch } from '../../../utils/api';
 import { Empty, SectionHead, ago, usePolled } from './bits';

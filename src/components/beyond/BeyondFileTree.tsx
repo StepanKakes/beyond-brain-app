@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ChevronRight, FileText, Folder, FolderOpen } from 'lucide-react';
+import { ChevronRight, FileText, Folder, FolderOpen } from './icons';
 import { authenticatedFetch } from '../../utils/api';
 
 /**

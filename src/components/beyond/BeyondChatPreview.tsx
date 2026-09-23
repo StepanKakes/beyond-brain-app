@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowUp, Paperclip } from 'lucide-react';
+import { ArrowUp, Paperclip } from './icons';
 import BeyondGlyph from './BeyondGlyph';
 
 /**

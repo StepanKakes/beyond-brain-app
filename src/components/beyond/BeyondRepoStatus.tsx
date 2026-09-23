@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { GitBranch, RefreshCw, ArrowUp, ArrowDown, AlertCircle } from 'lucide-react';
+import { GitBranch, RefreshCw, ArrowUp, ArrowDown, AlertCircle } from './icons';
 import { authenticatedFetch } from '../../utils/api';
 
 /**

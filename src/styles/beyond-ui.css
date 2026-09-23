@@ -65,7 +65,9 @@
   grid-auto-columns: 300px;
   justify-content: start;
   gap: 14px;
-  align-items: stretch;
+  /* A column is as tall as what it holds, and scrolls inside only when that
+     is more than the screen. An empty column is not a tall empty box. */
+  align-items: start;
   overflow-x: auto;
   overflow-y: hidden;
   padding-bottom: 8px;
@@ -73,7 +75,7 @@
 }
 .bb-col {
   display: flex; flex-direction: column;
-  min-width: 0; min-height: 0;
+  min-width: 0; min-height: 0; max-height: 100%;
   background: var(--bb-bg2);
   border: 1px solid transparent;
   border-radius: 16px;
@@ -85,7 +87,16 @@
 .bb-col__h h3 { margin: 0; font-size: 13.5px; font-weight: 600; color: var(--bb-ink); letter-spacing: -.01em; }
 .bb-col__n { font-size: 12px; color: var(--bb-ink3); font-variant-numeric: tabular-nums; }
 .bb-col__b { display: flex; flex-direction: column; gap: 8px; min-height: 8px; overflow-y: auto; scrollbar-width: thin; padding: 1px; margin: -1px; }
-.bb-col__f { padding-top: 8px; }
+/* The add row, quiet until you want it, like the reference board. */
+.bb-col__add { margin-left: auto; width: 22px; height: 22px; display: grid; place-items: center; border: 0; border-radius: 7px;
+  background: none; color: var(--bb-ink3); cursor: pointer; opacity: 0; transition: opacity var(--bb-t-fast) ease, background var(--bb-t-fast) ease; }
+.bb-col:hover .bb-col__add { opacity: 1; }
+.bb-col__add:hover { background: var(--bb-panel2); color: var(--bb-ink); }
+.bb-col__f { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding: 8px 9px; border: 0; border-radius: 10px;
+  background: none; font: inherit; font-size: 12.5px; color: var(--bb-ink3); cursor: pointer; transition: background var(--bb-t-fast) ease, color var(--bb-t-fast) ease; }
+.bb-col__f:hover { background: var(--bb-panel2); color: var(--bb-ink); }
+.bb-addc input { width: 100%; border: 0; background: none; font: inherit; font-size: 13px; color: var(--bb-ink); outline: none; }
+.bb-addc input::placeholder { color: var(--bb-ink3); }
 
 /* --- misc ----------------------------------------------------------------- */
 .bb-empty { margin: 0; padding: 10px 4px; font-size: 12.5px; color: var(--bb-ink3); }
@@ -115,7 +126,12 @@
 /* The dot a tag carries, so a label is read by colour before it is read. */
 .bb-tag { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
 .bb-tc__top { display: flex; align-items: flex-start; gap: 9px; }
-.bb-tc__t { margin: 0; font-size: 13px; font-weight: 500; line-height: 1.38; color: var(--bb-ink); }
+/* Three lines and the rest is in the task itself; a board is for scanning. */
+.bb-tc__t { margin: 0; font-size: 13px; font-weight: 500; line-height: 1.38; color: var(--bb-ink);
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+/* What is done steps back: no priority, no colour, just the record of it. */
+.bb-tc--done { background: transparent; border-color: var(--bb-line2); box-shadow: none; }
+.bb-tc--done .bb-tc__t, .bb-tc--done .bb-tc__head { color: var(--bb-ink3); }
 .bb-tc__t--done { color: var(--bb-ink3); text-decoration: line-through; }
 .bb-tc__meta { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0 0 25px; }
 .bb-tc__meta:empty { display: none; }
@@ -149,3 +165,6 @@
 .bb-dot--drhne    { background: var(--bb-warn); }
 .bb-dot--riziko   { background: var(--bb-danger); }
 .bb-dot--dobehl   { background: var(--bb-ink3); }
+.bb-dot--none { background: var(--bb-ink3); }
+.bb-dot--work { background: var(--bb-work); }
+.bb-dot--done { background: var(--bb-p3); }

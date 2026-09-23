@@ -6,7 +6,7 @@ import {
   Globe,
   MessageCircle,
   Wrench,
-} from 'lucide-react';
+} from '../icons';
 
 /**
  * Beyond Brain chat — how a tool call is named, iconed and previewed.

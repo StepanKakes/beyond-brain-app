@@ -706,6 +706,7 @@ function QuickAdd({ me, owner, people, onAdded }: { me: string; owner: string; p
 const MODE_KEY = 'beyond:velin-mode';
 const MODES = [
   { key: 'dnes', label: 'Dnes' },
+  { key: 'stav', label: 'Stav' },
   { key: 'tym', label: 'Tým' },
   { key: 'klienti', label: 'Klienti' },
 ];
@@ -780,7 +781,7 @@ export default function VelinPage({ onOpenClient, onOpenCalls, onOpenChat }: Pro
             <Tabs items={MODES} value={mode} onChange={setMode} />
             <button type="button" className="bb-pill" onClick={onOpenChat}>Řekni agentovi</button>
           </header>
-          <BoardPage mode={mode === 'tym' ? 'lide' : 'klienti'} onOpenClient={onOpenClient} />
+          <BoardPage mode={mode === 'tym' ? 'lide' : mode === 'stav' ? 'stav' : 'klienti'} onOpenClient={onOpenClient} />
         </div>
       </div>
     );

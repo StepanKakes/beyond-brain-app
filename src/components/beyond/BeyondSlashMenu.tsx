@@ -1,4 +1,4 @@
-import { Terminal, Puzzle, Sparkles } from 'lucide-react';
+import { Terminal, Puzzle, Sparkles } from './icons';
 import { commandKindLabel, type BeyondSlashCommand } from './beyondCommands';
 
 /**

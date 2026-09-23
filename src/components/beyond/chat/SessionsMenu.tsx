@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Check, MessagesSquare, Plus, Trash2 } from 'lucide-react';
+import { Check, MessagesSquare, Plus, Trash2 } from '../icons';
 
 import type { BeyondSession } from '../beyondSessionsApi';
 import { relativeTime } from './format';

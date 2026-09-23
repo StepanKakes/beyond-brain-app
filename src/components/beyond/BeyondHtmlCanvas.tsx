@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, Download, Copy, Check, Code2, Eye, ExternalLink, RotateCw } from 'lucide-react';
+import { X, Download, Copy, Check, Code2, Eye, ExternalLink, RotateCw } from './icons';
 import { copyTextToClipboard } from '../../utils/clipboard';
 import BeyondCodeBlock from './BeyondCodeBlock';
 

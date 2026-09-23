@@ -14,7 +14,7 @@ import {
   ChevronDown,
   ShieldCheck,
   Zap,
-} from 'lucide-react';
+} from './icons';
 import { useBeyondConnectors } from './useBeyondConnectors';
 import { applyToCurrentChat } from './beyondConnectorsApi';
 import type { Connector, ConnectorStatus, Preset } from './beyondConnectorsApi';

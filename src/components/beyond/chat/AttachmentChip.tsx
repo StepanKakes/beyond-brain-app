@@ -1,4 +1,4 @@
-import { File as FileIcon, X } from 'lucide-react';
+import { File as FileIcon, X } from '../icons';
 
 import type { PendingAttachment } from './types';
 
