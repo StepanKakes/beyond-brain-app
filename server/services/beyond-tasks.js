@@ -159,6 +159,7 @@ export async function createTask({
   repeat = null,
   continuity = false,
   noAgent = false,
+  mcp = [],
   createdBy = 'app',
   origin = null,
 }) {
@@ -185,6 +186,8 @@ export async function createTask({
     enabled: true,
     continuity: Boolean(continuity),
     noAgent: Boolean(noAgent),
+    /** Connectors this task may load; empty means the brain's own tools only. */
+    mcp: Array.isArray(mcp) ? mcp.map((m) => String(m)) : [],
     createdBy: String(createdBy),
     createdAt: new Date().toISOString(),
     origin: origin || null,

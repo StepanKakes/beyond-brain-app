@@ -574,6 +574,24 @@ async function cleanupTempFiles(tempImagePaths, tempDir) {
  * @param {string} cwd - Current working directory for project-specific configs
  * @returns {Object|null} MCP servers object or null if none found
  */
+/**
+ * Keep only the servers a caller asked for, by connector key. Every server's
+ * tool schemas ride along on every single turn, so this is the difference
+ * between a chat that starts at 20k tokens and one that starts at 150k.
+ * `want` empty means none; `null`/undefined means no opinion, keep them all.
+ */
+function pickMcpServers(servers, want) {
+  if (!servers || !Array.isArray(want)) return servers;
+  const wanted = want.map((k) => String(k).toLowerCase()).filter(Boolean);
+  if (!wanted.length) return null;
+  const picked = {};
+  for (const [key, val] of Object.entries(servers)) {
+    const k = key.toLowerCase();
+    if (wanted.some((w) => k === w || k.startsWith(`${w}-`) || k.replace(/[-_]/g, '') === w.replace(/[-_]/g, ''))) picked[key] = val;
+  }
+  return Object.keys(picked).length ? picked : null;
+}
+
 async function loadMcpConfig(cwd) {
   try {
     // Normalize cwd through resolveSpawnCwd so the upstream-hardcoded macOS path
@@ -689,11 +707,22 @@ function mcpAuthFingerprint(servers) {
  * auth fingerprint actually changed, re-inject it into the running session with
  * `setMcpServers`. No change → no reconnect churn.
  */
+/**
+ * Which connectors this chat asked for. `BEYOND_CHAT_MCP` sets what a chat
+ * starts with when the screen says nothing (empty by default: the brain's own
+ * tools are always there, everything else is a choice).
+ */
+function chatMcpAllow(options = {}) {
+  if (Array.isArray(options.connectors)) return options.connectors.map((c) => String(c));
+  const fromEnv = String(process.env.BEYOND_CHAT_MCP || '').trim();
+  return fromEnv ? fromEnv.split(/[,\s]+/).filter(Boolean) : [];
+}
+
 async function refreshLiveMcpIfNeeded(entry) {
   try {
     const inst = entry?.queryInstance;
     if (!inst || typeof inst.setMcpServers !== 'function') return;
-    const servers = (await loadMcpConfig(entry.initialOptions?.cwd)) || {};
+    const servers = pickMcpServers(await loadMcpConfig(entry.initialOptions?.cwd), entry.mcpAllow) || {};
     const fp = mcpAuthFingerprint(servers);
     if (fp === entry.mcpAuthFingerprint) return; // tokens + server set unchanged
     await inst.setMcpServers(servers);
@@ -959,6 +988,13 @@ function runTurnOnBeyondStream(entry, command, options, ws) {
     // the resolver above, which is fine — order to the SDK is preserved by
     // the inputQueue, not by call order. First refresh MCP OAuth tokens so a
     // long-lived session never sends an expired bearer (BEO/Notion/etc.).
+    // The person can add or drop a connector mid-chat; the session picks it up
+    // on the next turn instead of needing a new chat.
+    const wantNow = chatMcpAllow(options);
+    if (Array.isArray(options.connectors) && wantNow.join(',') !== (entry.mcpAllow || []).join(',')) {
+      entry.mcpAllow = wantNow;
+      entry.mcpAuthFingerprint = null;
+    }
     refreshLiveMcpIfNeeded(entry)
       .then(() => buildBeyondUserMessage(command, options, entry))
       .then((msg) => {
@@ -1085,8 +1121,11 @@ async function startNewBeyondStream(command, options, ws) {
   const sdkOptions = mapCliOptionsToSDK(options);
   entry.sdkOptions = sdkOptions;
 
-  // MCP config + strict mode (same as one-shot path)
-  const mcpServers = await loadMcpConfig(options.cwd);
+  // MCP config + strict mode (same as one-shot path). A chat carries the list
+  // of connectors it wants; the rest never reach the model, because their tool
+  // schemas would be re-sent with every turn.
+  entry.mcpAllow = chatMcpAllow(options);
+  const mcpServers = pickMcpServers(await loadMcpConfig(options.cwd), entry.mcpAllow);
   if (mcpServers) {
     sdkOptions.mcpServers = mcpServers;
   }
@@ -2052,13 +2091,7 @@ async function runSdkOneShot({
   // tool schemas ride along on every turn, so forty Beo tools on a job that
   // reads a transcript is the difference between a cheap run and a dear one.
   if (mcpServers && Array.isArray(beyond?.mcp)) {
-    const want = beyond.mcp.map((k) => String(k).toLowerCase());
-    const picked = {};
-    for (const [key, val] of Object.entries(mcpServers)) {
-      const k = key.toLowerCase();
-      if (want.some((w) => k === w || k.startsWith(`${w}-`) || k.replace(/[-_]/g, '') === w.replace(/[-_]/g, ''))) picked[key] = val;
-    }
-    mcpServers = Object.keys(picked).length ? picked : null;
+    mcpServers = pickMcpServers(mcpServers, beyond.mcp);
   }
   if (mcpServers) {
     sdkOptions.mcpServers = mcpServers;

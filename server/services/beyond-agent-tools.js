@@ -71,6 +71,7 @@ export function buildBeyondToolsServer(ctx = {}) {
       repeatTimes: z.number().int().positive().optional().describe('kolikrát celkem proběhnout, pak se vypne'),
       continuity: z.boolean().optional(),
       noAgent: z.boolean().optional(),
+      mcp: z.array(z.string()).optional().describe('konektory, které úloha potřebuje (notion, beo, story-studio, waha). Prázdné = žádný, jen brain. Každý konektor posílá svůj seznam nástrojů do každého běhu, tak jmenuj jen ty nutné.'),
     },
     async (args) => {
       try {
@@ -103,6 +104,7 @@ export function buildBeyondToolsServer(ctx = {}) {
             repeat: args.repeatTimes ? { times: args.repeatTimes } : null,
             continuity: args.continuity,
             noAgent: args.noAgent,
+            mcp: Array.isArray(args.mcp) ? args.mcp : [],
             createdBy: actor,
             origin: ctx.origin || null,
           });

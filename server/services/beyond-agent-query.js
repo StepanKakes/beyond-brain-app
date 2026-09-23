@@ -201,6 +201,10 @@ export async function askAgent({ text, source = 'unknown', meta = {}, slug: expl
         label: slug || null,
         origin: meta?.telegramChatId != null ? { telegramChatId: String(meta.telegramChatId) } : null,
         allowSchedule: true,
+        // Telegram and the velín ask the brain about the brain. Connectors
+        // would put every one of their tool lists into every turn; the ones a
+        // question genuinely needs are named in BEYOND_AGENT_MCP.
+        mcp: String(process.env.BEYOND_AGENT_MCP || '').split(/[,\s]+/).filter(Boolean),
       },
     });
     if (progress) progress.finish().catch((err) => console.warn('[agent] progress.finish failed', err));

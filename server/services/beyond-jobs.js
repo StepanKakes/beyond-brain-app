@@ -1581,7 +1581,14 @@ function runnableFromTask(task) {
         ]
           .filter((l) => l !== null)
           .join('\n');
-        const result = await runAgent(prompt, { timeoutMs: 10 * 60 * 1000 });
+        // A task brings only the connectors it names (`mcp: ["notion"]` in
+        // system/ulohy.json). Carrying all of them put every connector's tool
+        // list into every run of every task, which is where the million-token
+        // windows came from.
+        const result = await runAgent(prompt, {
+          timeoutMs: 10 * 60 * 1000,
+          mcp: Array.isArray(task.mcp) ? task.mcp : [],
+        });
         text = String(result.text || '').trim();
       }
 

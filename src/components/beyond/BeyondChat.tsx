@@ -48,6 +48,7 @@ import { useBrainPath } from './useBrainPath';
 
 import MessageBlock from './chat/MessageBlock';
 import ModelPicker from './chat/ModelPicker';
+import ToolsPicker from './chat/ToolsPicker';
 import TokenBudgetChip from './chat/TokenBudgetChip';
 import AskPanel from './chat/AskPanel';
 import PermissionPanel from './chat/PermissionPanel';
@@ -117,6 +118,9 @@ type Props = {
    *  Only consulted on mount; bump the parent's epoch key to apply a new value. */
   sessionOverride?: { uuid: string | null };
 };
+
+/** Which connectors the last chat used, so the next one starts the same way. */
+const CONNECTORS_KEY = 'beyond:chat-connectors';
 
 export default function BeyondChat({ client, initialPrompt, sessionOverride }: Props) {
   const { sendMessage, latestMessage, isConnected, subscribeMessages } = useWebSocket();
@@ -190,6 +194,21 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
   // Model options shown in the picker. Start from the static fallback, then
   // replace with the live list (real version names) once it loads.
   const [modelOptions, setModelOptions] = useState<BeyondModelOption[]>(() => fallbackModelOptions());
+  // Which connectors this chat may use. Off by default: their tool lists are
+  // re-sent every turn, and most chats never touch them.
+  const [connectors, setConnectors] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem(CONNECTORS_KEY);
+      return raw ? (JSON.parse(raw) as string[]) : [];
+    } catch {
+      return [];
+    }
+  });
+  const connectorsRef = useRef(connectors);
+  connectorsRef.current = connectors;
+  useEffect(() => {
+    try { localStorage.setItem(CONNECTORS_KEY, JSON.stringify(connectors)); } catch { /* fine without */ }
+  }, [connectors]);
   const [permsOpen, setPermsOpen] = useState(false);
   // Thinking-loader animation (Settings → Animace přemýšlení), shared via events.
   const [loader, setLoader] = useState<LoaderKind>(() => readLoaderKind());
@@ -1125,6 +1144,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
             ? { projectPath: brainPathRef.current, cwd: brainPathRef.current }
             : {}),
           model: modelRef.current,
+          connectors: connectorsRef.current,
           ...(resumeId ? { sessionId: resumeId, resume: true } : {}),
           sessionSummary: `Beyond · ${client.name}`,
           ...(images.length > 0 ? { images } : {}),
@@ -1699,6 +1719,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
               </button>
             )}
             <ModelPicker value={model} options={modelOptions} onChange={changeModel} />
+            <ToolsPicker value={connectors} onChange={setConnectors} />
             <TokenBudgetChip budget={tokenBudget} />
             <span className="bb-composer__hint">Enter odešle · Shift + Enter nový řádek</span>
             {thinking ? (
