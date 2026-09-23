@@ -424,6 +424,9 @@ body { background: var(--bb-bg) !important; color: var(--bb-ink); font-family: v
 .bb-send:active { transform: scale(.94); }
 .bb-modelbtn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 999px; border: 1px solid var(--bb-line); background: transparent; color: var(--bb-ink); font-size: 13px; font-weight: 500; cursor: pointer; transition: background var(--bb-t-fast) ease; }
 .bb-modelbtn:hover { background: var(--bb-panel2); }
+.bb-modelbtn__own { margin-top: 4px; padding: 6px 4px 2px; border-top: 1px solid var(--bb-line2); }
+.bb-modelbtn__own input { width: 100%; border: 0; background: none; outline: 0; font: inherit; font-size: 12.5px; color: var(--bb-ink); padding: 4px 6px; }
+.bb-modelbtn__own input::placeholder { color: var(--bb-ink3); }
 .bb-disclaimer { text-align: center; margin-top: 10px; font-size: 11.5px; color: var(--bb-ink3); }
 .bb-mic { display: flex; align-items: center; gap: 12px; padding: 16px 18px 4px; animation: bbFade .3s ease; }
 .bb-mic__bars { display: flex; align-items: center; gap: 3px; height: 22px; }

@@ -30,6 +30,7 @@ export default function ModelPicker({
 
   const current = options.find((o) => o.value === value);
   const chipLabel = current?.short || value;
+  const [custom, setCustom] = useState('');
 
   return (
     <div ref={ref} className="relative">
@@ -83,6 +84,26 @@ export default function ModelPicker({
               )}
             </button>
           ))}
+          {/* The list is whatever Claude Code on the box offers. When a model
+              exists that it does not list yet, its id can be typed in; a name
+              it refuses comes back as an error in the chat, not silence. */}
+          <div className="bb-modelbtn__own">
+            <input
+              type="text"
+              value={custom}
+              placeholder="Jiný model, např. claude-sonnet-5"
+              onChange={(e) => setCustom(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter') return;
+                e.preventDefault();
+                const id = custom.trim();
+                if (!id) return;
+                onChange(id);
+                setCustom('');
+                setOpen(false);
+              }}
+            />
+          </div>
         </div>
       )}
     </div>
