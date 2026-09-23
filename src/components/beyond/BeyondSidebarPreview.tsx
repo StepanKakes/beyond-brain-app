@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import {
   Search, Plus, Check, MessagesSquare, Trash2, Plug,
   PanelLeftClose, Settings, Sun, Moon,
-  Gauge, Users, CalendarDays, MessageSquare, Bot, FolderTree, Clapperboard, Images,
+  Gauge, Users, CalendarDays, MessageSquare, Bot, FolderTree, Clapperboard, Images, Columns3,
 } from 'lucide-react';
 import BeyondBrainMark from './BeyondBrainMark';
 import { useBeyondClients } from './useBeyondClients';
@@ -30,6 +30,7 @@ type Props = {
   onOpenBoard?: () => void;
   onOpenCalls?: () => void;
   onOpenAgent?: () => void;
+  onOpenTabule?: () => void;
   onOpenFiles?: () => void;
   onOpenObsah?: () => void;
   onOpenStudio?: () => void;
@@ -50,6 +51,7 @@ export default function BeyondSidebarPreview({
   onOpenBoard,
   onOpenCalls,
   onOpenAgent,
+  onOpenTabule,
   onOpenFiles,
   onOpenObsah,
   onOpenStudio,
@@ -142,6 +144,19 @@ export default function BeyondSidebarPreview({
               <Users size={15} strokeWidth={1.8} style={{ color: 'var(--bb-ink2)' }} />
             </span>
             <span className="bb-row__label">Klienti</span>
+          </button>
+        )}
+        {onOpenTabule && (
+          <button
+            type="button"
+            className="bb-row"
+            aria-current={section === 'tabule' ? 'true' : undefined}
+            onClick={onOpenTabule}
+          >
+            <span className="bb-avatar" style={{ background: 'transparent', boxShadow: 'none' }}>
+              <Columns3 size={15} strokeWidth={1.8} style={{ color: 'var(--bb-ink2)' }} />
+            </span>
+            <span className="bb-row__label">Tabule</span>
           </button>
         )}
         {onOpenCalls && (

@@ -10,15 +10,11 @@ export const useTheme = () => {
   return context;
 };
 
-/**
- * Beyond Brain auto-theme heuristic: light during 5-22, dark 22-5.
- * Falls back to system preference if no time data, then user override.
- */
-const isNightHour = (hour) => hour >= 22 || hour < 5;
-
-const computeAutoTheme = () => {
-  return isNightHour(new Date().getHours());
-};
+/** "Auto" follows the operating system; the app itself is a light app. */
+const systemPrefersDark = () =>
+  typeof window !== 'undefined' && window.matchMedia
+    ? window.matchMedia('(prefers-color-scheme: dark)').matches
+    : false;
 
 export const ThemeProvider = ({ children }) => {
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -32,8 +28,8 @@ export const ThemeProvider = ({ children }) => {
     if (savedTheme === 'dark' || savedTheme === 'light') {
       return savedTheme === 'dark';
     }
-    // No explicit override → use Beyond auto-by-hour
-    return computeAutoTheme();
+    // Light is the app's own look; dark is a choice, not a time of day.
+    return false;
   });
 
   // Update document class and localStorage when theme changes
@@ -69,7 +65,7 @@ export const ThemeProvider = ({ children }) => {
     const id = window.setInterval(() => {
       const saved = localStorage.getItem('theme');
       if (saved === 'dark' || saved === 'light') return;
-      setIsDarkMode(computeAutoTheme());
+      setIsDarkMode(systemPrefersDark());
     }, 10 * 60 * 1000);
     return () => window.clearInterval(id);
   }, []);
@@ -81,8 +77,7 @@ export const ThemeProvider = ({ children }) => {
     const handleChange = (_e) => {
       const savedTheme = localStorage.getItem('theme');
       if (savedTheme === 'dark' || savedTheme === 'light') return;
-      // Prefer time-of-day over OS for Beyond vibe; fall back to OS if hour info missing
-      setIsDarkMode(computeAutoTheme());
+      setIsDarkMode(systemPrefersDark());
     };
     mediaQuery.addEventListener('change', handleChange);
     return () => mediaQuery.removeEventListener('change', handleChange);
@@ -100,14 +95,14 @@ export const ThemeProvider = ({ children }) => {
   // Allow the user to clear the override and go back to auto
   const resetThemePreference = () => {
     localStorage.removeItem('theme');
-    setIsDarkMode(computeAutoTheme());
+    setIsDarkMode(systemPrefersDark());
   };
 
   // Explicit 3-way setter used by the Settings dialog (auto | light | dark).
   const setTheme = (mode) => {
     if (mode === 'auto') {
       localStorage.removeItem('theme');
-      setIsDarkMode(computeAutoTheme());
+      setIsDarkMode(systemPrefersDark());
     } else {
       localStorage.setItem('theme', mode);
       setIsDarkMode(mode === 'dark');

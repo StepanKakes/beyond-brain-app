@@ -12,13 +12,15 @@
 
 /* ---------------------------------------------------------------- tokens --- */
 :root {
-  /* Surfaces — clean, near-opaque (the handoff "Glass" theme is not see-through) */
-  --bb-bg:      #FFFFFF;
-  --bb-bg2:     #F3F4F7;
-  --bb-panel:   #FCFCFDF2;   /* sidebar / header — near-opaque, hint of blur */
-  --bb-panel2:  #F3F4F7;     /* hover fills, inset fields */
+  /* Surfaces. A quiet warm-grey canvas with white raised on top of it: the
+     card is the object, the page is the table it lies on. Pure white
+     everywhere reads as an unstyled document and loses every card edge. */
+  --bb-bg:      #F6F6F4;
+  --bb-bg2:     #EFEFEC;     /* wells: board columns, inset panels */
+  --bb-panel:   #FBFBFAF2;   /* sidebar / header — near-opaque, hint of blur */
+  --bb-panel2:  #F0F0ED;     /* hover fills, inset fields */
   --bb-raise:   #FFFFFF;     /* cards, menus, composer */
-  --bb-bubble:  #F2F3F6;     /* user message bubble */
+  --bb-bubble:  #EFEFEC;     /* user message bubble */
 
   /* Ink */
   --bb-ink:  #14161A;
@@ -26,8 +28,8 @@
   --bb-ink3: #A2A6AF;
 
   /* Lines — subtle dark hairline */
-  --bb-line:  rgba(20, 22, 26, .09);
-  --bb-line2: rgba(20, 22, 26, .05);
+  --bb-line:  rgba(20, 22, 26, .10);
+  --bb-line2: rgba(20, 22, 26, .06);
   --bb-edge:  rgba(20, 22, 26, .09);
   --bb-rim:   rgba(20, 22, 26, .09);
 
@@ -650,7 +652,7 @@ body { background: var(--bb-bg) !important; color: var(--bb-ink); font-family: v
 /* The client a task belongs to. Its own class: .bb-uk__cl is also the wide
    row on the client board further down, and that grid was landing here. */
 .bb-uk__who { border: 0; background: none; padding: 0; font: inherit; font-size: 12px; font-weight: 500; color: var(--bb-ink2); white-space: nowrap; cursor: pointer; }
-.bb-uk__who:hover { color: var(--bb-ink); text-decoration: underline; text-underline-offset: 2px; }
+.bb-uk__who:hover { color: var(--bb-ink); }
 .bb-uk__brain { color: var(--bb-ink2); display: inline-flex; align-items: center; gap: 5px; }
 .bb-uk__brain::before { content: ""; width: 6px; height: 6px; border-radius: 2px; background: var(--bb-ink2); opacity: .55; }
 .bb-uk__x { border: 0; background: none; padding: 0; font: inherit; font-size: 12px; color: var(--bb-ink3); cursor: pointer; opacity: 0; transition: opacity .15s ease; }
@@ -671,7 +673,7 @@ body { background: var(--bb-bg) !important; color: var(--bb-ink); font-family: v
 .bb-uk__pb--navrh { color: var(--bb-ink2); }
 .bb-uk__pb--full { display: block; -webkit-line-clamp: unset; cursor: default; grid-column: 1 / -1; }
 .bb-uk__expand { border: 0; background: none; padding: 0; font: inherit; font-size: 12px; color: var(--bb-p3); cursor: pointer; margin-left: auto; }
-.bb-uk__expand:hover { text-decoration: underline; }
+.bb-uk__expand:hover { color: var(--bb-ink); }
 .bb-uk__prep--open { grid-template-columns: 1fr; }
 .bb-uk__prep--open .bb-uk__pa { grid-column: 1; grid-row: auto; justify-content: flex-start; padding-top: 2px; }
 .bb-uk__edit { grid-column: 1 / -1; width: 100%; min-height: 160px; font: inherit; font-size: 14px; line-height: 1.5; color: var(--bb-ink); background: var(--bb-panel2); border: 1px solid var(--bb-line); border-radius: 10px; padding: 10px 12px; resize: vertical; }
@@ -703,7 +705,7 @@ html.dark .bb-uk__wa, .dark .bb-uk__wa { background: #005C4B; color: #E9EDEF; }
 .bb-uk__call:last-of-type { border-bottom: 0; }
 .bb-uk__tm { font-weight: 600; color: var(--bb-ink); }
 .bb-uk__nm { border: 0; background: none; padding: 0; font: inherit; font-weight: 500; color: var(--bb-ink); cursor: pointer; text-align: left; }
-.bb-uk__nm:hover { text-decoration: underline; }
+.bb-uk__nm:hover { color: var(--bb-ink2); }
 .bb-uk__w { font-size: 12.5px; color: var(--bb-ink3); }
 .bb-uk__w a { color: var(--bb-p3); text-decoration: none; font-weight: 500; }
 .bb-uk__more { border: 0; background: none; padding: 6px 0 0; font: inherit; font-size: 12.5px; color: var(--bb-ink3); cursor: pointer; }
@@ -713,12 +715,13 @@ html.dark .bb-uk__wa, .dark .bb-uk__wa { background: #005C4B; color: #E9EDEF; }
 .bb-uk__wi i { display: block; width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; background: var(--bb-warn); }
 .bb-uk__wi--crit i { background: var(--bb-danger); }
 .bb-uk__wi small { display: block; color: var(--bb-ink3); font-size: 12.5px; }
-.bb-uk__wi:hover div { text-decoration: underline; }
+.bb-uk__wi:hover div { color: var(--bb-ink2); }
 
 .bb-uk__clients { margin-top: 24px; }
 .bb-uk__cl { display: grid; grid-template-columns: 1.3fr 130px 1.7fr 1fr; gap: 18px; align-items: center; width: 100%; padding: 12px 0; border: 0; border-bottom: 1px solid var(--bb-line2); background: none; font: inherit; color: var(--bb-ink); text-align: left; cursor: pointer; }
 .bb-uk__cl:last-child { border-bottom: 0; }
-.bb-uk__cl:hover .bb-uk__cn { text-decoration: underline; }
+.bb-uk__cl { border-radius: 10px; padding-left: 8px; padding-right: 8px; transition: background var(--bb-t-fast) var(--bb-spring); }
+.bb-uk__cl:hover { background: var(--bb-panel2); }
 .bb-uk__cn { font-weight: 600; }
 .bb-uk__cn small { display: block; color: var(--bb-ink3); font-weight: 400; font-size: 12.5px; }
 .bb-uk__wk { display: flex; justify-content: space-between; font-size: 12px; color: var(--bb-ink3); margin-bottom: 5px; }
@@ -874,8 +877,9 @@ html.dark .bb-uk__wa, .dark .bb-uk__wa { background: #005C4B; color: #E9EDEF; }
 .bb-cal__steps a { color: var(--bb-ink); text-decoration: underline; text-underline-offset: 2px; }
 
 /* --- task editor: one line of chips, nothing to save ----------------------- */
-.bb-uk__t--btn { border: 0; background: none; padding: 0; text-align: left; cursor: text; font: inherit; font-size: 14px; font-weight: 500; line-height: 1.35; color: var(--bb-ink); }
-.bb-uk__t--btn:hover { text-decoration: underline; text-decoration-color: var(--bb-line); text-underline-offset: 3px; }
+/* The row is the target; nothing inside it is underlined on hover. */
+.bb-uk__body--act { cursor: pointer; border-radius: 10px; }
+.bb-uk__body--act:focus-visible { outline: 2px solid var(--bb-accent); outline-offset: 3px; }
 /* A link inside a task: its own target, not part of the line's click. */
 .bb-uk__lnk { border: 0; background: none; padding: 0; font: inherit; color: var(--bb-work); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; word-break: break-word; }
 .bb-uk__lnk:hover { color: var(--bb-ink); }

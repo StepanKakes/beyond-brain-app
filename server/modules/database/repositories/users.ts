@@ -46,6 +46,15 @@ export const userDb = {
     return row.count > 0;
   },
 
+  /** Every active login, for surfaces that show who the team is. */
+  listUsernames(): string[] {
+    const db = getConnection();
+    const rows = db
+      .prepare('SELECT username FROM users WHERE is_active = 1 ORDER BY username')
+      .all() as { username: string }[];
+    return rows.map((r) => r.username);
+  },
+
   /** Inserts a new user and returns the created ID + username. */
   createUser(username: string, passwordHash: string): CreateUserResult {
     const db = getConnection();

@@ -337,22 +337,16 @@ function TaskRow({ task, people, clients, me, onState, onRemove, onReload, onOpe
       >
         {CHECK}
       </button>
-      <div className="bb-uk__body">
-        {task.virtual ? (
-          <div className="bb-uk__t"><Linkify text={task.text} onOpenFile={onOpenFile} /></div>
-        ) : (
-          <div
-            className="bb-uk__t bb-uk__t--btn"
-            role="button"
-            tabIndex={0}
-            title="Upravit"
-            onClick={() => setEditing(true)}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditing(true); } }}
-          >
-            <Linkify text={task.text} onOpenFile={onOpenFile} />
-          </div>
-        )}
-        <div className="bb-uk__meta">
+      <div
+        className={`bb-uk__body${task.virtual ? '' : ' bb-uk__body--act'}`}
+        role={task.virtual ? undefined : 'button'}
+        tabIndex={task.virtual ? undefined : 0}
+        title={task.virtual ? undefined : 'Upravit'}
+        onClick={task.virtual ? undefined : () => setEditing(true)}
+        onKeyDown={task.virtual ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditing(true); } }}
+      >
+        <div className="bb-uk__t"><Linkify text={task.text} onOpenFile={onOpenFile} /></div>
+        <div className="bb-uk__meta" onClick={(e) => e.stopPropagation()} role="presentation">
           {task.client && (
             <button type="button" className="bb-uk__who" onClick={() => task.client && onOpenClient(task.client.slug)} title="Otevřít klienta">
               {task.client.name}

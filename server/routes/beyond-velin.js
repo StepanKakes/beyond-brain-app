@@ -14,6 +14,8 @@ import { getCalls, isConfigured as callsConfigured, invalidateCallsCache } from 
 import { calendarStatus, invalidateCalendars, testIcsUrl } from '../services/beyond-kalendar.js';
 import { usageReport, subscriptionLimits, brainShare } from '../services/beyond-usage.js';
 import { getPeople, personForUser } from '../services/beyond-people.js';
+import { STAGES, stageFor, setStage } from '../services/beyond-pipeline.js';
+import { userDb } from '../modules/database/index.js';
 import { listRuns, setJobEnabled } from '../services/beyond-runs.js';
 import { describeJobs, runJob, schedulerStatus, setPaused } from '../services/beyond-scheduler.js';
 import { listEvents, listRoutes } from '../services/beyond-events.js';
@@ -490,6 +492,54 @@ router.delete('/obsah/:id', async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ ok: false, error: err?.message || 'nešlo smazat' });
+  }
+});
+
+/* ------------------------------------------------------------------ */
+/* the boards                                                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Two boards over the same data the velín already has: who on the team is
+ * carrying what, and how each client is doing. A column per person (only
+ * people who can log in get one, plus one for what nobody has taken), and a
+ * column per stage of the relationship.
+ */
+router.get('/tabule', async (req, res) => {
+  try {
+    const { index, calls } = await load();
+    const me = personForUser(req.user);
+    const logins = new Set(userDb.listUsernames().map((u) => String(u).toLowerCase()));
+    const withLogin = getPeople().filter((p) => p.usernames.some((u) => logins.has(String(u).toLowerCase())));
+    // A board with no columns would be worse than a wrong one: if nobody's
+    // login matches (a fresh box, renamed accounts), show the whole team.
+    const people = (withLogin.length ? withLogin : getPeople())
+      .map((p) => ({ key: p.key, displayName: p.displayName, avatar: `/avatars/${p.key}.jpg` }));
+    const { rows } = inbox(index.clients, { upcomingCalls: calls.calls });
+    res.json({
+      me: me ? me.key : DEFAULT_OWNER(),
+      today: todayIso(),
+      people,
+      tasks: composeTasks(index),
+      stages: STAGES,
+      clients: rows.map((row) => {
+        const card = clientCard(row.client, row, calls);
+        return { ...card, ...stageFor(card) };
+      }),
+    });
+  } catch (err) {
+    console.error('[velin] /tabule failed', err);
+    res.status(500).json({ error: err?.message || 'tabule selhala' });
+  }
+});
+
+/** Move a client's card, or (stage: null) hand it back to the signals. */
+router.patch('/tabule/klient/:slug', async (req, res) => {
+  try {
+    const out = await setStage(req.params.slug, req.body?.stage ?? null, { by: req.user?.username || 'velin' });
+    res.json({ ok: true, ...out });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'nešlo přesunout' });
   }
 });
 

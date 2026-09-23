@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
 import './styles/beyond-glass.css'
+import './styles/beyond-ui.css'
 import 'katex/dist/katex.min.css'
 
 // Initialize i18n

@@ -1,0 +1,145 @@
+/* ============================================================================
+   Beyond Brain — the pieces every screen is built from.
+   ----------------------------------------------------------------------------
+   One card, one chip, one avatar, one column. Everything reads the --bb-*
+   tokens, so light and dark are the same code. Loaded after beyond-glass.css.
+   ========================================================================== */
+
+/* --- card ----------------------------------------------------------------- */
+.bb-c {
+  background: var(--bb-raise);
+  border: 1px solid var(--bb-line2);
+  border-radius: var(--bb-rc);
+  padding: 12px 13px;
+  box-shadow: 0 1px 2px rgba(20, 22, 26, .04);
+  transition: box-shadow var(--bb-t-fast) var(--bb-spring), border-color var(--bb-t-fast) var(--bb-spring), transform var(--bb-t-fast) var(--bb-spring);
+}
+.bb-c--act { cursor: pointer; }
+.bb-c--act:hover { border-color: var(--bb-line); box-shadow: 0 1px 2px rgba(20, 22, 26, .05), 0 8px 20px -10px rgba(20, 22, 26, .16); }
+.bb-c--act:focus-visible { outline: 2px solid var(--bb-accent); outline-offset: 2px; }
+.bb-c--drag { opacity: .45; }
+/* Nothing inside a card is underlined: the card is the target. */
+.bb-c a, .bb-c button { text-decoration: none; }
+
+/* --- chip ----------------------------------------------------------------- */
+.bb-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 22px; padding: 0 8px;
+  border-radius: 999px;
+  background: var(--bb-panel2);
+  color: var(--bb-ink2);
+  font-size: 11.5px; font-weight: 500; line-height: 1;
+  white-space: nowrap;
+}
+.bb-chip svg { flex: none; }
+.bb-chip[data-tone="urgent"] { background: var(--bb-danger-soft); color: var(--bb-danger); }
+.bb-chip[data-tone="watch"]  { background: var(--bb-warn-soft);   color: var(--bb-warn); }
+.bb-chip[data-tone="work"]   { background: var(--bb-work-soft);   color: var(--bb-work); }
+.bb-chip[data-tone="done"]   { background: var(--bb-panel2);      color: var(--bb-ink3); }
+.bb-chip[data-tone="p1"] { background: var(--bb-p1-soft); color: var(--bb-p1); }
+.bb-chip[data-tone="p2"] { background: var(--bb-p2-soft); color: var(--bb-p2); }
+.bb-chip[data-tone="p3"] { background: var(--bb-p3-soft); color: var(--bb-p3); }
+.bb-chip[data-tone="p4"] { background: var(--bb-panel2);  color: var(--bb-ink3); }
+
+/* --- avatar --------------------------------------------------------------- */
+.bb-av {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  flex: none; border-radius: 50%; overflow: hidden;
+  background: var(--bb-panel2); color: var(--bb-ink2);
+  font-weight: 600; letter-spacing: .02em; user-select: none;
+}
+.bb-av img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.bb-av i { font-style: normal; }
+.bb-av[data-dim="true"] { opacity: .5; }
+
+/* --- column --------------------------------------------------------------- */
+.bb-board {
+  display: grid;
+  /* The board fills the screen and each column scrolls on its own, the way a
+     board is read: you scan across, then down one column. */
+  flex: 1;
+  min-height: 0;
+  grid-auto-flow: column;
+  /* A column is a column, not a stretched panel: it keeps its width however
+     few of them there are. */
+  grid-auto-columns: minmax(280px, 330px);
+  justify-content: start;
+  gap: 14px;
+  align-items: stretch;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 8px;
+  scrollbar-width: thin;
+}
+.bb-col {
+  display: flex; flex-direction: column;
+  min-width: 0; min-height: 0;
+  background: var(--bb-bg2);
+  border: 1px solid transparent;
+  border-radius: 16px;
+  padding: 10px;
+  transition: background var(--bb-t-fast) var(--bb-spring), border-color var(--bb-t-fast) var(--bb-spring);
+}
+.bb-col[data-over="true"] { background: var(--bb-accent-soft); border-color: var(--bb-line); }
+.bb-col__h { display: flex; align-items: center; gap: 7px; padding: 2px 4px 10px; }
+.bb-col__h h3 { margin: 0; font-size: 13.5px; font-weight: 600; color: var(--bb-ink); letter-spacing: -.01em; }
+.bb-col__n { font-size: 12px; color: var(--bb-ink3); font-variant-numeric: tabular-nums; }
+.bb-col__b { display: flex; flex-direction: column; gap: 8px; min-height: 8px; overflow-y: auto; scrollbar-width: thin; padding: 1px; margin: -1px; }
+.bb-col__f { padding-top: 8px; }
+
+/* --- misc ----------------------------------------------------------------- */
+.bb-empty { margin: 0; padding: 10px 4px; font-size: 12.5px; color: var(--bb-ink3); }
+
+.bb-tabs { display: inline-flex; gap: 2px; padding: 3px; background: var(--bb-bg2); border-radius: 999px; }
+.bb-tabs__t {
+  border: 0; background: none; padding: 6px 14px; border-radius: 999px;
+  font: inherit; font-size: 13px; font-weight: 500; color: var(--bb-ink2); cursor: pointer;
+  transition: background var(--bb-t-fast) var(--bb-spring), color var(--bb-t-fast) var(--bb-spring);
+}
+.bb-tabs__t:hover { color: var(--bb-ink); }
+.bb-tabs__t[aria-selected="true"] { background: var(--bb-raise); color: var(--bb-ink); box-shadow: 0 1px 2px rgba(20, 22, 26, .06); }
+
+/* --- screen frame --------------------------------------------------------- */
+.bb-scr { display: flex; flex-direction: column; gap: 16px; height: 100%; min-height: 0; padding: 22px 24px 18px; overflow: hidden; }
+.bb-scr__h { display: flex; align-items: center; gap: 14px; }
+.bb-scr__h h1 { margin: 0; font-family: var(--bb-display); font-size: 26px; font-weight: 500; letter-spacing: -.01em; color: var(--bb-ink); }
+.bb-scr__h .bb-ib { margin-left: auto; }
+.bb-scr__f { display: flex; gap: 8px; padding-top: 2px; }
+
+/* --- task card ------------------------------------------------------------ */
+.bb-tc__top { display: flex; align-items: flex-start; gap: 9px; }
+.bb-tc__t { margin: 0; font-size: 13.5px; font-weight: 500; line-height: 1.35; color: var(--bb-ink); }
+.bb-tc__t--done { color: var(--bb-ink3); text-decoration: line-through; }
+.bb-tc__sub { margin: 4px 0 0 25px; font-size: 12px; color: var(--bb-ink3); }
+.bb-tc__meta { display: flex; flex-wrap: wrap; gap: 5px; margin: 9px 0 0 25px; }
+.bb-tc__meta:empty { display: none; }
+.bb-tc__chk {
+  flex: none; width: 16px; height: 16px; margin-top: 1px;
+  border: 1.6px solid var(--c, var(--bb-ink3)); border-radius: 50%;
+  background: none; padding: 0; cursor: pointer;
+  transition: background var(--bb-t-fast) var(--bb-spring), border-color var(--bb-t-fast) var(--bb-spring);
+}
+.bb-tc__chk:hover { background: color-mix(in srgb, var(--c, var(--bb-ink3)) 18%, transparent); }
+.bb-tc__chk--p1 { --c: var(--bb-p1); }
+.bb-tc__chk--p2 { --c: var(--bb-p2); }
+.bb-tc__chk--p3 { --c: var(--bb-p3); }
+.bb-tc__chk--p4 { --c: var(--bb-p4); }
+.bb-tc__chk--work { background: var(--bb-work); border-color: var(--bb-work); }
+.bb-tc__chk--done { background: var(--c, var(--bb-ink3)); border-color: var(--c, var(--bb-ink3)); }
+
+/* --- client card ---------------------------------------------------------- */
+.bb-cc__top { display: flex; align-items: center; gap: 6px; }
+.bb-cc__n { margin: 0; font-size: 13.5px; font-weight: 600; color: var(--bb-ink); letter-spacing: -.01em; }
+.bb-cc__hand { color: var(--bb-ink3); }
+.bb-cc__wk { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 11.5px; color: var(--bb-ink3); }
+.bb-cc__wk i { flex: 1; height: 3px; border-radius: 999px; background: var(--bb-panel2); overflow: hidden; }
+.bb-cc__wk b { display: block; height: 100%; background: var(--bb-ink3); border-radius: 999px; }
+.bb-cc__sig { margin: 8px 0 0; font-size: 12.5px; line-height: 1.35; color: var(--bb-ink2); }
+.bb-cc__meta { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
+
+/* --- stage dots ----------------------------------------------------------- */
+.bb-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--bb-ink3); }
+.bb-dot--v-pohode { background: var(--bb-work); }
+.bb-dot--drhne    { background: var(--bb-warn); }
+.bb-dot--riziko   { background: var(--bb-danger); }
+.bb-dot--dobehl   { background: var(--bb-ink3); }
