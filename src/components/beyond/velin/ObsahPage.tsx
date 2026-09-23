@@ -180,7 +180,7 @@ function Card({ item, open, onToggle, onMove, onRemove, onDiscard, onOpenClient,
     onRefresh();
   };
   return (
-    <article className={`bb-ob__card${open ? ' bb-ob__card--open' : ''}`} data-kind={item.kind}>
+    <article className={`bb-ob__card${open ? ' bb-ob__card--open' : ''}`} data-kind={item.kind} data-open={open ? 'true' : undefined}>
       <div className="bb-ob__top">
         <button type="button" className="bb-ob__head" onClick={onToggle} aria-expanded={open}>
           <span className="bb-ob__kind"><i className="bb-tag" />{isReel ? 'Reel' : 'Stories'}</span>
@@ -207,7 +207,7 @@ function Card({ item, open, onToggle, onMove, onRemove, onDiscard, onOpenClient,
           )}
           <div className="bb-ob__acts">
             {next && <button type="button" className="bb-pill bb-pill--sm bb-pill--primary" onClick={() => onMove(next.to)}>{next.label}</button>}
-            {link && <a className="bb-pill bb-pill--sm" href={link} target="_blank" rel="noreferrer">{isReel ? 'Přehrát' : 'Upravit'}</a>}
+            {link && <a className="bb-pill bb-pill--sm bb-pill--ghost" href={link} target="_blank" rel="noreferrer">{isReel ? 'Přehrát' : 'Upravit'}</a>}
             {item.state !== 'zahozeno' && <button type="button" className="bb-pill bb-pill--sm bb-pill--danger" onClick={onDiscard}>Zahodit</button>}
           </div>
         </div>

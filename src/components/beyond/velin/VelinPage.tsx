@@ -108,6 +108,14 @@ function waHtml(text: string): string {
   return out.join('');
 }
 
+/** What kind of thing the brain prepared, in one word. */
+function prepKind(kind: string, prep: { images?: string[] | null; clip?: string | null }): string {
+  if (kind === 'zprava') return 'Zpráva';
+  if (kind === 'obsah') return prep.clip ? 'Reel' : prep.images?.length ? 'Stories' : 'Obsah';
+  if (kind === 'navrh') return 'Návrh';
+  return 'Podklad';
+}
+
 function Prep({ task, onDone, onOpenFile }: { task: Task; onDone: () => void; onOpenFile: (path: string) => void }) {
   const prep = task.prep;
   const [busy, setBusy] = useState<string | null>(null);
@@ -181,17 +189,15 @@ function Prep({ task, onDone, onOpenFile }: { task: Task; onDone: () => void; on
   };
 
   const rows = Math.min(24, Math.max(8, draft.split('\n').length + 2));
+  // The card already says it once; a second copy of the same sentence is
+  // noise, not information.
+  const firstLine = draft.split('\n')[0]?.trim() || '';
+  const echoesTitle = !expanded && !editing && firstLine.length > 0 && task.text.trim().endsWith(firstLine);
   return (
     <div className={`bb-uk__prep${editing || expanded ? ' bb-uk__prep--open' : ''}`} onClick={(e) => e.stopPropagation()} role="presentation">
       <div className="bb-uk__ph">
-        <span className="bb-uk__dot" />
-        {prep.title}
+        <span className="bb-uk__kind">{prepKind(prep.kind, prep)}</span>
         {isMessage && prep.canSend === false && <small>WhatsApp není napojený, odeslat nepůjde</small>}
-        {!editing && long && (
-          <button type="button" className="bb-uk__expand" onClick={() => setExpanded((v) => !v)}>
-            {expanded ? 'sbalit' : isMessage ? 'celá zpráva' : 'celý text'}
-          </button>
-        )}
       </div>
       {editing ? (
         <>
@@ -202,8 +208,10 @@ function Prep({ task, onDone, onOpenFile }: { task: Task; onDone: () => void; on
         <div className="bb-uk__wa" dangerouslySetInnerHTML={{ __html: waHtml(draft) }} />
       ) : expanded ? (
         <div className="bb-uk__pb bb-uk__pb--full">{draft}</div>
-      ) : (
-        <button type="button" className={`bb-uk__pb${prep.kind === 'navrh' ? ' bb-uk__pb--navrh' : ''}`} onClick={() => long && setExpanded(true)}>{draft}</button>
+      ) : echoesTitle ? null : (
+        <button type="button" className={`bb-uk__pb${prep.kind === 'navrh' ? ' bb-uk__pb--navrh' : ''}`} onClick={() => long && setExpanded(true)}>
+          {draft.split('\n').filter((l) => l.trim() !== '…').join('\n').trim()}
+        </button>
       )}
       {expanded && clipUrl && (
         <div className="bb-uk__clip"><video src={clipUrl} controls playsInline preload="metadata" /></div>
@@ -217,15 +225,20 @@ function Prep({ task, onDone, onOpenFile }: { task: Task; onDone: () => void; on
           ))}
         </div>
       )}
-      {prep.link && (
-        <a className="bb-uk__link" href={prep.link.url} target="_blank" rel="noreferrer">{prep.link.label}</a>
-      )}
       {diff && (
         <pre className="bb-uk__diff">
           {diff.removed.map((l) => `− ${l}`).concat(diff.added.map((l) => `+ ${l}`)).join('\n') || '(jen přesuny řádků)'}
         </pre>
       )}
       <div className="bb-uk__pa">
+        {prep.link && (
+          <a className="bb-pill bb-pill--sm" href={prep.link.url} target="_blank" rel="noreferrer">{prep.link.label}</a>
+        )}
+        {!editing && long && (
+          <button type="button" className="bb-pill bb-pill--sm" onClick={() => setExpanded((v) => !v)}>
+            {expanded ? 'Sbalit' : isMessage ? 'Celá zpráva' : 'Celý text'}
+          </button>
+        )}
         {prep.actions.map((a) => (
           <button
             key={a.action}
