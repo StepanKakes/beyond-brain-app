@@ -68,9 +68,18 @@ jobs:
           # (node-pty) each time and is slow.
           $depsChanged = git diff --name-only $before $after -- package.json package-lock.json
           if ($depsChanged -or -not (Test-Path 'node_modules')) {
-            Write-Host "==> deps changed / missing -> npm ci"
+            # The running service holds the native modules open (bcrypt,
+            # node-pty, better-sqlite3), and `npm ci` empties node_modules
+            # first, so Windows refuses with EPERM. Stop it for the install and
+            # let the restart at the end bring it back.
+            Write-Host "==> deps changed / missing -> stop service, npm ci"
+            Stop-Service $svc -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 3
             npm ci
-            if ($LASTEXITCODE -ne 0) { throw "npm ci failed" }
+            if ($LASTEXITCODE -ne 0) {
+              Start-Service $svc -ErrorAction SilentlyContinue
+              throw "npm ci failed"
+            }
           } else {
             Write-Host "==> deps unchanged -> skipping npm ci"
           }
@@ -129,8 +138,14 @@ jobs:
             Write-Host "==> service log: $app\logs\service.log"
           }
 
-          Write-Host "==> Restart-Service $svc"
-          Restart-Service $svc -Force
+          # It may already be stopped (a dependency install above).
+          if ((Get-Service $svc).Status -eq 'Stopped') {
+            Write-Host "==> Start-Service $svc"
+            Start-Service $svc
+          } else {
+            Write-Host "==> Restart-Service $svc"
+            Restart-Service $svc -Force
+          }
 
           # Confirm it came back up.
           Start-Sleep -Seconds 2
