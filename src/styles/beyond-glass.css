@@ -405,7 +405,8 @@ body { background: var(--bb-bg) !important; color: var(--bb-ink); font-family: v
   backdrop-filter: var(--bb-blur); -webkit-backdrop-filter: var(--bb-blur);
   box-shadow: 0 1px 2px rgba(18,21,27,.05), 0 10px 24px -16px rgba(18,21,27,.2);
   transition: box-shadow var(--bb-t-mid) var(--bb-spring), border-color var(--bb-t-mid) ease, transform var(--bb-t-mid) var(--bb-spring); }
-.bb-composer[data-focus="true"], .bb-composer:focus-within { border-color: var(--bb-accent); transform: translateY(-3px); box-shadow: var(--bb-shadow-lift); }
+/* Focus is shown by the field waking up, not by a black ring around it. */
+.bb-composer[data-focus="true"], .bb-composer:focus-within { border-color: var(--bb-line); box-shadow: 0 2px 6px rgba(20, 22, 26, .05), 0 18px 40px -24px rgba(20, 22, 26, .25); }
 .bb-composer textarea { width: 100%; border: none; background: transparent; resize: none; padding: 18px 22px 6px; font-size: 15.5px; line-height: 1.55; min-height: 54px; max-height: 240px; color: var(--bb-ink); transition: min-height .3s var(--bb-spring); }
 .bb-composer textarea::placeholder { color: var(--bb-ink3); }
 .bb-composer[data-focus="true"] textarea, .bb-composer:focus-within textarea { min-height: 72px; }

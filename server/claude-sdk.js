@@ -1882,10 +1882,17 @@ async function getSupportedModels() {
   }
 
   // No live session — spawn a minimal query just to read the model list.
+  // It must run the SAME Claude Code the chat runs. Left to itself the SDK
+  // starts the copy bundled inside the npm package, which is older than the
+  // installed CLI and answers with the model names of its own generation; the
+  // picker then offered models nobody is actually served.
   const queue = createBeyondMessageQueue();
   let q;
   try {
-    q = query({ prompt: queue, options: {} });
+    q = query({
+      prompt: queue,
+      options: { pathToClaudeCodeExecutable: resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH) },
+    });
     const models = normalizeModelInfos(
       await Promise.race([
         q.supportedModels(),
