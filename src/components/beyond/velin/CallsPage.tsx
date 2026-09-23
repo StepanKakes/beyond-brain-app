@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 
 import { fetchCalls, type Call, type CallsPage as CallsData } from './api';
+import { Tabs } from '../ui';
 import { Empty, LiveCall, SectionHead, formatTime, usePolled } from './bits';
 
 /**
@@ -77,22 +78,11 @@ export default function CallsPage({ onOpenClient }: { onOpenClient: (slug: strin
               {data.unmatched > 0 && ` · ${data.unmatched} bez napojení na klienta`}
             </p>
           </div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button type="button" className="bb-pill" aria-pressed={who === 'all'} onClick={() => setWho('all')}>
-              Všichni
-            </button>
-            {data.people.map((p) => (
-              <button
-                key={p.key}
-                type="button"
-                className="bb-pill"
-                aria-pressed={who === p.key}
-                onClick={() => setWho(p.key)}
-              >
-                {p.displayName}
-              </button>
-            ))}
-          </div>
+          <Tabs
+            items={[{ key: 'all', label: 'Všichni' }, ...data.people.map((p) => ({ key: p.key, label: p.displayName }))]}
+            value={who}
+            onChange={setWho}
+          />
         </header>
 
         {data.error && <Empty>Cal.com hlásí: {data.error}</Empty>}

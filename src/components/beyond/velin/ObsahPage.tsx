@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Empty, ago, usePolled } from './bits';
+import { Tabs } from '../ui';
 import { cutObsah, deleteObsah, fetchObsah, patchObsah, type ObsahItem } from './api';
 import { authenticatedFetch } from '../../../utils/api';
 
@@ -75,11 +76,11 @@ export default function ObsahPage({ onOpenStudio, onOpenClient }: { onOpenStudio
             <p className="bb-vel__sub">Co brain našel v callech a připravil na stories, a co se s tím stalo</p>
           </div>
           <div className="bb-ob__tools">
-            <div className="bb-fx__seg">
-              <button type="button" className="bb-pill bb-pill--sm" aria-pressed={kind === 'all'} onClick={() => setKind('all')}>Vše</button>
-              <button type="button" className="bb-pill bb-pill--sm" aria-pressed={kind === 'reel'} onClick={() => setKind('reel')}>Reely</button>
-              <button type="button" className="bb-pill bb-pill--sm" aria-pressed={kind === 'story'} onClick={() => setKind('story')}>Stories</button>
-            </div>
+            <Tabs
+              items={[{ key: 'all', label: 'Vše' }, { key: 'reel', label: 'Reely' }, { key: 'story', label: 'Stories' }]}
+              value={kind}
+              onChange={(k) => setKind(k as 'all' | 'reel' | 'story')}
+            />
             <button type="button" className="bb-pill" onClick={onOpenStudio}>Story Studio</button>
           </div>
         </header>
@@ -182,7 +183,7 @@ function Card({ item, open, onToggle, onMove, onRemove, onDiscard, onOpenClient,
     <article className={`bb-ob__card${open ? ' bb-ob__card--open' : ''}`} data-kind={item.kind}>
       <div className="bb-ob__top">
         <button type="button" className="bb-ob__head" onClick={onToggle} aria-expanded={open}>
-          <span className="bb-ob__kind">{isReel ? 'Reel' : 'Stories'}</span>
+          <span className="bb-ob__kind"><i className="bb-tag" />{isReel ? 'Reel' : 'Stories'}</span>
           <span className="bb-ob__title">{item.title || item.hook}</span>
           <span className="bb-ob__meta">
             {isReel && item.startSec != null && <>{fmtSec(item.startSec)} až {fmtSec(item.endSec)}{item.speaker ? ` · ${item.speaker}` : ''}</>}

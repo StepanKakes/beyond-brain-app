@@ -106,14 +106,8 @@ export default function BeyondSidebarPreview({
         <ChevronsUpDown size={14} strokeWidth={1.8} />
       </button>
 
-      {/* New chat + search */}
+      {/* Search */}
       <div className="flex flex-col gap-2 px-3 pb-1 pt-2">
-        {onOpenUniversalChat && (
-          <button type="button" className="bb-newchat" onClick={onOpenUniversalChat}>
-            <Plus size={16} strokeWidth={2} />
-            <span>Nový chat</span>
-          </button>
-        )}
         <div className="bb-search">
           <Search size={15} strokeWidth={1.8} className="flex-none" style={{ color: 'var(--bb-ink3)' }} aria-hidden />
           <input
@@ -127,6 +121,7 @@ export default function BeyondSidebarPreview({
 
       {/* Body — scrolling */}
       <nav className="bb-side__body">
+        {onOpenUniversalChat && <NavRow icon={Plus} label="Nový chat" on={false} onClick={onOpenUniversalChat} />}
         {onGoHome && <NavRow icon={Gauge} label="Velín" on={section === 'velin'} count={counts?.velin} onClick={onGoHome} />}
         {onOpenBoard && <NavRow icon={Users} label="Klienti" on={section === 'board' || section === 'client'} count={counts?.klienti} onClick={onOpenBoard} />}
         {onOpenCalls && <NavRow icon={CalendarDays} label="Hovory" on={section === 'calls'} onClick={onOpenCalls} />}

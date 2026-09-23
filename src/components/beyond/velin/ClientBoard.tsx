@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 
 import { fetchBoard, type BoardClient } from './api';
+import { Tabs } from '../ui';
 import { Empty, Metric, SectionHead, SeverityChip, Spark, ago, usePolled } from './bits';
 
 /**
@@ -72,19 +73,7 @@ export default function ClientBoard({ onOpenClient }: { onOpenClient: (slug: str
               {finished.length > 0 && ` · ${finished.length} doběhlo`}
             </p>
           </div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {SORTS.map((s) => (
-              <button
-                key={s.key}
-                type="button"
-                className="bb-pill"
-                aria-pressed={sort === s.key}
-                onClick={() => setSort(s.key)}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
+          <Tabs items={SORTS.map((s) => ({ key: s.key, label: s.label }))} value={sort} onChange={(k) => setSort(k as typeof sort)} />
         </header>
 
         <div className="bb-tblwrap">

@@ -182,7 +182,7 @@ function Prep({ task, onDone, onOpenFile }: { task: Task; onDone: () => void; on
 
   const rows = Math.min(24, Math.max(8, draft.split('\n').length + 2));
   return (
-    <div className={`bb-uk__prep${editing || expanded ? ' bb-uk__prep--open' : ''}`}>
+    <div className={`bb-uk__prep${editing || expanded ? ' bb-uk__prep--open' : ''}`} onClick={(e) => e.stopPropagation()} role="presentation">
       <div className="bb-uk__ph">
         <span className="bb-uk__dot" />
         {prep.title}
@@ -325,7 +325,16 @@ function TaskRow({ task, people, clients, me, onState, onRemove, onReload, onOpe
     );
   }
   return (
-    <div className={`bb-uk__row${task.state === 'work' ? ' bb-uk__row--work' : task.state === 'done' ? ' bb-uk__row--done' : ''}`}>
+    <div
+      className={`bb-uk__row${task.state === 'work' ? ' bb-uk__row--work' : task.state === 'done' ? ' bb-uk__row--done' : ''}`}
+      role={task.virtual ? undefined : 'button'}
+      tabIndex={task.virtual ? undefined : 0}
+      onClick={task.virtual ? undefined : () => setEditing(true)}
+      onKeyDown={task.virtual ? undefined : (e) => {
+        if (e.target !== e.currentTarget) return;
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditing(true); }
+      }}
+    >
       <button
         type="button"
         className={`bb-uk__chk bb-uk__chk--p${task.priority}${task.state !== 'none' ? ` bb-uk__chk--${task.state}` : ''}${pop ? ' bb-uk__chk--pop' : ''}`}
@@ -339,14 +348,7 @@ function TaskRow({ task, people, clients, me, onState, onRemove, onReload, onOpe
       >
         {CHECK}
       </button>
-      <div
-        className={`bb-uk__body${task.virtual ? '' : ' bb-uk__body--act'}`}
-        role={task.virtual ? undefined : 'button'}
-        tabIndex={task.virtual ? undefined : 0}
-        title={task.virtual ? undefined : 'Upravit'}
-        onClick={task.virtual ? undefined : () => setEditing(true)}
-        onKeyDown={task.virtual ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditing(true); } }}
-      >
+      <div className="bb-uk__body">
         <div className="bb-uk__t"><Linkify text={task.text} onOpenFile={onOpenFile} /></div>
         <div className="bb-uk__meta" onClick={(e) => e.stopPropagation()} role="presentation">
           {task.client && (
