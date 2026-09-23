@@ -1,0 +1,32 @@
+name: Claude update
+
+# Update the Claude Code the box runs. The model picker lists whatever that
+# install offers, so a stale CLI means the newest models simply are not there.
+# Restarts the app afterwards: the supported-model list is cached until then.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  update:
+    runs-on: [self-hosted, windows, beyond-brain]
+    timeout-minutes: 15
+    steps:
+      - name: Update and restart
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $svc = if ($env:BEYOND_SERVICE) { $env:BEYOND_SERVICE } else { 'BeyondBrainApp' }
+
+          Write-Host "==> before: $(claude --version 2>&1)"
+          Write-Host "==> where: $((Get-Command claude -ErrorAction SilentlyContinue).Source)"
+
+          claude update 2>&1 | ForEach-Object { Write-Host "    $_" }
+
+          $after = (claude --version 2>&1 | Out-String).Trim()
+          Write-Host "==> after: $after"
+
+          Write-Host "==> Restart-Service $svc"
+          Restart-Service $svc -Force
+          Start-Sleep -Seconds 4
+          Write-Host "==> $svc is now: $((Get-Service $svc).Status)"
