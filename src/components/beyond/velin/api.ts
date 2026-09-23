@@ -269,8 +269,10 @@ async function send<T>(pathname: string, method: string, body?: unknown): Promis
     headers: { 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  const data = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+  const data = (await res.json().catch(() => ({}))) as T & { ok?: boolean; error?: string };
+  // An action that failed for a reason the person can act on answers 200 with
+  // ok:false and that reason; only a broken request answers with a status.
+  if (!res.ok || data?.ok === false) throw new Error(data?.error || `HTTP ${res.status}`);
   return data;
 }
 

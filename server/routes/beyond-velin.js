@@ -336,7 +336,6 @@ function composeTasks(index) {
         { label: 'Odeslat', action: 'navrh-odeslat', primary: true },
         { label: 'Upravit', action: 'navrh-upravit' },
         { label: 'Zahodit', action: 'navrh-zahodit' },
-        ...(p.clientSlug ? [{ label: 'Zápis callu', action: 'open-file', path: `clients/aktivni/${p.clientSlug}/cally.md` }] : []),
       ],
     },
     createdAt: p.createdAt,
@@ -623,6 +622,16 @@ router.post('/navrhy/:id/zahodit', (req, res) => {
   }
 });
 
+/** WAHA's answer in words that say what to do about it. */
+function explainWaha(message) {
+  const m = String(message);
+  if (/\b401\b/.test(m)) return 'WhatsApp (WAHA) odmítl klíč: v nastavení je starý BEYOND_WAHA_API_KEY';
+  if (/\b404\b/.test(m)) return 'WAHA nezná tuhle session nebo chat, zpráva se neodeslala';
+  if (/422/.test(m)) return 'WAHA zprávu odmítla, nejspíš neplatné číslo nebo skupina';
+  if (/neodpověděla/.test(m)) return m;
+  return m;
+}
+
 /**
  * Send it. The stored text goes out untouched — the point of the click is that
  * what was read is what leaves, so nothing re-renders it here.
@@ -647,7 +656,10 @@ router.post('/navrhy/:id/odeslat', async (req, res) => {
     try {
       markFailed(id, message);
     } catch { /* keep the original error */ }
-    res.status(502).json({ ok: false, error: message });
+    // 200 with ok:false on purpose: a 5xx gets swapped for the proxy's own
+    // error page on the way through Cloudflare, and the screen then shows
+    // "HTTP 502" instead of the reason WhatsApp gave.
+    res.json({ ok: false, error: explainWaha(message) });
   }
 });
 

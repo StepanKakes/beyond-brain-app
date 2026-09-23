@@ -647,7 +647,10 @@ body { background: var(--bb-bg) !important; color: var(--bb-ink); font-family: v
 @keyframes bbUkRing { 0% { opacity: .7; transform: scale(.8); } 100% { opacity: 0; transform: scale(1.7); } }
 .bb-uk__t { font-size: 14px; font-weight: 500; line-height: 1.35; color: var(--bb-ink); }
 .bb-uk__meta { display: flex; flex-wrap: wrap; gap: 3px 9px; margin-top: 1px; font-size: 12px; color: var(--bb-ink3); align-items: center; }
-.bb-uk__cl { color: var(--bb-ink2); font-weight: 500; white-space: nowrap; }
+/* The client a task belongs to. Its own class: .bb-uk__cl is also the wide
+   row on the client board further down, and that grid was landing here. */
+.bb-uk__who { border: 0; background: none; padding: 0; font: inherit; font-size: 12px; font-weight: 500; color: var(--bb-ink2); white-space: nowrap; cursor: pointer; }
+.bb-uk__who:hover { color: var(--bb-ink); text-decoration: underline; text-underline-offset: 2px; }
 .bb-uk__brain { color: var(--bb-ink2); display: inline-flex; align-items: center; gap: 5px; }
 .bb-uk__brain::before { content: ""; width: 6px; height: 6px; border-radius: 2px; background: var(--bb-ink2); opacity: .55; }
 .bb-uk__x { border: 0; background: none; padding: 0; font: inherit; font-size: 12px; color: var(--bb-ink3); cursor: pointer; opacity: 0; transition: opacity .15s ease; }

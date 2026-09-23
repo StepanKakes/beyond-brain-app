@@ -295,7 +295,7 @@ function Linkify({ text, onOpenFile }: { text: string; onOpenFile?: (path: strin
   return <>{out}</>;
 }
 
-function TaskRow({ task, people, clients, me, onState, onRemove, onReload, onOpenFile }: {
+function TaskRow({ task, people, clients, me, onState, onRemove, onReload, onOpenFile, onOpenClient }: {
   task: Task;
   people: Ukoly['people'];
   clients: Ukoly['clients'];
@@ -304,6 +304,7 @@ function TaskRow({ task, people, clients, me, onState, onRemove, onReload, onOpe
   onRemove: (task: Task) => void;
   onReload: () => void;
   onOpenFile: (path: string) => void;
+  onOpenClient: (slug: string) => void;
 }) {
   const [pop, setPop] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -352,7 +353,11 @@ function TaskRow({ task, people, clients, me, onState, onRemove, onReload, onOpe
           </div>
         )}
         <div className="bb-uk__meta">
-          {task.client && <span className="bb-uk__cl">{task.client.name}</span>}
+          {task.client && (
+            <button type="button" className="bb-uk__who" onClick={() => task.client && onOpenClient(task.client.slug)} title="Otevřít klienta">
+              {task.client.name}
+            </button>
+          )}
           {task.note && <span><Linkify text={task.note} onOpenFile={onOpenFile} /></span>}
           {by && <span className={by === 'od brainu' ? 'bb-uk__brain' : ''}>{by}</span>}
           {!task.virtual && (
@@ -756,7 +761,7 @@ export default function VelinPage({ onOpenClient, onOpenCalls, onOpenChat }: Pro
   const risks = (velin.data?.risks || []).slice(0, 4);
   const clients = (board.data?.clients || []).filter((c) => c.isActive !== false);
 
-  const rowProps = { people, clients: ukoly.data?.clients || [], me, onState: setState, onRemove: remove, onReload: () => void ukoly.reload(), onOpenFile: openFile };
+  const rowProps = { people, clients: ukoly.data?.clients || [], me, onState: setState, onRemove: remove, onReload: () => void ukoly.reload(), onOpenFile: openFile, onOpenClient };
 
   return (
     <div className="bb-vel">
