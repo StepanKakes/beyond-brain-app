@@ -241,6 +241,60 @@ function Prep({ task, onDone, onOpenFile }: { task: Task; onDone: () => void; on
   );
 }
 
+/**
+ * A task's words with its links live. The brain writes URLs and brain paths
+ * into task text; clicking one used to open the editor, because the whole
+ * line was a button. Now the line is still clickable, the links inside it
+ * are their own targets, and a brain path opens in the document panel.
+ */
+const LINK_RE = /(https?:\/\/[^\s<>()"']+)|((?:[\w.@-]+\/)+[\w.@-]+\.(?:md|json|txt|csv|pdf|png|jpg|mp4))/g;
+
+function Linkify({ text, onOpenFile }: { text: string; onOpenFile?: (path: string) => void }) {
+  const out: React.ReactNode[] = [];
+  let last = 0;
+  let n = 0;
+  for (const m of text.matchAll(LINK_RE)) {
+    const at = m.index ?? 0;
+    if (at > last) out.push(text.slice(last, at));
+    const raw = m[0];
+    // Trailing punctuation belongs to the sentence, not to the address.
+    const trimmed = raw.replace(/[.,;:!?)\]]+$/, '');
+    const tail = raw.slice(trimmed.length);
+    n += 1;
+    if (m[1]) {
+      out.push(
+        <a
+          key={`l${n}`}
+          className="bb-uk__lnk"
+          href={trimmed}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {trimmed}
+        </a>,
+      );
+    } else if (onOpenFile) {
+      out.push(
+        <button
+          key={`f${n}`}
+          type="button"
+          className="bb-uk__lnk"
+          onClick={(e) => { e.stopPropagation(); onOpenFile(trimmed); }}
+        >
+          {trimmed}
+        </button>,
+      );
+    } else {
+      out.push(trimmed);
+    }
+    if (tail) out.push(tail);
+    last = at + raw.length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return <>{out}</>;
+}
+
 function TaskRow({ task, people, clients, me, onState, onRemove, onReload, onOpenFile }: {
   task: Task;
   people: Ukoly['people'];
@@ -284,13 +338,22 @@ function TaskRow({ task, people, clients, me, onState, onRemove, onReload, onOpe
       </button>
       <div className="bb-uk__body">
         {task.virtual ? (
-          <div className="bb-uk__t">{task.text}</div>
+          <div className="bb-uk__t"><Linkify text={task.text} onOpenFile={onOpenFile} /></div>
         ) : (
-          <button type="button" className="bb-uk__t bb-uk__t--btn" onClick={() => setEditing(true)} title="Upravit">{task.text}</button>
+          <div
+            className="bb-uk__t bb-uk__t--btn"
+            role="button"
+            tabIndex={0}
+            title="Upravit"
+            onClick={() => setEditing(true)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditing(true); } }}
+          >
+            <Linkify text={task.text} onOpenFile={onOpenFile} />
+          </div>
         )}
         <div className="bb-uk__meta">
           {task.client && <span className="bb-uk__cl">{task.client.name}</span>}
-          {task.note && <span>{task.note}</span>}
+          {task.note && <span><Linkify text={task.note} onOpenFile={onOpenFile} /></span>}
           {by && <span className={by === 'od brainu' ? 'bb-uk__brain' : ''}>{by}</span>}
           {!task.virtual && (
             <button type="button" className="bb-uk__x" onClick={() => onRemove(task)} aria-label="Smazat úkol">
@@ -594,13 +657,20 @@ function QuickAdd({ me, owner, people, onAdded }: { me: string; owner: string; p
           }}
         />
       </div>
+      {/* A chip only for what was actually recognised. An empty line shows the
+          hint and nothing else: a dead button and a chip saying "no client"
+          were furniture. */}
       <div className="bb-qa__chips">
-        <button type="button" className="bb-qa__go" onClick={() => void submit()} disabled={!hasText || busy} aria-label="Přidat úkol" title="Přidat (Enter)">+</button>
-        <span className="bb-qa__chip" data-kind="client" title={parsed?.clientName ? 'Klient' : 'Bez klienta'}>
-          <span className="bb-qa__ico" aria-hidden="true">{parsed?.clientName ? '◎' : '▢'}</span>
-          {parsed?.clientName || 'Schránka'}
-          {clientTok && <button type="button" className="bb-qa__x" onClick={() => removeWord(clientTok.i)} aria-label="Odebrat klienta">×</button>}
-        </span>
+        {hasText && (
+          <button type="button" className="bb-qa__go" onClick={() => void submit()} disabled={busy} aria-label="Přidat úkol" title="Přidat (Enter)">+</button>
+        )}
+        {parsed?.clientName && (
+          <span className="bb-qa__chip" data-kind="client" title="Klient">
+            <span className="bb-qa__ico" aria-hidden="true">◎</span>
+            {parsed.clientName}
+            {clientTok && <button type="button" className="bb-qa__x" onClick={() => removeWord(clientTok.i)} aria-label="Odebrat klienta">×</button>}
+          </span>
+        )}
         {dueTok && (
           <span className="bb-qa__chip" data-kind="due">
             <span className="bb-qa__ico" aria-hidden="true">▣</span>

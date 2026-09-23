@@ -111,6 +111,24 @@ export default function BeyondApp() {
   const [htmlDoc, setHtmlDoc] = useState<{ html: string; title?: string } | null>(null);
   const [connectorsOpen, setConnectorsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Which session the mounted chat actually has open, announced by BeyondChat
+  // (`beyond:chat-open`). The sidebar ticks a row from this, and only while
+  // the chat is the screen in front, so another screen never looks like a
+  // chat and a fresh chat never ticks the one before it.
+  const [openChat, setOpenChat] = useState<{ slug: string; uuid: string | null }>({ slug: '', uuid: null });
+  // Bumped by "+ Nový chat". The fresh chat is keyed by this instead of the
+  // history entry, so coming back to the chat from another screen returns to
+  // the one in progress rather than starting over.
+  const [freshEpoch, setFreshEpoch] = useState(0);
+
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const d = (e as CustomEvent<{ slug?: string; uuid?: string | null }>).detail;
+      if (d && typeof d.slug === 'string') setOpenChat({ slug: d.slug, uuid: d.uuid ?? null });
+    };
+    window.addEventListener('beyond:chat-open', onOpen);
+    return () => window.removeEventListener('beyond:chat-open', onOpen);
+  }, []);
 
   // Sidebar file tree (and clickable chat paths) dispatch `beyond:open-file`
   // with a repo-relative or absolute path; we surface a slide-in preview sheet.
@@ -193,11 +211,21 @@ export default function BeyondApp() {
 
   const handleOpenUniversalChat = useCallback(() => {
     setInitialPrompt(undefined);
-    // Always push a fresh /c/new entry — even if we're already there — so the
-    // view key (which includes location.key) changes and BeyondChat remounts
-    // into a brand-new session.
+    // A brand-new chat: bump the epoch so the key changes and BeyondChat
+    // remounts into a clean session, even from /c/new.
+    setFreshEpoch((n) => n + 1);
     navigate(pathForChat(UNIVERSAL_SLUG));
   }, [navigate]);
+
+  /** The Chat item in the sidebar: back to the chat that is open, not a new one. */
+  const handleReturnToChat = useCallback(() => {
+    setInitialPrompt(undefined);
+    if (openChat.slug && openChat.slug !== UNIVERSAL_SLUG) {
+      navigate(pathForChat(openChat.slug));
+      return;
+    }
+    navigate(pathForChat(UNIVERSAL_SLUG, openChat.uuid));
+  }, [navigate, openChat]);
 
   const handleSwitchUniversalSession = useCallback(
     (uuid: string) => {
@@ -249,7 +277,7 @@ export default function BeyondApp() {
           ? `chat:${activeClient.slug}`
           : routeUuid
             ? `universal:${routeUuid}`
-            : `universal:fresh:${location.key}`;
+            : `universal:fresh:${freshEpoch}`;
 
   // The chat stays mounted while another screen is open, so a reply that
   // is still arriving keeps arriving and the spinner, the streamed words
@@ -258,8 +286,23 @@ export default function BeyondApp() {
   const chatKey = view.kind === 'chat' && activeClient ? viewKey : null;
   const [mountedChat, setMountedChat] = useState<{ key: string; client: NonNullable<typeof activeClient>; sessionOverride: typeof sessionOverride; initialPrompt: string | undefined } | null>(null);
   useEffect(() => {
-    if (chatKey && activeClient) setMountedChat({ key: chatKey, client: activeClient, sessionOverride, initialPrompt });
-  }, [chatKey, activeClient, sessionOverride, initialPrompt]);
+    if (!chatKey || !activeClient) return;
+    setMountedChat((prev) => {
+      if (!prev) return { key: chatKey, client: activeClient, sessionOverride, initialPrompt };
+      // The chat already showing this very session stays mounted: a session
+      // that was started fresh gets its uuid into the URL without throwing
+      // away the reply that is still arriving.
+      const sameSession =
+        prev.key === chatKey
+        || (prev.client.slug === UNIVERSAL_SLUG
+          && activeClient.slug === UNIVERSAL_SLUG
+          && openChat.slug === UNIVERSAL_SLUG
+          && Boolean(openChat.uuid)
+          && chatKey === `universal:${openChat.uuid}`);
+      if (!sameSession) return { key: chatKey, client: activeClient, sessionOverride, initialPrompt };
+      return prev.client.name === activeClient.name ? prev : { ...prev, client: activeClient };
+    });
+  }, [chatKey, activeClient, sessionOverride, initialPrompt, openChat]);
   const chatVisible = view.kind === 'chat' && Boolean(activeClient);
 
   const openClient = useCallback((slug: string) => navigate(`/klient/${encodeURIComponent(slug)}`), [navigate]);
@@ -284,7 +327,9 @@ export default function BeyondApp() {
       onOpenObsah={openObsah}
       onOpenStudio={openStudio}
       onOpenUniversalChat={handleOpenUniversalChat}
+      onReturnToChat={handleReturnToChat}
       onSwitchUniversalSession={handleSwitchUniversalSession}
+      openSessionUuid={view.kind === 'chat' && openChat.slug === UNIVERSAL_SLUG ? openChat.uuid : null}
     >
       {mountedChat && (
         <div className="h-full w-full" hidden={!chatVisible}>

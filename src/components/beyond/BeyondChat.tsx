@@ -126,12 +126,24 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
   const { brainPath } = useBrainPath();
   const brainPathRef = useRef<string | null>(brainPath);
   brainPathRef.current = brainPath;
+  const clientSlugRef = useRef(client.slug);
+  clientSlugRef.current = client.slug;
 
   // Claude Agent SDK session UUID for this client. Loaded from localStorage on
   // mount; updated whenever the server emits `session_created`. We only pass
   // `resume: true` once we actually have a UUID — otherwise the SDK tries to
   // resume a non-existent transcript and silently hangs.
   const sessionIdRef = useRef<string | null>(null);
+  /**
+   * Which session this chat actually has open, announced to the rest of the
+   * app. The sidebar marks a row from this, not from the stored index: the
+   * index remembers what was last used, which is the wrong thing to tick
+   * while a fresh chat is open or another screen is showing.
+   */
+  const openSession = useCallback((uuid: string | null) => {
+    sessionIdRef.current = uuid;
+    window.dispatchEvent(new CustomEvent('beyond:chat-open', { detail: { slug: clientSlugRef.current, uuid } }));
+  }, []);
   // True between "user sent the first turn of a brand-new chat" and "server
   // told us the freshly-minted session id". Only the mount that started that
   // turn may claim the incoming `session_created` — and only such a mount
@@ -241,7 +253,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
     // Drop the current uuid + transcript; the next send() will spawn a fresh
     // SDK session and capture its new UUID via session_created. Server still
     // keeps the old session in the list so it can be switched back to.
-    sessionIdRef.current = null;
+    openSession(null);
     writeLocalActive(client.slug, null);
     streamBubbleIdRef.current = null;
     setStreamingId(null);
@@ -257,7 +269,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
       return prev;
     });
     requestAnimationFrame(() => textareaRef.current?.focus());
-  }, [client.slug]);
+  }, [client.slug, openSession]);
 
   const switchToSession = useCallback(
     (uuid: string) => {
@@ -265,7 +277,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
         setSessionsOpen(false);
         return;
       }
-      sessionIdRef.current = uuid;
+      openSession(uuid);
       writeLocalActive(client.slug, uuid);
       streamBubbleIdRef.current = null;
       setStreamingId(null);
@@ -323,7 +335,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
         return next;
       });
     },
-    [client.slug],
+    [client.slug, openSession],
   );
 
   // Re-pull the persisted transcript for the current session. Used by the
@@ -557,7 +569,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
   // mount — used by global ("+ Nový chat") and session-switch flows.
   useEffect(() => {
     let cancelled = false;
-    sessionIdRef.current = null;
+    openSession(null);
     expectingNewSessionRef.current = false;
     streamBubbleIdRef.current = null;
     setStreamingId(null);
@@ -584,11 +596,11 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
           sessionOverride !== undefined ? sessionOverride.uuid : resolveActiveUuid(index, client.slug);
 
         if (!resumeUuid) {
-          sessionIdRef.current = null;
+          openSession(null);
           if (sessionOverride === undefined) writeLocalActive(client.slug, null);
           return;
         }
-        sessionIdRef.current = resumeUuid;
+        openSession(resumeUuid);
         if (sessionOverride === undefined) writeLocalActive(client.slug, resumeUuid);
 
         // If override picks a different session than the server's active one,
@@ -680,7 +692,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
         null;
       if (!newId) return;
       expectingNewSessionRef.current = false;
-      sessionIdRef.current = newId;
+      openSession(newId);
       writeLocalActive(client.slug, newId);
       // The raw first message — used both for the instant snippet title and to
       // ask the server for a nicer AI-generated label right after.
@@ -722,7 +734,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
         });
       }
     });
-  }, [subscribeMessages, client.slug]);
+  }, [subscribeMessages, client.slug, openSession]);
 
   // Direct subscription for token_budget — bypasses React state batching.
   // The latestMessage effect below would otherwise miss this event whenever
@@ -903,7 +915,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
       // (rare format issue) and is auto-retrying as a fresh session. Clear our
       // resume ref and re-arm "expecting" so the fallback's `session_created`
       // is adopted as this client's new active uuid.
-      sessionIdRef.current = null;
+      openSession(null);
       expectingNewSessionRef.current = true;
       streamBubbleIdRef.current = null;
       setStreamingId(null);

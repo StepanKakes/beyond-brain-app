@@ -34,7 +34,11 @@ type Props = {
   onOpenObsah?: () => void;
   onOpenStudio?: () => void;
   onOpenUniversalChat?: () => void;
+  /** Back to the chat that is open; the Chat item does not start a new one. */
+  onReturnToChat?: () => void;
   onSwitchUniversalSession?: (uuid: string) => void;
+  /** The session open right now, or null when another screen is in front. */
+  openSessionUuid?: string | null;
   /** Collapse the sidebar (rendered as a button in the head). */
   onCollapse?: () => void;
 };
@@ -50,7 +54,9 @@ export default function BeyondSidebarPreview({
   onOpenObsah,
   onOpenStudio,
   onOpenUniversalChat,
+  onReturnToChat,
   onSwitchUniversalSession,
+  openSessionUuid,
   onCollapse,
 }: Props) {
   const { refresh: refreshClients } = useBeyondClients();
@@ -208,7 +214,7 @@ export default function BeyondSidebarPreview({
             type="button"
             className="bb-row"
             aria-current={section === 'chat' ? 'true' : undefined}
-            onClick={onOpenUniversalChat}
+            onClick={onReturnToChat || onOpenUniversalChat}
           >
             <span className="bb-avatar" style={{ background: 'transparent', boxShadow: 'none' }}>
               <MessageSquare size={15} strokeWidth={1.8} style={{ color: 'var(--bb-ink2)' }} />
@@ -217,7 +223,7 @@ export default function BeyondSidebarPreview({
           </button>
         )}
 
-        {onOpenUniversalChat && <UniversalSessions onSwitch={onSwitchUniversalSession} query={query} />}
+        {onOpenUniversalChat && <UniversalSessions onSwitch={onSwitchUniversalSession} query={query} openUuid={openSessionUuid ?? null} />}
 
       </nav>
 
@@ -271,7 +277,7 @@ const RECENT_COUNT = 6;
  * the active one always among them; the rest unfold on request. Typing in
  * the search box searches all of them instead.
  */
-function UniversalSessions({ onSwitch, query }: { onSwitch?: (uuid: string) => void; query: string }) {
+function UniversalSessions({ onSwitch, query, openUuid }: { onSwitch?: (uuid: string) => void; query: string; openUuid: string | null }) {
   const { sessions, activeUuid } = useBeyondSessions(UNIVERSAL_SLUG);
   const [all, setAll] = useState(false);
   const q = query.trim().toLowerCase();
@@ -279,10 +285,10 @@ function UniversalSessions({ onSwitch, query }: { onSwitch?: (uuid: string) => v
     if (q) return sessions.filter((s) => s.title.toLowerCase().includes(q));
     if (all || sessions.length <= RECENT_COUNT) return sessions;
     const head = sessions.slice(0, RECENT_COUNT);
-    const active = sessions.find((s) => s.uuid === activeUuid);
-    if (active && !head.includes(active)) head.push(active);
+    const open = sessions.find((s) => s.uuid === openUuid);
+    if (open && !head.includes(open)) head.push(open);
     return head;
-  }, [sessions, q, all, activeUuid]);
+  }, [sessions, q, all, openUuid]);
   if (sessions.length === 0) return null;
 
   const handleDelete = (s: BeyondSession) => {
@@ -300,7 +306,7 @@ function UniversalSessions({ onSwitch, query }: { onSwitch?: (uuid: string) => v
         <SessionRow
           key={s.uuid}
           session={s}
-          active={s.uuid === activeUuid}
+          active={Boolean(openUuid) && s.uuid === openUuid}
           onClick={() => onSwitch?.(s.uuid)}
           onDelete={() => handleDelete(s)}
         />

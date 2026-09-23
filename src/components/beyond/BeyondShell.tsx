@@ -41,7 +41,11 @@ type Props = {
   onOpenObsah?: () => void;
   onOpenStudio?: () => void;
   onOpenUniversalChat?: () => void;
+  /** Back to the chat that is open, as opposed to starting a new one. */
+  onReturnToChat?: () => void;
   onSwitchUniversalSession?: (uuid: string) => void;
+  /** The session the chat has open right now, or null when another screen is in front. */
+  openSessionUuid?: string | null;
   children?: ReactNode;
   /** Force-open the sidebar on mount (used by preview /__preview/sidebar). */
   defaultOpen?: boolean;
@@ -57,7 +61,9 @@ export default function BeyondShell({
   onOpenObsah,
   onOpenStudio,
   onOpenUniversalChat,
+  onReturnToChat,
   onSwitchUniversalSession,
+  openSessionUuid,
   children,
   defaultOpen,
 }: Props) {
@@ -93,6 +99,10 @@ export default function BeyondShell({
     onOpenUniversalChat?.();
     closeOnMobile();
   };
+  const handleReturnToChat = () => {
+    onReturnToChat?.();
+    closeOnMobile();
+  };
   const handleSwitchUniversal = (uuid: string) => {
     onSwitchUniversalSession?.(uuid);
     closeOnMobile();
@@ -113,7 +123,9 @@ export default function BeyondShell({
             onOpenObsah={onOpenObsah ? () => { onOpenObsah(); closeOnMobile(); } : undefined}
             onOpenStudio={onOpenStudio ? () => { onOpenStudio(); closeOnMobile(); } : undefined}
             onOpenUniversalChat={onOpenUniversalChat ? handleOpenUniversal : undefined}
+            onReturnToChat={onReturnToChat ? handleReturnToChat : undefined}
             onSwitchUniversalSession={onSwitchUniversalSession ? handleSwitchUniversal : undefined}
+            openSessionUuid={openSessionUuid ?? null}
             onCollapse={() => setOpen(false)}
           />
         </div>

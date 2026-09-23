@@ -26,6 +26,8 @@ import * as mozek from './beyond-mozek.js';
 import * as ukoly from './beyond-ukoly.js';
 import * as obsah from './beyond-obsah.js';
 import { getPeople } from './beyond-people.js';
+import { createProposal, listProposals, rejectProposal } from './beyond-proposals.js';
+import { getBrainIndex } from './brain-index.js';
 
 function text(payload) {
   return { content: [{ type: 'text', text: typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2) }] };
@@ -365,8 +367,68 @@ export function buildBeyondToolsServer(ctx = {}) {
     },
   );
 
-  return createSdkMcpServer({ name: 'beyond', version: '1.0.0', tools: [schedule, history, pamet, skillManage, tasks, content] });
+  /**
+   * A message to a client, written and queued for one click on the velín.
+   * The agent never sends: it drafts, says who it is for and why, and the
+   * approved text goes out verbatim. Until now only the cron jobs could put
+   * something in that queue, so a message asked for in chat had nowhere to
+   * go.
+   */
+  const message = tool(
+    'zprava',
+    [
+      'Připravená zpráva klientovi, která na Velíně čeká na jedno kliknutí (Odeslat přes WhatsApp). Akce: list, draft, zrus.',
+      'draft: client (slug klienta), title (o co jde, krátce), body (celý text zprávy, pošle se přesně tak, jak ho napíšeš), reason (proč ji posíláme, čte to člověk před kliknutím).',
+      'Neposílej nic sám a nikdy to neslibuj jako odeslané: zpráva jde do fronty a odešle ji člověk. U jednoho klienta smí čekat jen jedna.',
+      'Drž Beyond hlas (system/beyond-hlas.md): tykání, bez emoji, bez pomlček, bez vaty.',
+      'list: co čeká. zrus: id návrhu, který už nedává smysl.',
+    ].join(' '),
+    {
+      action: z.enum(['list', 'draft', 'zrus']),
+      id: z.number().int().optional(),
+      client: z.string().optional(),
+      title: z.string().optional(),
+      body: z.string().optional(),
+      reason: z.string().optional(),
+    },
+    async (args) => {
+      try {
+        if (args.action === 'list') {
+          return text(listProposals({ status: 'pending' }).map((p) => ({ id: p.id, client: p.clientSlug, title: p.title, createdAt: p.createdAt, createdBy: p.createdBy })));
+        }
+        if (args.action === 'zrus') {
+          if (!args.id) return fail('id chybí');
+          const p = rejectProposal(args.id, actor);
+          return text({ ok: true, id: p.id, status: p.status });
+        }
+        if (!args.client) return fail('client chybí (slug klienta)');
+        if (!args.body || !args.body.trim()) return fail('body chybí (text zprávy)');
+        const index = await getBrainIndex();
+        const client = index.clients.find((c) => c.slug === args.client)
+          || index.clients.find((c) => c.slug.startsWith(args.client));
+        if (!client) return fail(`klienta ${args.client} neznám`);
+        if (!client.waGroupId) return fail(`${client.name} nemá v brainu WhatsApp skupinu, zprávu nemám kam poslat`);
+        const created = createProposal({
+          kind: 'chat',
+          clientSlug: client.slug,
+          clientName: client.name,
+          channel: 'whatsapp',
+          target: client.waGroupId,
+          title: args.title || `Zpráva pro ${client.name}`,
+          body: args.body,
+          reason: args.reason || null,
+          createdBy: actor,
+        });
+        if (created.skipped) return text({ ok: false, duvod: created.skipped, cekaId: created.existingId });
+        return text({ ok: true, id: created.id, klient: client.name, ceka: 'na Velíně, odešle člověk kliknutím' });
+      } catch (err) {
+        return fail(err?.message || String(err));
+      }
+    },
+  );
+
+  return createSdkMcpServer({ name: 'beyond', version: '1.0.0', tools: [schedule, history, pamet, skillManage, tasks, content, message] });
 }
 
 /** Tool names as the SDK exposes them, for allow lists. */
-export const BEYOND_TOOL_NAMES = ['mcp__beyond__beyond_schedule', 'mcp__beyond__hledej_historii', 'mcp__beyond__pamet', 'mcp__beyond__skill_manage', 'mcp__beyond__ukoly', 'mcp__beyond__obsah'];
+export const BEYOND_TOOL_NAMES = ['mcp__beyond__beyond_schedule', 'mcp__beyond__hledej_historii', 'mcp__beyond__pamet', 'mcp__beyond__skill_manage', 'mcp__beyond__ukoly', 'mcp__beyond__obsah', 'mcp__beyond__zprava'];
