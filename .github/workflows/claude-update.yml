@@ -30,3 +30,9 @@ jobs:
           Restart-Service $svc -Force
           Start-Sleep -Seconds 4
           Write-Host "==> $svc is now: $((Get-Service $svc).Status)"
+
+          # What the CLI actually offers now, verbatim, so a missing model can
+          # be blamed on the right side.
+          $app = if ($env:BEYOND_APP_DIR) { $env:BEYOND_APP_DIR } else { 'C:\Users\Vlast\beyond\beyond-brain-app' }
+          Set-Location $app
+          node scripts\models.mjs
