@@ -368,14 +368,18 @@ function mapCliOptionsToSDK(options = {}) {
  * @param {Array<string>} tempImagePaths - Temp image file paths for cleanup
  * @param {string} tempDir - Temp directory for cleanup
  */
-function addSession(sessionId, queryInstance, tempImagePaths = [], tempDir = null, writer = null) {
+function addSession(sessionId, queryInstance, tempImagePaths = [], tempDir = null, writer = null, beyondEntry = null) {
   activeSessions.set(sessionId, {
     instance: queryInstance,
     startTime: Date.now(),
     status: 'active',
     tempImagePaths,
     tempDir,
-    writer
+    writer,
+    // The live Beyond stream behind this session, when there is one: the
+    // connectors panel swaps servers through it so the brain's own tools and
+    // the chat's chosen connectors survive the swap.
+    beyond: beyondEntry,
   });
 }
 
@@ -719,6 +723,19 @@ function chatMcpAllow(options = {}) {
   return fromEnv ? fromEnv.split(/[,\s]+/).filter(Boolean) : [];
 }
 
+/**
+ * `setMcpServers` replaces EVERY server the SDK added, and the brain's own
+ * in-process tools (tasks, content, messages, memory, connectors) are one of
+ * them. Any call that forgets them silently strips the session of its brain:
+ * that is how switching on Meta Ads mid-chat once took the task tool away.
+ * So every call goes through here and carries them along.
+ */
+async function applyMcpServers(inst, entry, servers) {
+  const kept = entry?.keptServers
+    || (entry?.sdkOptions?.mcpServers?.beyond ? { beyond: entry.sdkOptions.mcpServers.beyond } : {});
+  return inst.setMcpServers({ ...(servers || {}), ...kept });
+}
+
 async function refreshLiveMcpIfNeeded(entry) {
   try {
     const inst = entry?.queryInstance;
@@ -726,7 +743,7 @@ async function refreshLiveMcpIfNeeded(entry) {
     const servers = pickMcpServers(await loadMcpConfig(entry.initialOptions?.cwd), entry.mcpAllow) || {};
     const fp = mcpAuthFingerprint(servers);
     if (fp === entry.mcpAuthFingerprint) return; // tokens + server set unchanged
-    await inst.setMcpServers(servers);
+    await applyMcpServers(inst, entry, servers);
     entry.mcpAuthFingerprint = fp;
     console.log('[beyond-mcp] re-injected refreshed MCP tokens into live session:', entry.sdkSessionId || entry.chatKey);
   } catch (err) {
@@ -782,7 +799,7 @@ export async function enableConnectorForRun(entry, wanted) {
   if (!match) throw new Error(`konektor ${wanted} neznám nebo je vypnutý`);
   const current = pickMcpServers(all, entry.mcpAllow) || {};
   const servers = { ...current, ...match };
-  await inst.setMcpServers(servers);
+  await applyMcpServers(inst, entry, servers);
   entry.mcpAllow = [...new Set([...(entry.mcpAllow || []), ...Object.keys(match)])];
   entry.mcpAuthFingerprint = mcpAuthFingerprint(servers);
   const keys = Object.keys(match);
@@ -1307,7 +1324,7 @@ async function startNewBeyondStream(command, options, ws) {
   // Register in activeSessions so existing abort code (`abort-session` WS
   // message → abortClaudeSDKSession) still finds it.
   if (entry.sdkSessionId) {
-    addSession(entry.sdkSessionId, entry.queryInstance, entry.tempImagePaths, entry.tempDir, ws);
+    addSession(entry.sdkSessionId, entry.queryInstance, entry.tempImagePaths, entry.tempDir, ws, entry);
   }
 
   // Attach the browser ws with a detach-on-close GRACE window: a dropped socket
@@ -1451,7 +1468,7 @@ async function handleBeyondStreamMessage(entry, message) {
       entry.chatKey = newKey;
       beyondStreamSessions.set(newKey, entry);
     }
-    addSession(entry.sdkSessionId, entry.queryInstance, entry.tempImagePaths, entry.tempDir, entry.ws);
+    addSession(entry.sdkSessionId, entry.queryInstance, entry.tempImagePaths, entry.tempDir, entry.ws, entry);
     if (entry.ws?.setSessionId && typeof entry.ws.setSessionId === 'function') {
       entry.ws.setSessionId(entry.sdkSessionId);
     }
@@ -1936,8 +1953,9 @@ async function setClaudeSDKSessionMcpServers(sessionId, cwd) {
   // Resolve the cwd the same way a fresh spawn would, so a caller passing a
   // stale or foreign path still reads the brain repo's .mcp.json instead of
   // silently finding nothing and detaching every connector.
-  const servers = (await loadMcpConfig(resolveSpawnCwd(cwd))) || {};
-  const result = await session.instance.setMcpServers(servers);
+  const live = session.beyond || session;
+  const servers = pickMcpServers(await loadMcpConfig(resolveSpawnCwd(cwd)), live.mcpAllow) || {};
+  const result = await applyMcpServers(session.instance, live, servers);
   return {
     added: result?.added || [],
     removed: result?.removed || [],
@@ -2200,6 +2218,7 @@ async function runSdkOneShot({
     if (message) recordSdkMessage(capturedSessionId, message);
   };
 
+  runEntry.keptServers = sdkOptions.mcpServers?.beyond ? { beyond: sdkOptions.mcpServers.beyond } : {};
   const queryInstance = query({ prompt: command, options: sdkOptions });
   runEntry.queryInstance = queryInstance;
 
