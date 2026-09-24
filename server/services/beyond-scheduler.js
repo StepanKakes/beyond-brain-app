@@ -42,6 +42,7 @@ import { invalidateBrainIndex } from './brain-index.js';
 import { pruneOsa } from './beyond-obsah.js';
 import { applyToEnv as applyStoredSettings } from './beyond-settings.js';
 import { sampleLimits } from './beyond-usage.js';
+import { usesAlt } from './beyond-alt-model.js';
 import { removeClipFile } from './beyond-clip.js';
 
 /** How often to look at the clock. Jobs decide their own cadence. */
@@ -346,6 +347,8 @@ export function describeJobs() {
       deliver: j.task?.deliver || null,
       createdBy: j.task?.createdBy || null,
       model: j.name === 'registr-klientu' || j.name === 'notion-raw' || j.name === 'wa-raw' || j.task?.noAgent ? null : modelForJob(j.name),
+      /** Runs on the cheap provider instead of the subscription. */
+      alt: usesAlt(j.name),
     };
   });
 }

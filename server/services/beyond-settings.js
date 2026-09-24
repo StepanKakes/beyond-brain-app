@@ -65,6 +65,9 @@ export const CATALOG = [
   { group: 'Modely', key: 'BEYOND_JOB_MODELS', label: 'Výjimky po úlohách (JSON)', hint: 'Např. {"napsat-navrhy":"sonnet","wa-check":"sonnet"}. Přebije výchozí model konkrétní úlohy.' },
   { group: 'Modely', key: 'BEYOND_MODEL_AGENT', label: 'Model pro Telegram a dotazy z Velína', placeholder: 'sonnet' },
   { group: 'Modely', key: 'BEYOND_REVIEW_MODEL', label: 'Model večerní kontroly učení', placeholder: 'sonnet' },
+  { group: 'Modely', key: 'BEYOND_ALT_KEY', label: 'Klíč levného poskytovatele', secret: true, hint: 'API klíč DeepSeeku. Úlohy v seznamu níž pak nejedou přes Claude a neukrajují z týdenního limitu.' },
+  { group: 'Modely', key: 'BEYOND_ALT_JOBS', label: 'Úlohy na levném modelu', hint: 'Názvy úloh oddělené čárkou, * znamená všechny. Např. wa-check, srovnat-profily, beo-hlasovky-rano.', placeholder: 'wa-check, srovnat-profily' },
+  { group: 'Modely', key: 'BEYOND_ALT_BASE_URL', label: 'Adresa levného poskytovatele', hint: 'Prázdné = DeepSeek (https://api.deepseek.com/anthropic).', placeholder: 'https://api.deepseek.com/anthropic' },
   { group: 'Agent', key: 'BEYOND_SCHEDULER', label: 'Plánovač', hint: '0 vypne všechny úlohy (ale dashboardy běží).', placeholder: '1', restart: true },
 ];
 

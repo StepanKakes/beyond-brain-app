@@ -29,6 +29,7 @@ import { getPeople } from './beyond-people.js';
 import { resolveBrainPath } from '../utils/brain-path.js';
 import { getJobState, lastOkSummary, listRuns, markJobRan, ranToday } from './beyond-runs.js';
 import { countPending, createProposal, listProposals, sentRecently, slugsWithPending } from './beyond-proposals.js';
+import { usesAlt } from './beyond-alt-model.js';
 import { broadcast as tgBroadcast, sendTo as tgSendTo, unconfiguredReason as tgReason } from './beyond-telegram.js';
 import { isDueAt, scheduleFromLegacy } from './beyond-schedule.js';
 import { listTasks, scheduleOverride } from './beyond-tasks.js';

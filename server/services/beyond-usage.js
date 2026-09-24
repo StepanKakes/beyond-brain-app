@@ -96,7 +96,9 @@ export function recordUsage(result, ctx = {}) {
       Number(usage.output_tokens || 0),
       Number(usage.cache_read_input_tokens || 0),
       Number(usage.cache_creation_input_tokens || 0),
-      Number(result.total_cost_usd || 0),
+      // A run on the cheap lane comes back priced as if it were Claude; the
+      // provider's own prices are what it actually cost.
+      ctx.altCost != null ? Number(ctx.altCost) : Number(result.total_cost_usd || 0),
       Number.isFinite(result.duration_ms) ? Math.round(result.duration_ms) : null,
       Number.isFinite(result.num_turns) ? result.num_turns : null,
       result.is_error ? 1 : 0,

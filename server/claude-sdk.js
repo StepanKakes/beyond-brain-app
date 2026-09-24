@@ -38,6 +38,7 @@ import { buildBeyondToolsServer, BEYOND_TOOL_NAMES } from './services/beyond-age
 import { promptBlock as memoryPromptBlock } from './services/beyond-memory.js';
 import { record as recordHistory, touchSession as touchHistorySession } from './services/beyond-history.js';
 import { recordUsage } from './services/beyond-usage.js';
+import { altCost, altEnv, usesAlt } from './services/beyond-alt-model.js';
 
 const activeSessions = new Map();
 const pendingToolApprovals = new Map();
@@ -2120,8 +2121,12 @@ async function runSdkOneShot({
   const resolvedCwd = resolveSpawnCwd(cwd);
   const resolvedExe = resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH);
 
+  // A job on the cheap lane talks to another provider's Anthropic-shaped API.
+  // Only the environment of this one spawn changes; the tools, the skills and
+  // the brain are the same.
+  const onAlt = usesAlt(beyond?.label || beyond?.job || null);
   const sdkOptions = {
-    env: { ...process.env },
+    env: { ...process.env, ...(onAlt ? altEnv() || {} : {}) },
     pathToClaudeCodeExecutable: resolvedExe,
     model: model || CLAUDE_MODELS.DEFAULT,
     tools: { type: 'preset', preset: 'claude_code' },
@@ -2243,7 +2248,13 @@ async function runSdkOneShot({
       }
       if (message.type === 'result') {
         resultRaw = message;
-        recordUsage(message, { source: beyond?.source || 'agent', label: beyond?.label || null, actor: beyond?.actor || null, sessionId: capturedSessionId });
+        recordUsage(message, {
+          source: beyond?.source || 'agent',
+          label: beyond?.label || null,
+          actor: beyond?.actor || null,
+          sessionId: capturedSessionId,
+          altCost: onAlt ? altCost(message?.modelUsage ? Object.keys(message.modelUsage)[0] : null, message.usage || {}) : null,
+        });
         if (typeof message.stop_reason === 'string') finishReason = message.stop_reason;
         else if (typeof message.subtype === 'string') finishReason = message.subtype;
         // result is terminal — the loop will exit naturally on the next iteration

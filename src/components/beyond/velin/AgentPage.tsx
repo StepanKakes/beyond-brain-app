@@ -28,6 +28,8 @@ type Job = {
   createdBy: string | null;
   /** Which model runs it; null for fetch-only jobs. */
   model: string | null;
+  /** True when it runs on the cheap provider, outside the subscription. */
+  alt?: boolean;
 };
 
 type EventRow = {
@@ -598,6 +600,7 @@ export default function AgentPage() {
                   {j.title}
                   {j.custom ? ` · vlastní${j.createdBy ? ` (${j.createdBy})` : ''}` : ''}
                   {j.model && <span className="bb-sig__model" title="Model, na kterém běží">{j.model}</span>}
+                  {j.alt && <span className="bb-sig__model" title="Jede mimo předplatné, na levném poskytovateli">mimo Claude</span>}
                 </span>
                 <span className="bb-sig__m">
                   {j.lastRunAt ? ago(j.lastRunAt) : 'neběželo'}
