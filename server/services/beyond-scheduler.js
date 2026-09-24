@@ -346,7 +346,7 @@ export function describeJobs() {
       failureStreak: state.failureStreak,
       deliver: j.task?.deliver || null,
       createdBy: j.task?.createdBy || null,
-      model: j.name === 'registr-klientu' || j.name === 'notion-raw' || j.name === 'wa-raw' || j.task?.noAgent ? null : modelForJob(j.name),
+      model: j.name === 'registr-klientu' || j.name === 'notion-raw' || j.name === 'wa-raw' || j.name === 'hlidat-modely' || j.task?.noAgent ? null : modelForJob(j.name),
       /** Runs on the cheap provider instead of the subscription. */
       alt: usesAlt(j.name),
     };

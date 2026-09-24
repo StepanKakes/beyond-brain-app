@@ -1963,8 +1963,8 @@ function normalizeModelInfos(models) {
  * instance; falls back to a short-lived throwaway spawn if none is active.
  * @returns {Promise<Array<{value: string, displayName: string, description: string}>>}
  */
-async function getSupportedModels() {
-  if (cachedSupportedModels) return cachedSupportedModels;
+async function getSupportedModels({ fresh = false } = {}) {
+  if (cachedSupportedModels && !fresh) return cachedSupportedModels;
 
   // Reuse a live session if one exists — avoids spawning a throwaway process.
   for (const session of activeSessions.values()) {

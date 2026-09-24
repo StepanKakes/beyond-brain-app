@@ -30,6 +30,7 @@ import { resolveBrainPath } from '../utils/brain-path.js';
 import { getJobState, lastOkSummary, listRuns, markJobRan, ranToday } from './beyond-runs.js';
 import { countPending, createProposal, listProposals, sentRecently, slugsWithPending } from './beyond-proposals.js';
 import { usesAlt } from './beyond-alt-model.js';
+import { diffModels } from './beyond-model-watch.js';
 import { broadcast as tgBroadcast, sendTo as tgSendTo, unconfiguredReason as tgReason } from './beyond-telegram.js';
 import { isDueAt, scheduleFromLegacy } from './beyond-schedule.js';
 import { listTasks, scheduleOverride } from './beyond-tasks.js';
@@ -1625,6 +1626,36 @@ function runnableFromTask(task) {
 
 /* ------------------------------------------------------------------ */
 
+/**
+ * Tell a person when Claude Code starts offering a different model. The
+ * aliases move work onto a new model by themselves; this is the note that it
+ * happened, with what it costs against what it replaced.
+ */
+const modelWatch = {
+  name: 'hlidat-modely',
+  title: 'Hlídat nové modely',
+  description: 'Porovná modely, které Claude Code nabízí, s minulým týdnem. Když se něco změnilo, řekne co a za kolik.',
+  dailyAt: { hour: 7, minute: 5 },
+  model: null,
+  async hasWork() {
+    return 'denní kontrola';
+  },
+  async run({ log }) {
+    const { getSupportedModels } = await import('../claude-sdk.js');
+    const models = await getSupportedModels({ fresh: true });
+    if (!models?.length) return { skipped: 'Claude Code seznam modelů nevrátil' };
+    const lines = diffModels(models);
+    if (!lines.length) {
+      log('beze změny');
+      return { summary: `beze změny: ${models.map((m) => m.value).join(', ')}` };
+    }
+    const text = ['Modely se změnily.', ...lines].join('\n');
+    const delivery = await tgBroadcast(text).catch((err) => ({ skipped: err?.message || String(err) }));
+    log(text);
+    return { summary: `${text}${delivery?.skipped ? `\n(Telegram: ${delivery.skipped})` : ''}` };
+  },
+};
+
 export const JOBS = [
   // Order matters only for which one a tick picks first when several are due;
   // the ones that produce work for a person come before the housekeeping,
@@ -1646,6 +1677,7 @@ export const JOBS = [
   contentMoments,
   contentStories,
   learningReview,
+  modelWatch,
 ];
 
 /** Built-in jobs plus the ones defined in the brain, in one list. */

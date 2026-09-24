@@ -1,38 +1,61 @@
 name: Claude update
 
-# Update the Claude Code the box runs. The model picker lists whatever that
-# install offers, so a stale CLI means the newest models simply are not there.
-# Restarts the app afterwards: the supported-model list is cached until then.
+# Keep the box's Claude Code current. The brain asks for models by alias
+# (opus, sonnet, haiku), and an alias always points at the newest model of its
+# tier in the installed Claude Code; so an up-to-date CLI is what moves every
+# job and chat onto a new model the day it ships, with no code change.
+#
+# Nightly, and by hand. Only touches the service when there is actually a
+# newer version, and only once nothing is running, because Windows will not
+# replace a binary a live run still holds open.
 
 on:
   workflow_dispatch: {}
+  schedule:
+    # 01:40 UTC = 03:40 Prague summer time, before the morning jobs.
+    - cron: '40 1 * * *'
 
 jobs:
   update:
     runs-on: [self-hosted, windows, beyond-brain]
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
-      - name: Update and restart
+      - name: Update when there is something to update
         shell: powershell
         run: |
           $ErrorActionPreference = 'Continue'
           $svc = if ($env:BEYOND_SERVICE) { $env:BEYOND_SERVICE } else { 'BeyondBrainApp' }
+          $app = if ($env:BEYOND_APP_DIR) { $env:BEYOND_APP_DIR } else { 'C:\Users\Vlast\beyond\beyond-brain-app' }
+          $health = if ($env:BEYOND_HEALTH_URL) { $env:BEYOND_HEALTH_URL } else { 'http://127.0.0.1:3001/health' }
 
-          Write-Host "==> before: $(claude --version 2>&1)"
-          Write-Host "==> where: $((Get-Command claude -ErrorAction SilentlyContinue).Source)"
+          $current = ((claude --version 2>&1 | Out-String).Trim() -split ' ')[0]
+          $latest = (npm view @anthropic-ai/claude-code version 2>$null | Out-String).Trim()
+          Write-Host "==> installed $current, newest $latest"
+          if (-not $latest -or $current -eq $latest) {
+            Write-Host "==> up to date, nothing to do"
+            exit 0
+          }
 
+          # Wait for a quiet moment: no chat mid-reply, no job running.
+          Write-Host "==> waiting for the box to be idle"
+          foreach ($attempt in 1..60) {
+            $busy = $null
+            try { $busy = ((Invoke-WebRequest -Uri $health -UseBasicParsing -TimeoutSec 5).Content | ConvertFrom-Json).busy } catch {}
+            if (-not $busy) { break }
+            if ($busy.chats -eq 0 -and -not $busy.job) { break }
+            Write-Host "    in flight: $($busy.chats) chat(s), job: $($busy.job) (attempt $attempt)"
+            Start-Sleep -Seconds 20
+          }
+
+          Stop-Service $svc -Force
+          Start-Sleep -Seconds 3
           claude update 2>&1 | ForEach-Object { Write-Host "    $_" }
-
-          $after = (claude --version 2>&1 | Out-String).Trim()
-          Write-Host "==> after: $after"
-
-          Write-Host "==> Restart-Service $svc"
-          Restart-Service $svc -Force
-          Start-Sleep -Seconds 4
+          $after = ((claude --version 2>&1 | Out-String).Trim() -split ' ')[0]
+          Write-Host "==> now $after"
+          Start-Service $svc
+          Start-Sleep -Seconds 5
           Write-Host "==> $svc is now: $((Get-Service $svc).Status)"
 
-          # What the CLI actually offers now, verbatim, so a missing model can
-          # be blamed on the right side.
-          $app = if ($env:BEYOND_APP_DIR) { $env:BEYOND_APP_DIR } else { 'C:\Users\Vlast\beyond\beyond-brain-app' }
+          # What the new CLI offers, verbatim.
           Set-Location $app
           node scripts\models.mjs
