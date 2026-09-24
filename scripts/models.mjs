@@ -27,7 +27,24 @@ try {
   console.log(`cli: not on PATH (${err.message})`);
 }
 
-const q = query({ prompt: (async function* () { /* nothing to send */ })(), options: {} });
+// Ask the INSTALLED Claude Code, the one the app runs. Left to itself the SDK
+// starts the older copy bundled in its npm package, which lists the models of
+// its own generation and makes this log lie.
+function installedCli() {
+  if (process.env.CLAUDE_CLI_PATH && fs.existsSync(process.env.CLAUDE_CLI_PATH)) return process.env.CLAUDE_CLI_PATH;
+  if (process.platform === 'win32') {
+    const exe = path.join(process.env.APPDATA || '', 'npm', 'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe');
+    if (fs.existsSync(exe)) return exe;
+  }
+  try {
+    return execFileSync(process.platform === 'win32' ? 'where' : 'which', ['claude'], { encoding: 'utf8' }).split(/\r?\n/)[0].trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+const cliPath = installedCli();
+console.log(`probing: ${cliPath || 'bundled copy (installed one not found)'}`);
+const q = query({ prompt: (async function* () { /* nothing to send */ })(), options: cliPath ? { pathToClaudeCodeExecutable: cliPath } : {} });
 try {
   const models = await Promise.race([
     q.supportedModels(),
