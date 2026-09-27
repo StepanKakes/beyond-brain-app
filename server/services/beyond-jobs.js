@@ -40,7 +40,7 @@ import { notionConfigured, pullNotion, pullRegistry, pullWhatsApp, readRegistry 
 import { isConfigured as wahaConfigured } from './beyond-waha.js';
 import { todayIso, timeLocal } from './beyond-time.js';
 import { createTask as createUkol, findByPrepRef, listTasks as listUkoly } from './beyond-ukoly.js';
-import { createClientTasks, notionConfigured as notionReady, tasksFromWriteup, upsertCallPage } from './beyond-notion.js';
+import { applyTaskPlan, notionConfigured as notionReady, readClientTaskState, tasksFromWriteup, upsertCallPage } from './beyond-notion.js';
 import { hasMomentsFor, listItems as listObsah, markChecked as markCallChecked } from './beyond-obsah.js';
 import { cutMissing } from './beyond-clip.js';
 
@@ -515,52 +515,18 @@ async function writeupAndNotion(call, log) {
   if (/<!--\s*notion:[^>]+-->/.test(text)) return `${notes[0]} · v Notionu už je`;
   const reg = (await readRegistry()).find((k) => k.slug === call.slug) || {};
 
-  // No API token: the agent does Notion itself through the Notion connector
-  // (MCP), the way the skill always did by hand. Same row, same tasks.
+  // Notion goes through its API. Without a token nothing is written there;
+  // the old way (the agent clicking through the connector) was slow and put
+  // every sentence of the write-up into the client's task list.
   if (!notionReady()) {
-    const week = client?.programWeek ? `W${String(client.programWeek).padStart(2, '0')}` : null;
-    const r = await runAgent(
-      [
-        `Zápis z callu klienta \`${call.slug}\` (${call.dateIso}) je hotový v \`${rel}\`. Dej ho do Notionu přes Notion MCP.`,
-        '',
-        '1. Coaching Calls klienta:' + (reg.callsDbId ? ` databáze \`${reg.callsDbId}\` (notion-fetch).` : ' najdi přes notion-search „Coaching Calls " + jméno.'),
-        `   Najdi řádek s datem ${call.dateIso}. Když má Status „✅ Zpracováno", je to Timův ruční zápis: NESAHEJ na něj, přeskoč krok 1`,
-        '   i krok 2 a do JSON dej jeho URL a problem "uz zpracovano rucne". Když má Status „🆕 Z Fathomu" nebo jiný, uprav ho; když neexistuje, založ nový.',
-        `   Properties: Téma hovoru = tema z hlavičky souboru, Datum = ${call.dateIso}, Status = „✅ Zpracováno",`,
-        '   Typ = typ z hlavičky (přesně jedna z hodnot databáze), Délka (min) = delka z hlavičky,',
-        reg.dashboardId ? `   Klient = relace na stránku \`${reg.dashboardId}\`.` : '   Klient = relace na Dashboard klienta, když ho dohledáš.',
-        '   Obsah stránky = celý zápis ze souboru bez YAML hlavičky a bez sekce „Souvisí" na konci (ta je jen pro brain), v Notion markdownu (checkboxy, nadpisy, číslovaný seznam).',
-        '   U existujícího řádku starý obsah nahraď. Na konec dej odkaz „Záznam hovoru (Fathom)" z hlavičky.',
-        '',
-        '2. Úkoly klienta:' + (reg.tasksDbId ? ` databáze \`${reg.tasksDbId}\`.` : ' najdi přes notion-search „Úkoly " + jméno.'),
-        '   Pro každý checkbox v sekci „Tvoje úkoly z dnešní schůzky" založ řádek: Název = text úkolu,',
-        `   Project Status = „Nezahájeno", Typ - Hodnota = „Úkol"${week ? `, Týden = „${week}"` : ''}${reg.dashboardId ? `, Klient = relace na \`${reg.dashboardId}\`` : ''}.`,
-        '   Když řádek se stejným názvem už existuje, nezakládej ho znovu. Nic dalšího v Notionu neměň.',
-        '',
-        'Neměň schéma databází a nehádej názvy hodnot. Když Notion MCP není k dispozici, řekni to a nic nedělej.',
-        '',
-        'Úplně na konec odpovědi dej jeden řádek JSON, nic za ním:',
-        '{"pageUrl": "<url stránky v Coaching Calls nebo prázdné>", "tasksCreated": <číslo>, "tasksSkipped": <číslo>, "problem": "<prázdné, nebo co nešlo>"}',
-      ].join('\n'),
-      { timeoutMs: 10 * 60 * 1000 },
-    );
-    const rep = parseReport(r.text);
-    let j = null;
-    try {
-      const line = String(r.text || '').trim().split('\n').reverse().find((l) => l.trim().startsWith('{'));
-      j = line ? JSON.parse(line.trim()) : null;
-    } catch {
-      j = null;
-    }
-    if (j?.pageUrl) {
-      await fs.writeFile(abs, `${text.trimEnd()}\n\n<!-- notion:${j.pageUrl} -->\n`, 'utf8');
-      notes.push(`Notion přes konektor: stránka ${j.pageUrl}, úkoly klienta ${j.tasksCreated ?? '?'} nových${j.tasksSkipped ? `, ${j.tasksSkipped} už byly` : ''}`);
-    } else {
-      notes.push(`Notion přes konektor neproběhl: ${j?.problem || rep.shrnuti || 'bez odpovědi'}`);
-    }
+    notes.push('Notion přeskočen: chybí BEYOND_NOTION_TOKEN');
     return notes.join(' · ');
   }
 
+  if (!reg.callsDbId) {
+    notes.push('Notion přeskočen: klient nemá v registru Coaching Calls DB');
+    return notes.join(' · ');
+  }
   const page = await upsertCallPage({
     callsDbId: reg.callsDbId,
     dashboardId: reg.dashboardId || null,
@@ -571,15 +537,89 @@ async function writeupAndNotion(call, log) {
     markdown: body,
     fathomUrl: fm.fathom || null,
   });
+  if (page.manual) {
+    await fs.writeFile(abs, `${text.trimEnd()}\n\n<!-- notion:${page.pageId} -->\n`, 'utf8');
+    notes.push('v Notionu už je ruční zápis, nesahám na něj ani na úkoly');
+    return notes.join(' · ');
+  }
   notes.push(`Notion Coaching Calls ${page.created ? 'založeno' : 'doplněno'}`);
 
   const week = client?.programWeek ? `W${String(client.programWeek).padStart(2, '0')}` : null;
-  const made = await createClientTasks({ tasksDbId: reg.tasksDbId, dashboardId: reg.dashboardId || null, tasks: clientTasks, week });
-  notes.push(made.note ? made.note : `úkoly klienta v Notionu: ${made.created.length} nových${made.skipped.length ? `, ${made.skipped.length} už byly` : ''}`);
+  try {
+    const state = await readClientTaskState({ tasksDbId: reg.tasksDbId, dashboardId: reg.dashboardId || null });
+    const plan = await planClientTasks(call, clientTasks, state, log);
+    if (plan) {
+      const made = await applyTaskPlan({ tasksDbId: reg.tasksDbId, dashboardId: reg.dashboardId || null, weekly: state.weekly, plan, week });
+      const parts = [];
+      if (made.weekly) parts.push(`týdenní úkoly na dashboardu: ${made.weekly}`);
+      parts.push(made.note || `nové úkoly v databázi: ${made.created.length}${made.created.length ? ` (${made.created.join(', ')})` : ''}`);
+      if (plan.vynechano?.length) parts.push(`vynecháno ${plan.vynechano.length}, už existuje nebo to není úkol`);
+      notes.push(parts.join(', '));
+    } else {
+      notes.push('úkoly klienta: plán nevznikl, nic nezaloženo');
+    }
+  } catch (err) {
+    notes.push(`úkoly klienta selhaly: ${err?.message || err}`);
+  }
 
   // Remember it so a re-run does not create the row twice.
   await fs.writeFile(abs, `${text.trimEnd()}\n\n<!-- notion:${page.pageId} -->\n`, 'utf8');
   return notes.join(' · ');
+}
+
+/**
+ * Decide what of the call's to-do list goes where. The write-up keeps every
+ * item (the client reads it on the call page); the dashboard gets this week's
+ * short checklist; the Úkoly database only gets a new, named piece of work the
+ * client does not have yet. Habits and advice ("post fewer stories") are not
+ * tasks, and "fill in the Brainstorming template" is the existing
+ * "Brainstorming obsahu Beyond" row, not a new one.
+ */
+export async function planClientTasks(call, candidates, state, log) {
+  if (!candidates.length) return { tydenni: [], nove: [], vynechano: [] };
+  const r = await runAgent(
+    [
+      `Po callu s klientem \`${call.slug}\` (${call.dateIso}) rozhoduješ, kam patří jeho úkoly. Nic nečti ani nepiš, všechno máš tady.`,
+      '',
+      'Úkoly ze zápisu callu:',
+      ...candidates.map((t, i) => `${i + 1}. ${t}`),
+      '',
+      'Co už má v databázi Úkoly (název | stav | týden):',
+      ...(state.rows.length ? state.rows.slice(0, 60).map((x) => `- ${x.nazev} | ${x.stav || '?'} | ${x.tyden || ''}`) : ['- nic']),
+      '',
+      state.weekly
+        ? `Týdenní úkoly na dashboardu teď: ${state.weekly.items.map((i) => `${i.checked ? '[x]' : '[ ]'} ${i.text}`).join('; ') || 'prázdné'}`
+        : 'Dashboard nemá seznam Týdenní úkoly, body z "tydenni" proto půjdou jako řádky do databáze: nedávej tam nic, co v ní už je.',
+      '',
+      'Pravidla:',
+      '1. "tydenni": co má klient udělat do dalšího callu, 3 až 5 bodů, nejdůležitější první. Krátce, infinitiv, do 70 znaků',
+      '   (vzor: "Vyplnit šablonu Brainstorming obsahu Beyond", "Upravit bio na Instagramu podle zápisu"). Nesplněný bod',
+      '   ze stávajícího seznamu, který pořád platí, můžeš nechat. Rady a návyky ("omezit stories se značkami", "dát si pauzu")',
+      '   sem nepatří, ty zůstávají v zápisu.',
+      '2. "nove": jen větší pojmenovaný výstup, který klient odevzdá ke kontrole a v databázi ještě NENÍ, ani pod jiným',
+      '   názvem (vyplnit Brainstorming = existující "Brainstorming obsahu Beyond", přepracovat sérii = existující "Série o typech dětí").',
+      '   Nula je běžná odpověď, nejvýš dva. Název 2 až 5 slov jako ostatní řádky ("Landing page", "Sestavení nabídky"),',
+      '   "popis" jedna až tři věty, co přesně odevzdat.',
+      '3. "vynechano": zbylé body ze zápisu a proč (existuje / rada / drobnost).',
+      '',
+      'Odpověz jen jedním řádkem JSON:',
+      '{"tydenni": ["..."], "nove": [{"nazev": "...", "popis": "..."}], "vynechano": [{"text": "...", "proc": "..."}]}',
+    ].join('\n'),
+    { model: 'sonnet', mcp: [], timeoutMs: 4 * 60 * 1000 },
+  );
+  const line = String(r.text || '').trim().split('\n').reverse().find((l) => l.trim().startsWith('{'));
+  try {
+    const plan = JSON.parse(line);
+    return {
+      tydenni: Array.isArray(plan.tydenni) ? plan.tydenni.filter((t) => typeof t === 'string' && t.trim()) : [],
+      existujici: state.rows.map((x) => x.nazev),
+      nove: Array.isArray(plan.nove) ? plan.nove.filter((u) => u?.nazev) : [],
+      vynechano: Array.isArray(plan.vynechano) ? plan.vynechano : [],
+    };
+  } catch {
+    log(`${call.slug}: plán úkolů není JSON: ${String(r.text || '').slice(0, 200)}`);
+    return null;
+  }
 }
 
 function parseFrontmatter(text) {

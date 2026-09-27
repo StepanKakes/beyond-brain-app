@@ -33,7 +33,7 @@ export const CATALOG = [
   { group: 'Kde jste', key: 'BEYOND_TZ', label: 'Časové pásmo', hint: 'Denní úlohy, „dnes" u úkolů a slova jako zítra. Např. Europe/Prague nebo Asia/Bangkok.', placeholder: 'Europe/Prague' },
   { group: 'Kde jste', key: 'BEYOND_DEFAULT_OWNER', label: 'Výchozí vlastník úkolů', hint: 'Klíč osoby (tim, stepan), komu připadne úkol od agenta, když nevíme lépe.', placeholder: 'tim' },
 
-  { group: 'Notion', key: 'BEYOND_NOTION_TOKEN', label: 'Notion integration token', hint: 'Jen pro ranní pully v appce (registr, dashboardy, cally, úkoly). Zápis po callu jde přes Notion konektor i bez něj.', secret: true },
+  { group: 'Notion', key: 'BEYOND_NOTION_TOKEN', label: 'Notion integration token', hint: 'Registr klientů, ranní pully a zápis po callu (Coaching Calls, Týdenní úkoly, Úkoly). Bez něj appka do Notionu nepíše.', secret: true },
 
   { group: 'Telegram', key: 'BEYOND_TG_BOT_TOKEN', label: 'Bot token', hint: 'Token bota od BotFather.', secret: true },
   { group: 'Telegram', key: 'BEYOND_TG_CHAT_ID', label: 'Chat pro brief a připomínky', hint: 'ID chatu nebo skupiny, kam chodí ranní brief a připomínka hovoru.' },

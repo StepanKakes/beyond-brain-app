@@ -9,8 +9,8 @@
  *   1. a row in the client's "Coaching Calls" database, with the write-up as
  *      the page content. n8n may already have created the row from Fathom
  *      (status "🆕 Z Fathomu"); then it is completed rather than duplicated.
- *   2. the client's tasks from the write-up as rows in their "Úkoly" database,
- *      one per checkbox, skipped when a row with the same title exists.
+ *   2. the week's checklist on the client's dashboard, and only new pieces of
+ *      work as rows in their "Úkoly" database (a planner decides which).
  *
  * Both databases share a schema across clients (see the skill). Nothing here
  * invents property values: selects use the exact option names.
@@ -155,6 +155,12 @@ export async function upsertCallPage({ callsDbId, dashboardId, dateIso, tema, ty
     page_size: 10,
   });
   const rows = found.results || [];
+  // A row already marked done for that day is Tim's own write-up: leave it
+  // and everything after it (tasks included) alone.
+  const manual = rows.find((r) => r.properties?.Status?.select?.name === CALL_STATUS_DONE);
+  if (manual && !rows.some((r) => r.properties?.Status?.select?.name === CALL_STATUS_FATHOM)) {
+    return { pageId: manual.id, url: manual.url, created: false, manual: true };
+  }
   const existing =
     rows.find((r) => r.properties?.Status?.select?.name === CALL_STATUS_FATHOM) ||
     rows.find((r) => r.properties?.Status?.select?.name !== CALL_STATUS_DONE) ||
@@ -211,25 +217,100 @@ export function tasksFromWriteup(markdown) {
   return out;
 }
 
+/* ------------------------------------------------------------------ */
+/* what the client already has                                          */
+/* ------------------------------------------------------------------ */
+
+const plainText = (rt) => (rt || []).map((r) => r.plain_text || r.text?.content || '').join('').trim();
+
 /**
- * One row per task in the client's Úkoly database, unless a row with the
- * same title already exists. Returns what was created and what was skipped.
+ * The client's open work as they see it: rows in their Úkoly database and
+ * the "Týdenní úkoly" checklist on the dashboard (the callout the newer
+ * dashboards have). The planner reads this before adding anything, so a task
+ * the client already has is not added a second time.
  */
-export async function createClientTasks({ tasksDbId, dashboardId, tasks, week = null, dateIso = null }) {
-  if (!tasksDbId) return { created: [], skipped: tasks, note: 'klient nemá Úkoly DB' };
-  const created = [];
-  const skipped = [];
-  for (const text of tasks) {
-    const name = String(text).replace(/\*\*|__|(?<!\w)[*_](?!\w)/g, '').replace(/\s+/g, ' ').trim().slice(0, 200);
-    if (!name) continue;
-    const dup = await notion('POST', `/databases/${tasksDbId}/query`, {
-      filter: { property: 'Název', title: { equals: name } },
-      page_size: 1,
-    });
-    if (dup.results?.length) {
-      skipped.push(name);
-      continue;
+export async function readClientTaskState({ tasksDbId, dashboardId }) {
+  const rows = [];
+  if (tasksDbId) {
+    let cursor;
+    do {
+      const data = await notion('POST', `/databases/${tasksDbId}/query`, {
+        page_size: 100,
+        start_cursor: cursor,
+        sorts: [{ timestamp: 'created_time', direction: 'descending' }],
+      });
+      for (const p of data.results || []) {
+        const pr = p.properties || {};
+        const typ = pr['Typ - Hodnota']?.select?.name || null;
+        if (typ && typ !== TASK_TYPE) continue;
+        rows.push({
+          id: p.id,
+          nazev: plainText(pr['Název']?.title),
+          stav: pr['Project Status']?.select?.name || null,
+          tyden: pr['Týden']?.select?.name || null,
+          zalozeno: (p.created_time || '').slice(0, 10),
+        });
+      }
+      cursor = data.has_more ? data.next_cursor : undefined;
+    } while (cursor && rows.length < 200);
+  }
+
+  let weekly = null;
+  if (dashboardId) {
+    const top = await notion('GET', `/blocks/${dashboardId}/children?page_size=100`);
+    for (const b of top.results || []) {
+      if (b.type !== 'callout' || !/úkol/i.test(plainText(b.callout?.rich_text))) continue;
+      const kids = await notion('GET', `/blocks/${b.id}/children?page_size=100`);
+      weekly = {
+        blockId: b.id,
+        items: (kids.results || [])
+          .filter((k) => k.type === 'to_do')
+          .map((k) => ({ id: k.id, text: plainText(k.to_do.rich_text), checked: Boolean(k.to_do.checked) })),
+      };
+      break;
     }
+  }
+  return { rows, weekly };
+}
+
+/**
+ * Apply what the planner decided: the week's checklist on the dashboard is
+ * replaced by the new one, and only genuinely new pieces of work become rows
+ * in the Úkoly database, with the longer description as the page body.
+ */
+export async function applyTaskPlan({ tasksDbId, dashboardId, weekly, plan, week = null, dateIso = null }) {
+  const out = { weekly: 0, created: [], note: null };
+
+  if (weekly?.blockId && Array.isArray(plan.tydenni) && plan.tydenni.length) {
+    for (const item of weekly.items) {
+      await notion('DELETE', `/blocks/${item.id}`).catch(() => {});
+    }
+    await notion('PATCH', `/blocks/${weekly.blockId}/children`, {
+      children: plan.tydenni.slice(0, 6).map((t) => ({
+        object: 'block',
+        type: 'to_do',
+        to_do: { rich_text: richText(String(t).trim()), checked: false },
+      })),
+    });
+    out.weekly = Math.min(plan.tydenni.length, 6);
+  }
+
+  if (!tasksDbId) {
+    out.note = 'klient nemá Úkoly DB';
+    return out;
+  }
+  // An older dashboard has no weekly checklist; there the week's short list
+  // is what goes into the database, minus what is already a row there.
+  const rows = [...(plan.nove || [])];
+  if (!weekly?.blockId) {
+    const have = new Set((plan.existujici || []).map((n) => String(n).toLowerCase().trim()));
+    for (const t of plan.tydenni || []) {
+      if (!have.has(String(t).toLowerCase().trim())) rows.push({ nazev: t });
+    }
+  }
+  for (const u of rows.slice(0, 5)) {
+    const name = String(u.nazev || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+    if (!name) continue;
     const properties = {
       'Název': { title: title(name) },
       'Project Status': { select: { name: TASK_STATUS_NEW } },
@@ -238,17 +319,16 @@ export async function createClientTasks({ tasksDbId, dashboardId, tasks, week = 
     if (dashboardId) properties.Klient = { relation: [{ id: dashboardId }] };
     if (week) properties['Týden'] = { select: { name: week } };
     if (dateIso) properties.Date = { date: { start: dateIso } };
+    const children = u.popis ? markdownToBlocks(String(u.popis)).slice(0, 50) : [];
     try {
-      await notion('POST', '/pages', { parent: { database_id: tasksDbId }, properties });
-      created.push(name);
+      await notion('POST', '/pages', { parent: { database_id: tasksDbId }, properties, children });
     } catch (err) {
       // A week option the DB does not have is the likely cause; retry without it.
-      if (week && /Týden|select/i.test(err?.message || '')) {
-        delete properties['Týden'];
-        await notion('POST', '/pages', { parent: { database_id: tasksDbId }, properties });
-        created.push(name);
-      } else throw err;
+      if (!week || !/Týden|select/i.test(err?.message || '')) throw err;
+      delete properties['Týden'];
+      await notion('POST', '/pages', { parent: { database_id: tasksDbId }, properties, children });
     }
+    out.created.push(name);
   }
-  return { created, skipped, note: null };
+  return out;
 }
