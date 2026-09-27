@@ -279,14 +279,14 @@ body { background: var(--bb-bg) !important; color: var(--bb-ink); font-family: v
 .bb-msg { animation: bbUp .5s var(--bb-spring); }
 
 .bb-user { display: flex; justify-content: flex-end; }
-.bb-user__col { max-width: 76%; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
-.bb-bubble { background: var(--bb-bubble); padding: 12px 17px; border-radius: 20px 20px 6px 20px; font-size: 15px; line-height: 1.6; text-wrap: pretty; color: var(--bb-ink); }
+.bb-user__col { max-width: 76%; min-width: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.bb-bubble { max-width: 100%; overflow-wrap: anywhere; background: var(--bb-bubble); padding: 12px 17px; border-radius: 20px 20px 6px 20px; font-size: 15px; line-height: 1.6; text-wrap: pretty; color: var(--bb-ink); }
 .bb-filechip { display: inline-flex; align-items: center; gap: 8px; padding: 7px 11px; font-size: 12.5px; color: var(--bb-ink);
   background: var(--bb-raise); border: 1px solid var(--bb-line); border-radius: 11px; }
 .bb-filechip__size { color: var(--bb-ink3); }
 
 .bb-ai { display: flex; }
-.bb-ai__col { flex: 1; min-width: 0; }
+.bb-ai__col { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .bb-blocks { display: flex; flex-direction: column; gap: 16px; }
 .bb-p { margin: 0; font-size: 15.5px; line-height: 1.72; text-wrap: pretty; color: var(--bb-ink); }
 .bb-caret { display: inline-block; width: 2px; height: 1em; margin-left: 2px; vertical-align: -2px; background: var(--bb-accent); animation: bbBlink 1s step-end infinite; }
