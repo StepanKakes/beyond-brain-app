@@ -799,6 +799,12 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
     // Drop anything that isn't for the session this chat is showing.
     if (!belongsToThisChat(m)) return;
 
+    // Anything live from the turn means it is still running. After the window
+    // comes back, a status check can report the turn as finished while steps
+    // keep arriving; the brain animation follows the stream, and only
+    // `complete` or `error` ends it.
+    if (kind === 'stream_delta' || kind === 'tool_use' || kind === 'tool_result') setThinking(true);
+
     if (kind === 'stream_delta') {
       const text = (m.content as string | undefined) || '';
       if (!text) return;
