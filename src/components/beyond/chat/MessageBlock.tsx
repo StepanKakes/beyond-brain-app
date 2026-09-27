@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronRight } from '../icons';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
@@ -8,6 +9,7 @@ import { remarkBeyondFilePaths, parseBeyondFileHref, BEYOND_FILE_SCHEME } from '
 import BeyondCodeBlock from '../BeyondCodeBlock';
 import BeyondBrainMark from '../BeyondBrainMark';
 import StreamingText from '../StreamingText';
+import StoryViewer from '../velin/StoryViewer';
 import { describeTool, formatInput, iconForTool } from './toolDisplay';
 import type { ChatMessage, ToolStep } from './types';
 
@@ -60,6 +62,23 @@ export default function MessageBlock({
     );
   }
 
+  return <AssistantText message={message} streaming={streaming} />;
+}
+
+const IMAGE_RE = /!\[[^\]]*\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/g;
+
+/** Every picture in a message, in order: the slides the viewer steps through. */
+function imagesIn(text: string): string[] {
+  const out: string[] = [];
+  for (const m of text.matchAll(IMAGE_RE)) if (!out.includes(m[1])) out.push(m[1]);
+  return out;
+}
+
+function AssistantText({ message, streaming }: { message: ChatMessage; streaming: boolean }) {
+  const text = 'text' in message ? message.text : '';
+  const [viewAt, setViewAt] = useState<number | null>(null);
+  const images = imagesIn(text);
+
   return (
     <motion.div
       initial="hidden"
@@ -71,7 +90,7 @@ export default function MessageBlock({
       <BeyondBrainMark size={42} animate="in" className="mt-[2px] shrink-0 text-beyond-dim" title="Beyond" />
       <div className="min-w-0 flex-1">
         {streaming ? (
-          <StreamingText text={message.text} />
+          <StreamingText text={text} />
         ) : (
           <ReactMarkdown
             remarkPlugins={[remarkGfm, remarkBeyondFilePaths]}
@@ -115,13 +134,22 @@ export default function MessageBlock({
                   </a>
                 );
               },
-              // Pictures the agent made (rendered stories) open full size in a
-              // new tab; the chat shows them at a story's proportions.
-              img: ({ src, alt }) => (
-                <a href={typeof src === 'string' ? src : undefined} target="_blank" rel="noopener noreferrer" className="bb-md__img">
-                  <img src={typeof src === 'string' ? src : undefined} alt={alt || ''} loading="lazy" />
-                </a>
-              ),
+              // Pictures the agent made (rendered stories) sit in the chat at a
+              // story's proportions and open in the story viewer, all slides of
+              // the message in a row, instead of a bare image in a new tab.
+              img: ({ src, alt }) => {
+                const url = typeof src === 'string' ? src : '';
+                return (
+                  <button
+                    type="button"
+                    className="bb-md__img"
+                    onClick={() => setViewAt(Math.max(0, images.indexOf(url)))}
+                    aria-label={alt ? `Otevřít ${alt}` : 'Otevřít náhled'}
+                  >
+                    <img src={url || undefined} alt={alt || ''} loading="lazy" />
+                  </button>
+                );
+              },
               code: ({ className, children }) => {
                 const raw = String(children ?? '');
                 const isBlock = /\n/.test(raw);
@@ -143,10 +171,15 @@ export default function MessageBlock({
               ),
             }}
           >
-            {message.text}
+            {text}
           </ReactMarkdown>
         )}
       </div>
+      {viewAt !== null && images.length > 0 && (
+        // The message animates with a transform, which would pin a fixed
+        // overlay to the message instead of the window; render it on the body.
+        createPortal(<StoryViewer images={images} startAt={viewAt} onClose={() => setViewAt(null)} />, document.body)
+      )}
     </motion.div>
   );
 }

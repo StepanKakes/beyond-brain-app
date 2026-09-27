@@ -1083,8 +1083,10 @@ details.bb-set__group .bb-set__row:focus-within .bb-set__h { display: block; }
 .bb-studio__bar { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; border-bottom: 1px solid var(--bb-line2); }
 .bb-studio__t { font-size: 13.5px; font-weight: 600; color: var(--bb-ink); }
 .bb-studio__frame { flex: 1; width: 100%; border: 0; background: #fff; }
-.bb-md__img { display: inline-block; margin: 6px 6px 6px 0; vertical-align: top; }
-.bb-md__img img { height: 320px; width: auto; max-width: 100%; border-radius: 10px; border: 1px solid var(--bb-line); display: block; }
+.bb-md__img { display: inline-block; margin: 6px 8px 6px 0; padding: 0; border: 0; background: none; vertical-align: top; cursor: zoom-in; border-radius: 12px; }
+.bb-md__img img { height: 300px; width: auto; max-width: 100%; border-radius: 12px; border: 1px solid var(--bb-line); display: block; transition: transform .2s ease, box-shadow .2s ease; }
+.bb-md__img:hover img { transform: translateY(-2px); box-shadow: 0 8px 24px rgb(0 0 0 / .12); }
+.bb-md__img:focus-visible { outline: 2px solid var(--bb-accent); outline-offset: 3px; }
 
 /* where a piece of content came from, readable without opening the card */
 .bb-ob__src { display: flex; align-items: baseline; gap: 6px; margin-top: 7px; color: var(--bb-ink3); font-size: 11.5px; line-height: 1.45; max-width: 100%; }
