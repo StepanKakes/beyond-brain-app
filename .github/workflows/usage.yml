@@ -1,0 +1,26 @@
+name: Usage
+
+# Read-only report of where the brain's tokens went, per source and model.
+# Run by hand from the Actions tab. Changes nothing.
+
+on:
+  workflow_dispatch:
+    inputs:
+      days:
+        description: How many days back to look
+        default: '14'
+
+jobs:
+  usage:
+    runs-on: [self-hosted, windows, beyond-brain]
+    timeout-minutes: 5
+    env:
+      DAYS: ${{ github.event.inputs.days }}
+    steps:
+      - name: Report
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $app = if ($env:BEYOND_APP_DIR) { $env:BEYOND_APP_DIR } else { 'C:\Users\Vlast\beyond\beyond-brain-app' }
+          Set-Location $app
+          node scripts\usage-report.cjs
