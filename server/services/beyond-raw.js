@@ -163,10 +163,28 @@ function activeFromRegistry(klienti) {
   return klienti.filter((k) => k.stav === 'Aktivní');
 }
 
+/**
+ * Write a raw file only when its content moved. The pull stamps `syncedAt`
+ * every morning, and rewriting identical data made every client look changed,
+ * so the morning sync re-read all of them for nothing.
+ */
 async function writeRaw(slug, rel, data) {
   const file = path.join(resolveBrainPath(), 'clients', 'aktivni', slug, 'raw', rel);
+  // Notion hands out file links signed for an hour; a new signature is not
+  // new content.
+  const strip = (d) =>
+    JSON.stringify(d, (key, value) => {
+      if (key === 'syncedAt' || key === 'expiry_time') return undefined;
+      if (key === 'url' && typeof value === 'string' && value.includes('X-Amz-')) return value.split('?')[0];
+      return value;
+    });
+  try {
+    const prev = JSON.parse(await fs.readFile(file, 'utf8'));
+    if (prev && strip(prev) === strip(data)) return false;
+  } catch { /* new or unreadable: write it */ }
   await fs.mkdir(path.dirname(file), { recursive: true });
   await fs.writeFile(file, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
+  return true;
 }
 
 /** Dashboard page + blocks, calls DB, tasks DB for every active client. */

@@ -2131,6 +2131,10 @@ async function runSdkOneShot({
   onProgress,
   loadMcp = true,
   beyond = null,
+  effort,
+  bare = false,
+  bareTools = [],
+  systemPrompt,
 } = {}) {
   if (typeof command !== 'string' || !command.trim()) {
     throw new Error('runSdkOneShot: `command` is required.');
@@ -2154,6 +2158,27 @@ async function runSdkOneShot({
     disallowedTools,
     includePartialMessages: false,
   };
+  // How hard the model thinks. Jobs that transform text or follow a written
+  // recipe do not need the default deep reasoning, and thinking is output.
+  // Haiku takes no effort setting, and a run on the cheap lane may not either.
+  if (effort && !onAlt && !/haiku/i.test(String(sdkOptions.model))) sdkOptions.effort = effort;
+  // A bare run is text in, text out: only the built-in tools it names (often
+  // none), no CLAUDE.md, no skills, no connectors, no Beyond layer. The prefix
+  // shrinks from tens of thousands of tokens to the caller's own instructions.
+  if (bare) {
+    sdkOptions.tools = [...bareTools];
+    sdkOptions.allowedTools = [...bareTools];
+    sdkOptions.settingSources = [];
+    sdkOptions.systemPrompt = systemPrompt || 'Odpovídáš česky. Drž se zadání a vrať jen požadovaný výstup.';
+    // The account's claude.ai connectors would otherwise join on their own.
+    sdkOptions.env = { ...sdkOptions.env, ENABLE_CLAUDEAI_MCP_SERVERS: 'false' };
+    sdkOptions.mcpServers = {};
+    sdkOptions.strictMcpConfig = true;
+    loadMcp = false;
+    beyond = beyond ? { ...beyond, bare: true } : null;
+  } else if (systemPrompt) {
+    sdkOptions.systemPrompt = { type: 'preset', preset: 'claude_code', append: systemPrompt };
+  }
   // Match the streaming path: enable auto-compact so long Telegram threads
   // summarize themselves at ~200k instead of erroring out on context overflow.
   // `BEYOND_AUTO_COMPACT=0` opts out (same env as streaming).
@@ -2189,7 +2214,7 @@ async function runSdkOneShot({
   // closes over it so a job can reach for a connector mid-run, the same way a
   // chat does.
   const runEntry = { mcpAllow: Array.isArray(beyond?.mcp) ? [...beyond.mcp] : [], cwd: resolvedCwd, queryInstance: null };
-  if (beyond) {
+  if (beyond && !beyond.bare) {
     await attachBeyondLayer(sdkOptions, {
       ...beyond,
       connectors: {

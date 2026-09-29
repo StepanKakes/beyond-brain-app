@@ -131,6 +131,11 @@ function shortTitle(text) {
   return oneLine.length > 60 ? oneLine.slice(0, 60) + '…' : oneLine;
 }
 
+/** Slugs whose calls run bare and fresh (see askAgent). */
+const BARE_SLUGS = new Set(
+  String(process.env.BEYOND_BARE_SLUGS ?? 'cron-destilace').split(/[,\s]+/).filter(Boolean),
+);
+
 /**
  * Ask the agent. Returns { slug, source, progress, promise } where `promise`
  * resolves to the answer record. When `progress` is non-null the answer is
@@ -150,9 +155,15 @@ export async function askAgent({ text, source = 'unknown', meta = {}, slug: expl
     }
   }
 
+  // A bare slug is one self-contained transform per call (the evening
+  // distillation sends one raw file each time). Resuming would carry every
+  // earlier file of the night into each later call, so each call starts fresh.
+  const bare = BARE_SLUGS.has(slug || '');
   let resumeId = null;
   let idleReset = false;
-  if (typeof sessionId === 'string' && sessionId.trim()) {
+  if (bare) {
+    /* fresh every time */
+  } else if (typeof sessionId === 'string' && sessionId.trim()) {
     resumeId = sessionId.trim();
   } else if (slug) {
     try {
@@ -195,6 +206,14 @@ export async function askAgent({ text, source = 'unknown', meta = {}, slug: expl
       model: process.env.BEYOND_MODEL_AGENT?.trim() || 'sonnet',
       skipPermissions: true,
       onProgress: progress || undefined,
+      ...(bare
+        ? {
+            bare: true,
+            bareTools: ['Read', 'Grep', 'Glob'],
+            effort: 'medium',
+            systemPrompt: 'Pracuješ nad Beyond brainem (markdown soubory v aktuální složce). Drž se zadání, soubory jen čti a vrať jen požadovaný výstup bez komentáře.',
+          }
+        : {}),
       beyond: {
         source: source === 'telegram' || source === 'voice' ? 'telegram' : source,
         actor: tgUser ? `tg:${tgUser}` : source,
@@ -208,7 +227,7 @@ export async function askAgent({ text, source = 'unknown', meta = {}, slug: expl
       },
     });
     if (progress) progress.finish().catch((err) => console.warn('[agent] progress.finish failed', err));
-    if (slug && result.sessionId) {
+    if (slug && result.sessionId && !bare) {
       try {
         if (resumeId && resumeId === result.sessionId) await touchSession(slug, result.sessionId);
         else await recordNewSession(slug, result.sessionId, shortTitle(text));

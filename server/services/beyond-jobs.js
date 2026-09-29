@@ -19,6 +19,7 @@
  */
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import { runSdkOneShot } from '../claude-sdk.js';
@@ -100,7 +101,46 @@ const JOB_MCP = {
   'uceni-review': [],
 };
 
-async function runAgent(command, { timeoutMs = JOB_TIMEOUT_MS, model = undefined, allowedTools = [], mcp = undefined } = {}) {
+/**
+ * How hard each job thinks. Thinking is billed as output and every step
+ * carries it forward, so bookkeeping and recipe-following jobs run lighter.
+ * Jobs that write words for people (content, call write-ups, proposals) keep
+ * the model's default. Overridable per job with `BEYOND_JOB_EFFORT`, JSON
+ * like {"sync-klientu":"high"}.
+ */
+const JOB_EFFORT = {
+  'sync-klientu': 'medium',
+  'wa-check': 'low',
+  'ranni-brief': 'low',
+  'roadmap-check': 'medium',
+  'zalozit-soubory': 'low',
+  'pripomenout-hovor': 'low',
+  'uceni-review': 'medium',
+  'napsat-co-dluzime': 'medium',
+  'pripravit-hovory': 'medium',
+  'srovnat-profily': 'medium',
+};
+
+function effortForJob(name) {
+  try {
+    const map = JSON.parse(process.env.BEYOND_JOB_EFFORT || '{}');
+    if (map && typeof map[name] === 'string' && map[name].trim()) return map[name].trim();
+  } catch { /* bad override falls through */ }
+  const job = name ? allJobs().find((j) => j.name === name) : null;
+  if (job?.task) return job.task.effort || 'medium';
+  return JOB_EFFORT[name] || undefined;
+}
+
+// Nobody reads a job's narration between tool calls; it only rides along in
+// every later step. The final answer is what the app keeps.
+const JOB_SYSTEM_APPEND = [
+  'Běžíš jako naplánovaná úloha, nikdo tě nesleduje v reálném čase.',
+  'Mezi kroky nic nekomentuj a neshrnuj, rovnou volej další nástroj.',
+  'Čti jen soubory, které úloha opravdu potřebuje, a z dlouhých souborů jen potřebné části.',
+  'Na konci vrať jen požadovaný výsledek, bez rekapitulace postupu.',
+].join('\n');
+
+async function runAgent(command, { timeoutMs = JOB_TIMEOUT_MS, model = undefined, allowedTools = [], mcp = undefined, effort = undefined } = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
@@ -110,6 +150,8 @@ async function runAgent(command, { timeoutMs = JOB_TIMEOUT_MS, model = undefined
       signal: ctrl.signal,
       model: model || modelForJob(currentJob),
       allowedTools,
+      effort: effort || effortForJob(currentJob),
+      systemPrompt: JOB_SYSTEM_APPEND,
       beyond: {
         source: 'job',
         actor: currentJob || 'job',
@@ -654,6 +696,49 @@ function ourPromisesFromWriteup(markdown) {
 /* 2. morning: sync, then say what needs a person                      */
 /* ------------------------------------------------------------------ */
 
+/** Newest modification time anywhere under a client's raw/ folder. */
+function rawStamp(slug) {
+  let newest = 0;
+  const walk = (dir) => {
+    let entries = [];
+    try {
+      entries = fsSync.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      const abs = path.join(dir, e.name);
+      if (e.isDirectory()) walk(abs);
+      else {
+        try {
+          newest = Math.max(newest, fsSync.statSync(abs).mtimeMs);
+        } catch { /* vanished */ }
+      }
+    }
+  };
+  walk(path.join(resolveBrainPath(), 'clients', 'aktivni', slug, 'raw'));
+  return newest;
+}
+
+const SYNC_STAMPS = path.join(os.homedir(), '.cloudcli', 'sync-klientu-stamps.json');
+
+function readSyncStamps() {
+  try {
+    return JSON.parse(fsSync.readFileSync(SYNC_STAMPS, 'utf8')) || {};
+  } catch {
+    return {};
+  }
+}
+
+function writeSyncStamps(stamps) {
+  try {
+    fsSync.mkdirSync(path.dirname(SYNC_STAMPS), { recursive: true });
+    fsSync.writeFileSync(SYNC_STAMPS, JSON.stringify(stamps, null, 2));
+  } catch (err) {
+    console.warn('[sync-klientu] razítka nejdou uložit', err?.message || err);
+  }
+}
+
 const syncClients = {
   name: 'sync-klientu',
   model: 'sonnet',
@@ -666,9 +751,18 @@ const syncClients = {
     // client; the morning run covers everyone, one agent turn per client.
     const index = await getBrainIndex({ force: true });
     const slug = context?.slug ? String(context.slug) : null;
-    const clients = index.clients.filter((c) => c.isActive !== false && (!slug || c.slug === slug));
-    if (!clients.length) return { skipped: slug ? `${slug} není aktivní klient` : 'žádný aktivní klient' };
-    log(slug ? `jen ${slug}` : `${clients.length} klientů, ${FAN_OUT_PARALLEL} najednou`);
+    const active = index.clients.filter((c) => c.isActive !== false && (!slug || c.slug === slug));
+    if (!active.length) return { skipped: slug ? `${slug} není aktivní klient` : 'žádný aktivní klient' };
+    // The morning run leaves out clients whose raw layer has not moved since
+    // their last good sync: an agent turn that reads everything to report
+    // "no change" is the most expensive way to learn nothing. An event for
+    // one client always runs.
+    const stamps = readSyncStamps();
+    const stampOf = new Map(active.map((c) => [c.slug, rawStamp(c.slug)]));
+    const clients = slug ? active : active.filter((c) => !stamps[c.slug] || stampOf.get(c.slug) > stamps[c.slug]);
+    const unchanged = active.length - clients.length;
+    if (!clients.length) return { skipped: `v raw vrstvě nic nového (${active.length} klientů)` };
+    log(slug ? `jen ${slug}` : `${clients.length} klientů, ${FAN_OUT_PARALLEL} najednou${unchanged ? `, ${unchanged} beze změny v raw přeskočeno` : ''}`);
 
     const results = await forEachClient(
       clients,
@@ -685,6 +779,8 @@ const syncClients = {
       { log },
     );
     invalidateBrainIndex();
+    for (const r of results) if (r.ok !== false) stamps[r.client.slug] = stampOf.get(r.client.slug) || Date.now();
+    writeSyncStamps(stamps);
     const out = summarizeFanOut(results);
     if (out.failed === out.total) throw new Error(`sync selhal u všech ${out.total} klientů`);
     return { summary: out.text.slice(0, 4000) };
