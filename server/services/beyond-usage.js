@@ -61,14 +61,41 @@ CREATE TABLE IF NOT EXISTS beyond_external_usage (
 CREATE INDEX IF NOT EXISTS idx_beyond_external_ts ON beyond_external_usage(ts DESC);
 `;
 
+/** Columns added after the first deploy; SQLite has no IF NOT EXISTS for these. */
+const MIGRATIONS = [
+  // The SDK's total_cost_usd as it came, which is the whole session so far
+  // for a chat that keeps one process alive. cost_usd holds this turn's part.
+  'ALTER TABLE beyond_usage ADD COLUMN cost_total REAL',
+];
+
 let ready = false;
 function db() {
   const conn = getConnection();
   if (!ready) {
     conn.exec(SCHEMA);
+    for (const sql of MIGRATIONS) {
+      try {
+        conn.exec(sql);
+      } catch { /* already there */ }
+    }
     ready = true;
   }
   return conn;
+}
+
+/**
+ * This turn's cost out of the SDK's running total. A chat keeps one process
+ * across turns and the total grows with every turn, so storing it as is
+ * counted the first answer again in each later one. A total below the last
+ * one means a fresh process started over, and then it is this turn alone.
+ */
+function turnCost(conn, sessionId, total) {
+  if (!sessionId) return total;
+  const last = conn.prepare(
+    'SELECT cost_total FROM beyond_usage WHERE session_id = ? AND cost_total IS NOT NULL ORDER BY id DESC LIMIT 1',
+  ).get(sessionId);
+  if (!last || last.cost_total == null || total < last.cost_total) return total;
+  return Math.max(0, total - last.cost_total);
 }
 
 /**
@@ -82,15 +109,18 @@ export function recordUsage(result, ctx = {}) {
     const models = result.modelUsage && typeof result.modelUsage === 'object' ? Object.keys(result.modelUsage) : [];
     // The model that did the work: the one with the most output tokens.
     const model = models.sort((a, b) => (result.modelUsage[b]?.outputTokens || 0) - (result.modelUsage[a]?.outputTokens || 0))[0] || null;
-    db().prepare(
-      `INSERT INTO beyond_usage (ts, source, label, actor, session_id, model, input, output, cache_read, cache_write, cost_usd, duration_ms, turns, is_error)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    const conn = db();
+    const sessionId = ctx.sessionId || result.session_id || null;
+    const total = Number(result.total_cost_usd || 0);
+    conn.prepare(
+      `INSERT INTO beyond_usage (ts, source, label, actor, session_id, model, input, output, cache_read, cache_write, cost_usd, duration_ms, turns, is_error, cost_total)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       new Date().toISOString(),
       String(ctx.source || 'chat'),
       ctx.label != null ? String(ctx.label) : null,
       ctx.actor != null ? String(ctx.actor) : null,
-      ctx.sessionId || result.session_id || null,
+      sessionId,
       model,
       Number(usage.input_tokens || 0),
       Number(usage.output_tokens || 0),
@@ -98,10 +128,11 @@ export function recordUsage(result, ctx = {}) {
       Number(usage.cache_creation_input_tokens || 0),
       // A run on the cheap lane comes back priced as if it were Claude; the
       // provider's own prices are what it actually cost.
-      ctx.altCost != null ? Number(ctx.altCost) : Number(result.total_cost_usd || 0),
+      ctx.altCost != null ? Number(ctx.altCost) : turnCost(conn, sessionId, total),
       Number.isFinite(result.duration_ms) ? Math.round(result.duration_ms) : null,
       Number.isFinite(result.num_turns) ? result.num_turns : null,
       result.is_error ? 1 : 0,
+      ctx.altCost != null ? null : total,
     );
   } catch (err) {
     console.warn('[usage] záznam selhal', err?.message || err);
