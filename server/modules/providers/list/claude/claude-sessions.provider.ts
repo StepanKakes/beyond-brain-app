@@ -230,6 +230,20 @@ function extractTaggedContent(content: string, tagName: string): string | null {
   return match ? match[1] : null;
 }
 
+/**
+ * A background subagent that finishes reports back as a synthetic "user" row
+ * wrapped in <task-notification>. It is the harness talking, not the person,
+ * so it becomes its own kind instead of a user bubble.
+ */
+function parseTaskNotification(content: string): { summary: string; status: string; result: string } | null {
+  if (!content.trimStart().startsWith('<task-notification>')) return null;
+  return {
+    summary: (extractTaggedContent(content, 'summary') ?? '').trim(),
+    status: (extractTaggedContent(content, 'status') ?? '').trim(),
+    result: (extractTaggedContent(content, 'result') ?? '').trim(),
+  };
+}
+
 type ClaudeLocalCommandPayload = {
   commandName: string;
   commandMessage: string;
@@ -327,7 +341,19 @@ export class ClaudeSessionsProvider implements IProviderSessions {
             }));
           } else if (part.type === 'text') {
             const text = part.text || '';
-            if (text && !isInternalContent(text)) {
+            const notice = parseTaskNotification(text);
+            if (notice) {
+              messages.push(createNormalizedMessage({
+                id: `${baseId}_task_${partIndex}`,
+                sessionId,
+                timestamp: ts,
+                provider: PROVIDER,
+                kind: 'task_notification',
+                content: notice.result,
+                summary: notice.summary,
+                status: notice.status,
+              }));
+            } else if (text && !isInternalContent(text)) {
               messages.push(createNormalizedMessage({
                 id: `${baseId}_text_${partIndex}`,
                 sessionId,
@@ -347,7 +373,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
             .map((part: AnyRecord) => part.text)
             .filter(Boolean)
             .join('\n');
-          if (textParts && !isInternalContent(textParts)) {
+          if (textParts && !isInternalContent(textParts) && !parseTaskNotification(textParts)) {
             messages.push(createNormalizedMessage({
               id: `${baseId}_text`,
               sessionId,
@@ -390,6 +416,21 @@ export class ClaudeSessionsProvider implements IProviderSessions {
          * frontend and emit a plain user-visible command string so the command
          * no longer disappears from history.
          */
+        const notice = parseTaskNotification(text);
+        if (notice) {
+          messages.push(createNormalizedMessage({
+            id: baseId,
+            sessionId,
+            timestamp: ts,
+            provider: PROVIDER,
+            kind: 'task_notification',
+            content: notice.result,
+            summary: notice.summary,
+            status: notice.status,
+          }));
+          return messages;
+        }
+
         const localCommandPayload = parseLocalCommandPayload(text);
         if (localCommandPayload) {
           const displayText = buildLocalCommandDisplayText(localCommandPayload);

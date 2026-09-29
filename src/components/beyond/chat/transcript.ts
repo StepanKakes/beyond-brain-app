@@ -45,6 +45,14 @@ export function rebuildHistory(raw: unknown[]): ChatMessage[] {
       out.push({ id: uid(), role: 'user', kind: 'text', text: content });
     } else if (kind === 'text' && role === 'assistant' && content) {
       out.push({ id: uid(), role: 'assistant', kind: 'text', text: content });
+    } else if (kind === 'task_notification') {
+      const step = taskStep(m);
+      const last = out[out.length - 1];
+      if (last && last.role === 'assistant' && last.kind === 'steps') {
+        out[out.length - 1] = { ...last, steps: [...last.steps, step] };
+      } else {
+        out.push({ id: uid(), role: 'assistant', kind: 'steps', steps: [step] });
+      }
     } else if (kind === 'tool_use' && m.toolName) {
       const toolResult = m.toolResult as
         | { content?: string; isError?: boolean }
@@ -67,6 +75,21 @@ export function rebuildHistory(raw: unknown[]): ChatMessage[] {
     }
   }
   return out;
+}
+
+/** A finished background subagent, shown as a step rather than a user bubble. */
+export function taskStep(m: Record<string, unknown>): ToolStep {
+  const status = String(m.status ?? '');
+  const failed = status === 'failed' || status === 'error' || status === 'killed';
+  return {
+    id: uid(),
+    toolId: uid(),
+    name: 'SubagentDone',
+    input: { summary: String(m.summary ?? '') },
+    output: (m.content as string | undefined) || undefined,
+    isError: failed,
+    status: failed ? 'error' : 'done',
+  };
 }
 
 export function appendStep(prev: ChatMessage[], step: ToolStep): ChatMessage[] {

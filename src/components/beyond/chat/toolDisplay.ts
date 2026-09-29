@@ -41,6 +41,8 @@ export function describeTool(name: string, input: unknown): { label: string; det
       return { label: 'WebFetch', detail: url };
     case 'WebSearch':
       return { label: 'WebSearch', detail: query };
+    case 'SubagentDone':
+      return { label: 'Subagent hotový', detail: typeof inp.summary === 'string' ? inp.summary.replace(/^Agent\s+"?|"?\s+(finished|completed)$/g, '') : '' };
     default:
       return { label: name, detail: '' };
   }

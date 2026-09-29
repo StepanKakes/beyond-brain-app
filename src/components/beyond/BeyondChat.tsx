@@ -74,6 +74,7 @@ import { isWhatsAppSendTool } from './chat/toolDisplay';
 import {
   appendAssistantTextById,
   appendStep,
+  taskStep,
   rebuildHistory,
   uid,
   updateStep,
@@ -836,6 +837,11 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
         }
         return [...prev, { id: uid(), role: 'assistant', kind: 'text', text }];
       });
+      return;
+    }
+
+    if (kind === 'task_notification') {
+      setMessages((prev) => appendStep(prev, taskStep(m)));
       return;
     }
 
