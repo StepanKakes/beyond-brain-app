@@ -12,6 +12,7 @@ import { persistSessionIndex, UNIVERSAL_SLUG } from './beyondSessionsApi';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../auth';
 import { useBeyondCounts } from './useBeyondCounts';
+import { Tip, TipGroup } from './ui';
 
 /**
  * Beyond Brain — v3 Sidebar (Liquid Glass).
@@ -90,9 +91,11 @@ export default function BeyondSidebarPreview({
           <div className="bb-brand">Beyond&nbsp;<em>Brain</em></div>
         </div>
         {onCollapse && (
-          <button type="button" className="bb-ib" onClick={onCollapse} aria-label="Skrýt panel">
-            <PanelLeftClose size={17} strokeWidth={1.8} />
-          </button>
+          <Tip label="Skrýt panel">
+            <button type="button" className="bb-ib" onClick={onCollapse} aria-label="Skrýt panel">
+              <PanelLeftClose size={17} strokeWidth={1.8} />
+            </button>
+          </Tip>
         )}
       </div>
 
@@ -144,18 +147,23 @@ export default function BeyondSidebarPreview({
             <Plug size={15} strokeWidth={1.8} />
             <span>Konektory</span>
           </button>
-          <button
-            type="button"
-            className="bb-ib"
-            onClick={toggleDarkMode}
-            aria-label={isDarkMode ? 'Světlý režim' : 'Tmavý režim'}
-            title={isDarkMode ? 'Světlý režim' : 'Tmavý režim'}
-          >
-            {isDarkMode ? <Sun size={16} strokeWidth={1.8} /> : <Moon size={16} strokeWidth={1.8} />}
-          </button>
-          <button type="button" className="bb-ib" onClick={openSettings} aria-label="Nastavení" title="Nastavení">
-            <Settings size={16} strokeWidth={1.8} />
-          </button>
+          <TipGroup>
+            <Tip label={isDarkMode ? 'Světlý režim' : 'Tmavý režim'} side="top">
+              <button
+                type="button"
+                className="bb-ib"
+                onClick={toggleDarkMode}
+                aria-label={isDarkMode ? 'Světlý režim' : 'Tmavý režim'}
+              >
+                {isDarkMode ? <Sun size={16} strokeWidth={1.8} /> : <Moon size={16} strokeWidth={1.8} />}
+              </button>
+            </Tip>
+            <Tip label="Nastavení" side="top">
+              <button type="button" className="bb-ib" onClick={openSettings} aria-label="Nastavení">
+                <Settings size={16} strokeWidth={1.8} />
+              </button>
+            </Tip>
+          </TipGroup>
         </div>
       </div>
     </div>

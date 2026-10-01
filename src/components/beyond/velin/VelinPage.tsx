@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type React from 'react';
 
 import { authenticatedFetch } from '../../../utils/api';
+import { HoldToSend, Tabs } from '../ui';
+import { toast } from '../ui/toast';
+import BoardPage from '../board/BoardPage';
 
 import {
   createQuick,
@@ -24,9 +27,7 @@ import {
   type Velin,
 } from './api';
 import { Empty, LiveCall, ago, formatTime, usePolled } from './bits';
-import { Tabs } from '../ui';
 import StoryViewer from './StoryViewer';
-import BoardPage from '../board/BoardPage';
 
 /**
  * Beyond Brain — the morning screen.
@@ -245,7 +246,17 @@ function Prep({ task, onDone, onOpenFile }: { task: Task; onDone: () => void; on
             {expanded ? 'Sbalit' : isMessage ? 'Celá zpráva' : 'Celý text'}
           </button>
         )}
-        {prep.actions.map((a) => (
+        {prep.actions.map((a) =>
+          a.action === 'navrh-odeslat' ? (
+            <HoldToSend
+              key={a.action}
+              disabled={busy != null || prep.canSend === false}
+              onSend={() => void run(a.action, a.path)}
+              onTap={() => toast('Podrž tlačítko', 'Zpráva odejde, až se tlačítko celé zaplní')}
+            >
+              Podrž a odešli
+            </HoldToSend>
+          ) : (
           <button
             key={a.action}
             type="button"
@@ -255,7 +266,8 @@ function Prep({ task, onDone, onOpenFile }: { task: Task; onDone: () => void; on
           >
             {a.action === 'navrh-upravit' && editing ? 'Uložit text' : a.action === 'mozek-diff' && diff ? 'Skrýt změnu' : a.label}
           </button>
-        ))}
+          ),
+        )}
         {err && <span className="bb-uk__err">{err}</span>}
       </div>
     </div>

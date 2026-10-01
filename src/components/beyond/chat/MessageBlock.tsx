@@ -10,6 +10,7 @@ import BeyondCodeBlock from '../BeyondCodeBlock';
 import BeyondBrainMark from '../BeyondBrainMark';
 import StreamingText from '../StreamingText';
 import StoryViewer from '../velin/StoryViewer';
+import CallChip from '../bits/CallChip';
 import { describeTool, formatInput, iconForTool } from './toolDisplay';
 import type { ChatMessage, ToolStep } from './types';
 
@@ -186,77 +187,69 @@ function AssistantText({ message, streaming }: { message: ChatMessage; streaming
 
 function StepList({ steps }: { steps: ToolStep[] }) {
   return (
-    <div className="relative flex flex-col gap-2">
-      {steps.map((step, idx) => (
-        <StepRow key={step.id} step={step} isLast={idx === steps.length - 1} />
+    <div className="bb-calls">
+      {steps.map((step) => (
+        <StepRow key={step.id} step={step} />
       ))}
     </div>
   );
 }
 
-function StepRow({ step, isLast }: { step: ToolStep; isLast: boolean }) {
+/** One tool call as a React Bits CallChip: the bar fills while it runs, the
+ *  icon rolls to a check or a retry mark when it lands. Click opens the
+ *  input and output underneath. */
+function StepRow({ step }: { step: ToolStep }) {
   const [expanded, setExpanded] = useState(false);
   const { label, detail } = describeTool(step.name, step.input);
   const Icon = iconForTool(step.name);
   const expandable = Boolean(step.output) || Boolean(step.input);
 
   return (
-    <div className="relative flex gap-3">
-      {/* Vertical connector — drawn through the icon column. */}
-      {!isLast && (
-        <span
-          aria-hidden
-          className="bb-step-line absolute left-[11px] top-7 h-[calc(100%-12px)] w-px"
+    <div className="bb-call">
+      <button
+        type="button"
+        onClick={() => expandable && setExpanded((v) => !v)}
+        aria-expanded={expandable ? expanded : undefined}
+        className="bb-call__head"
+        data-expandable={expandable ? '' : undefined}
+        title={detail || label}
+      >
+        <CallChip
+          icon={<Icon size={14} />}
+          name={label}
+          argument={detail}
+          status={step.status}
+          size={30}
+          radius={10}
+          color="var(--bb-ink)"
+          className="bb-callchip"
         />
-      )}
+        {expandable && <ChevronRight size={14} className="bb-call__chev" data-open={expanded ? '' : undefined} />}
+      </button>
 
-      {/* Icon badge */}
-      <div className="bb-step-badge relative z-10 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md text-beyond-dim">
-        <Icon className="h-[14px] w-[14px]" strokeWidth={1.8} />
-      </div>
-
-      {/* Content */}
-      <div className="min-w-0 flex-1 pt-0.5">
-        <button
-          type="button"
-          onClick={() => expandable && setExpanded((v) => !v)}
-          className={`group flex w-full items-center gap-1.5 text-left text-[14px] ${expandable ? 'cursor-pointer' : 'cursor-default'}`}
-        >
-          <span className="font-medium text-beyond-ink">{label}</span>
-          {detail && <span className="truncate text-beyond-faint">{detail}</span>}
-          {step.status === 'running' && <span className="beyond-dot ml-1" aria-hidden />}
-          {expandable && (
-            <ChevronRight
-              className={`ml-auto h-[14px] w-[14px] flex-shrink-0 text-beyond-faint transition-transform ${expanded ? 'rotate-90' : ''}`}
-              strokeWidth={1.8}
-            />
-          )}
-        </button>
-
-        <AnimatePresence initial={false}>
-          {expanded && expandable && (
-            <motion.div
-              key="expand"
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.18, ease: 'easeOut' }}
-              className="overflow-hidden"
-            >
-              <div className="mt-2 space-y-2">
-                {step.input != null && <PreBlock label="Vstup" content={formatInput(step.input)} />}
-                {step.output && (
-                  <PreBlock
-                    label={step.isError ? 'Chyba' : 'Výstup'}
-                    content={step.output}
-                    tone={step.isError ? 'error' : 'default'}
-                  />
-                )}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+      <AnimatePresence initial={false}>
+        {expanded && expandable && (
+          <motion.div
+            key="expand"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+            className="overflow-hidden"
+          >
+            <div className="mt-2 space-y-2">
+              {step.input != null && <PreBlock label="Vstup" content={formatInput(step.input)} />}
+              {step.output && (
+                <PreBlock
+                  label={step.isError ? 'Chyba' : 'Výstup'}
+                  content={step.output}
+                  tone={step.isError ? 'error' : 'default'}
+                />
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -272,7 +265,7 @@ function PreBlock({
 }) {
   return (
     <div>
-      <p className="mb-1 text-[11px] uppercase tracking-wide text-beyond-faint">{label}</p>
+      <p className="mb-1 text-[12px] text-beyond-faint">{label}</p>
       <pre
         className={`max-h-[260px] overflow-auto whitespace-pre-wrap break-words rounded-[10px] px-3 py-2 font-mono text-[12px] leading-relaxed ${tone === 'error' ? 'bb-pre--error' : 'bb-pre'}`}
       >

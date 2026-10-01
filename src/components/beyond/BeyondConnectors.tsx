@@ -16,6 +16,7 @@ import {
   Zap,
 } from './icons';
 import { useBeyondConnectors } from './useBeyondConnectors';
+import RubberSegment from './bits/RubberSegment';
 import { applyToCurrentChat } from './beyondConnectorsApi';
 import type { Connector, ConnectorStatus, Preset } from './beyondConnectorsApi';
 
@@ -436,9 +437,20 @@ function AddForm(props: AddFormProps) {
   return (
     <div className="mb-6 rounded-2xl border border-beyond-line p-4">
       {/* Type toggle */}
-      <div className="mb-3 inline-flex rounded-full bg-beyond-ink/[0.04] p-0.5">
-        <TypeTab active={mode === 'remote'} onClick={() => setMode('remote')} icon={<Globe className="h-[13px] w-[13px]" strokeWidth={1.8} />} label="Vzdálený" />
-        <TypeTab active={mode === 'local'} onClick={() => setMode('local')} icon={<Terminal className="h-[13px] w-[13px]" strokeWidth={1.8} />} label="Lokální" />
+      <div className="mb-3">
+        <RubberSegment
+          aria-label="Druh konektoru"
+          items={[
+            { value: 'remote', label: 'Vzdálený', icon: <Globe size={13} /> },
+            { value: 'local', label: 'Lokální', icon: <Terminal size={13} /> },
+          ]}
+          value={mode}
+          onChange={(v) => setMode(v as typeof mode)}
+          trackColor="var(--bb-bg2)"
+          radius={999}
+          size="sm"
+          equalSlots={false}
+        />
       </div>
 
       <div className="flex flex-col gap-2.5">
@@ -460,10 +472,18 @@ function AddForm(props: AddFormProps) {
             />
             <div className="flex items-center gap-2">
               <span className="text-[12px] text-beyond-faint">Přenos:</span>
-              <div className="inline-flex rounded-full bg-beyond-ink/[0.04] p-0.5">
-                <TypeTab active={transport === 'http'} onClick={() => setTransport('http')} label="HTTP" />
-                <TypeTab active={transport === 'sse'} onClick={() => setTransport('sse')} label="SSE" />
-              </div>
+              <RubberSegment
+                aria-label="Přenos"
+                items={[
+                  { value: 'http', label: 'HTTP' },
+                  { value: 'sse', label: 'SSE' },
+                ]}
+                value={transport}
+                onChange={(v) => setTransport(v as typeof transport)}
+                trackColor="var(--bb-bg2)"
+                radius={999}
+                size="sm"
+              />
             </div>
 
             <button
@@ -534,31 +554,6 @@ function AddForm(props: AddFormProps) {
         </div>
       </div>
     </div>
-  );
-}
-
-function TypeTab({
-  active,
-  onClick,
-  icon,
-  label,
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon?: React.ReactNode;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-medium transition-colors ${
-        active ? 'bb-seg-active' : 'text-beyond-faint hover:text-beyond-dim'
-      }`}
-    >
-      {icon}
-      {label}
-    </button>
   );
 }
 

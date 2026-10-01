@@ -1,0 +1,102 @@
+/* ---------------------------------------------------------------------------
+   React Bits on the brain's tokens.
+
+   The ported components (src/components/beyond/bits) keep React Bits' own CSS
+   and its dark zinc defaults. This file points their custom properties at the
+   brain's tokens, so they follow light, dark and the system theme like
+   everything else. Their stylesheets load after this one, hence the doubled
+   class: equal specificity would lose.
+   ------------------------------------------------------------------------- */
+
+/* ------------------------------------------------------------- composer - */
+.prompt-bar.bb-pb {
+  --pb-bg: var(--bb-raise);
+  --pb-ink: var(--bb-ink);
+  --pb-menu: var(--bb-raise);
+  --pb-w: 760px;
+  --pb-radius: 22px;
+  --pb-press: 0.94;
+  --pb-muted: var(--bb-ink3);
+  --pb-hover: var(--bb-panel2);
+  margin: 0 auto;
+  font-size: 15px;
+  line-height: 24px;
+}
+.prompt-bar.bb-pb .prompt-bar__field {
+  gap: 10px;
+  padding: 14px 14px 12px 18px;
+  border: 1px solid var(--bb-line);
+  box-shadow: 0 1px 2px rgba(18, 21, 27, .05), 0 10px 24px -16px rgba(18, 21, 27, .2);
+  transition: box-shadow var(--bb-t-mid) var(--bb-spring);
+}
+.prompt-bar.bb-pb .prompt-bar__field:focus-within {
+  box-shadow: 0 2px 6px rgba(20, 22, 26, .05), 0 18px 40px -24px rgba(20, 22, 26, .25);
+}
+.prompt-bar.bb-pb .prompt-bar__input { font-size: 15.5px; line-height: 24px; color: var(--bb-ink); }
+.prompt-bar.bb-pb .prompt-bar__input::placeholder { color: var(--bb-ink3); }
+.prompt-bar.bb-pb .prompt-bar__bar { gap: 6px; margin-left: -6px; }
+.prompt-bar.bb-pb .prompt-bar__tool,
+.prompt-bar.bb-pb .prompt-bar__send { width: 32px; height: 32px; border-radius: 10px; }
+.prompt-bar.bb-pb .prompt-bar__tool { color: var(--bb-ink2); }
+.prompt-bar.bb-pb .prompt-bar__pick { height: 32px; padding: 0 10px; border-radius: 10px; color: var(--bb-ink2); font-size: 13px; min-width: 0; }
+.prompt-bar.bb-pb .prompt-bar__send { background: var(--bb-panel2); color: var(--bb-ink3); }
+.prompt-bar.bb-pb .prompt-bar__send[data-armed] { background: var(--bb-accent); color: var(--bb-on-accent); }
+.prompt-bar.bb-pb .prompt-bar__glyph { width: 17px; height: 17px; }
+.bb-pb__picklabel { min-width: 0; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Menus above the field: the list scrolls, the gliding highlight scrolls with it. */
+.prompt-bar.bb-pb .prompt-bar__menu {
+  bottom: calc(100% + 10px);
+  z-index: 40;
+  padding: 6px;
+  border: 1px solid var(--bb-line);
+  border-radius: 16px;
+  box-shadow: var(--bb-shadow-pop);
+}
+.bb-glide__list { position: relative; max-height: 320px; overflow-y: auto; overscroll-behavior: contain; }
+.prompt-bar.bb-pb .prompt-bar__row { height: 38px; border-radius: 10px; }
+.prompt-bar.bb-pb .prompt-bar__glow { left: 0; right: 0; border-radius: 10px; }
+.prompt-bar.bb-pb .prompt-bar__row-name { color: var(--bb-ink); max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prompt-bar.bb-pb .prompt-bar__row-icon { color: var(--bb-ink3); }
+.prompt-bar.bb-pb .prompt-bar__row-tag { padding: 1px 7px; border-radius: 999px; background: var(--bb-panel2); }
+.bb-glide__mono { font-family: var(--bb-mono); font-size: 12.5px !important; }
+.bb-pb__note { margin: 0; padding: 6px 8px 8px; font-size: 12px; line-height: 1.45; color: var(--bb-ink3); }
+.bb-pb__own { margin-top: 4px; padding: 6px 2px 0; border-top: 1px solid var(--bb-line2); }
+.bb-pb__own input { width: 100%; border: 0; background: none; outline: 0; font: inherit; font-size: 12.5px; color: var(--bb-ink); padding: 6px 8px; }
+.bb-pb__own input::placeholder { color: var(--bb-ink3); }
+.bb-pb__reset { width: 100%; margin-top: 4px; padding: 8px; border: 0; border-radius: 10px; background: none; font: inherit; font-size: 12px; text-align: left; color: var(--bb-ink3); cursor: pointer; }
+.bb-pb__reset:hover { background: var(--bb-panel2); color: var(--bb-ink); }
+
+/* Attachment chips */
+.prompt-bar.bb-pb .prompt-bar__chip { height: 30px; gap: 7px; padding: 0 4px 0 9px; border-radius: 10px; background: var(--bb-panel2); color: var(--bb-ink); }
+.prompt-bar.bb-pb .prompt-bar__chip[data-image] { padding-left: 3px; }
+.bb-pb__thumb { width: 24px; height: 24px; border-radius: 7px; object-fit: cover; }
+.bb-pb__size { color: var(--bb-ink3); font-size: 11px; }
+
+/* ------------------------------------------------------------- thinking - */
+.lattice-loader.bb-lattice { color: var(--bb-ink2); }
+.bb-think .lattice-loader__timer { color: var(--bb-ink3); }
+
+/* ------------------------------------------------------- tool call chips - */
+.call-chip.bb-callchip { max-width: 100%; }
+.call-chip.bb-callchip .call-chip__arg { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* --------------------------------------------------------------- toasts - */
+.bb-toasts { position: fixed; right: 20px; bottom: 20px; z-index: 90; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; pointer-events: none; }
+.bb-toasts > * { pointer-events: auto; }
+.bb-calls { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.bb-call { max-width: 100%; }
+.bb-call__head { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 0; border: 0; background: none; font: inherit; cursor: default; text-align: left; }
+.bb-call__head[data-expandable] { cursor: pointer; }
+.bb-call__chev { flex: none; color: var(--bb-ink3); transition: transform .18s var(--bb-spring), color .18s ease; }
+.bb-call__chev[data-open] { transform: rotate(90deg); }
+.bb-call__head[data-expandable]:hover .bb-call__chev { color: var(--bb-ink); }
+.call-chip.bb-callchip .call-chip__name { font-weight: 500; }
+.call-chip.bb-callchip .call-chip__arg { max-width: 46ch; color: var(--bb-ink3); }
+.bb-tabs__badge { position: relative; display: inline-flex; align-items: center; gap: 6px; }
+.bb-tabs__badge .bb-tabs__dot { position: static; }
+.rubber-segment.bb-rubber { align-self: flex-start; max-width: 100%; }
+
+/* ------------------------------------------------------- hold to send - */
+.hold-button.bb-hold { font-size: 12.5px; font-weight: 500; }
+.status-mark.bb-mark { flex: none; min-width: 92px; color: var(--bb-ink2); }

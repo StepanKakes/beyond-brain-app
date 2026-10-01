@@ -1,6 +1,7 @@
 import { useMemo, useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowUp, Mic } from './icons';
+import { Mic } from './icons';
+import { SendGlyph } from './bits/PromptBar';
 import { useBeyondSpeech } from './useBeyondSpeech';
 
 /**
@@ -67,7 +68,6 @@ const SUGGESTIONS: Suggestion[] = [
 export default function BeyondWelcome({ name = 'Štěpáne', onSubmit }: Props) {
   const greeting = useMemo(() => getGreeting(name), [name]);
   const [value, setValue] = useState('');
-  const [focused, setFocused] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const valueRef = useRef(value);
   valueRef.current = value;
@@ -76,8 +76,8 @@ export default function BeyondWelcome({ name = 'Štěpáne', onSubmit }: Props) 
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+    el.style.height = '0px';
+    el.style.height = `${Math.max(48, Math.min(el.scrollHeight, 216))}px`;
   }, [value]);
 
   useEffect(() => {
@@ -133,7 +133,7 @@ export default function BeyondWelcome({ name = 'Štěpáne', onSubmit }: Props) 
           transition={{ duration: 0.7, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
           style={{ margin: '14px auto 26px', maxWidth: 460, color: 'var(--bb-ink2)', fontSize: 15, textWrap: 'pretty' } as React.CSSProperties}
         >
-          Napiš, co dnes řešíme — nebo si vyber jeden ze startů níž.
+          Napiš, co dnes řešíme, nebo si vyber jeden ze startů níž.
         </motion.p>
 
         {/* Composer — the focal point */}
@@ -144,50 +144,51 @@ export default function BeyondWelcome({ name = 'Štěpáne', onSubmit }: Props) 
           transition={{ duration: 0.7, delay: 0.16, ease: [0.22, 1, 0.36, 1] }}
           style={{ maxWidth: 600, margin: '0 auto 26px' }}
         >
-          <div className="bb-composer" data-focus={focused || canSubmit ? 'true' : 'false'}>
-            {speech.listening && (
-              <div className="bb-mic">
-                <div className="bb-mic__bars" aria-hidden="true">
-                  {[0, 1, 2, 3, 4].map((i) => (
-                    <i key={i} style={{ animationDelay: `${i * 0.12}s` }} />
-                  ))}
-                </div>
-                <span style={{ fontSize: 13.5, color: 'var(--bb-ink2)' }}>Poslouchám… (česky)</span>
-              </div>
-            )}
-            <textarea
-              ref={textareaRef}
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onFocus={() => setFocused(true)}
-              onBlur={() => setFocused(false)}
-              rows={1}
-              placeholder="Napiš, co řešíme…"
-            />
-            <div className="bb-composer__bar">
-              {speech.supported && (
+          <div className="prompt-bar bb-pb">
+            <div className="prompt-bar__field" role="presentation" onClick={() => textareaRef.current?.focus()}>
+              <textarea
+                ref={textareaRef}
+                className="prompt-bar__input"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                rows={2}
+                aria-label="Zpráva"
+                placeholder={speech.listening ? 'Poslouchám, mluv česky' : 'Napiš, co řešíme'}
+              />
+              <div className="prompt-bar__bar">
+                <span className="prompt-bar__spacer" />
+                {speech.supported && (
+                  <button
+                    type="button"
+                    onClick={speech.toggle}
+                    aria-pressed={speech.listening}
+                    aria-label={speech.listening ? 'Zastavit diktování' : 'Diktovat česky'}
+                    title={speech.listening ? 'Zastavit diktování' : 'Diktovat česky'}
+                    className="prompt-bar__tool"
+                    data-on={speech.listening ? '' : undefined}
+                  >
+                    {speech.listening ? (
+                      <span className="prompt-bar__eq" aria-hidden="true">
+                        <i />
+                        <i />
+                        <i />
+                      </span>
+                    ) : (
+                      <Mic size={16} />
+                    )}
+                  </button>
+                )}
                 <button
-                  type="button"
-                  onClick={speech.toggle}
-                  aria-pressed={speech.listening}
-                  aria-label="Diktovat"
-                  title={speech.listening ? 'Zastavit diktování' : 'Diktovat (česky)'}
-                  className="bb-ib bb-ib--tool"
+                  type="submit"
+                  disabled={!canSubmit}
+                  aria-label="Odeslat"
+                  className="prompt-bar__send"
+                  data-armed={canSubmit ? '' : undefined}
                 >
-                  <Mic className="h-[18px] w-[18px]" strokeWidth={1.8} />
+                  <SendGlyph busy={false} morphDuration={240} squash={0.12} tilt={8} />
                 </button>
-              )}
-              <span className="bb-composer__hint">Enter odešle · Shift + Enter nový řádek</span>
-              <button
-                type="submit"
-                disabled={!canSubmit}
-                aria-label="Odeslat"
-                className="bb-send"
-                data-active={canSubmit ? 'true' : 'false'}
-              >
-                <ArrowUp size={19} strokeWidth={2.1} />
-              </button>
+              </div>
             </div>
           </div>
         </motion.form>

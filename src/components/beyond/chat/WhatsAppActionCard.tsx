@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { MessageCircle } from '../icons';
+import { HoldToSend } from '../ui';
+import { toast } from '../ui/toast';
 
 import type { PermRequest } from './types';
 
@@ -98,14 +100,13 @@ export default function WhatsAppActionCard({
         >
           {editing ? 'Hotovo' : 'Upravit'}
         </button>
-        <button
-          type="button"
-          onClick={handleSend}
+        <HoldToSend
           disabled={!text.trim()}
-          className="rounded-full bg-emerald-500 px-4 py-1.5 text-[12px] font-medium text-white shadow-[0_2px_8px_-2px_rgba(16,185,129,0.4)] transition-all hover:bg-emerald-600 hover:shadow-[0_4px_12px_-2px_rgba(16,185,129,0.5)] disabled:bg-beyond-ink/[0.08] disabled:text-beyond-ink/30 disabled:shadow-none"
+          onSend={handleSend}
+          onTap={() => toast('Podrž tlačítko', 'Zpráva odejde, až se tlačítko celé zaplní')}
         >
-          Odeslat
-        </button>
+          Podrž a odešli
+        </HoldToSend>
       </div>
     </motion.div>
   );

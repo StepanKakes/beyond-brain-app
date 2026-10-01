@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { ArrowLeft, ExternalLink, MessageSquare } from '../icons';
+import { Tabs } from '../ui';
 
 import { fetchClient, type ClientDetail as Detail, type Promise_, type TimelineItem } from './api';
 import {
@@ -128,20 +129,7 @@ export default function ClientDetail({
           </section>
         )}
 
-        <div className="bb-tabs" role="tablist">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              role="tab"
-              className="bb-tab"
-              aria-selected={tab === t.key}
-              onClick={() => setTab(t.key)}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
+        <Tabs label="Části klienta" items={TABS} value={tab} onChange={(k) => setTab(k as typeof tab)} />
 
         {tab === 'timeline' && <Timeline items={data.timeline} />}
         {tab === 'promises' && <Promises detail={data} />}

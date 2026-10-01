@@ -57,3 +57,20 @@ export async function fetchBeyondModels(): Promise<BeyondModelOption[]> {
     return [];
   }
 }
+
+/** Claude Code describes its models in English; the menu speaks Czech. A
+ *  description it has not seen yet is left out rather than shown in English. */
+const NOTES: [RegExp, string][] = [
+  [/hardest and longest/i, 'Na nejtěžší a nejdelší práci'],
+  [/toughest/i, 'Na nejtěžší úkoly'],
+  [/complex work and everyday/i, 'Na složitou i běžnou práci'],
+  [/everyday, complex/i, 'Na každodenní i složitou práci'],
+  [/simpler tasks/i, 'Úsporný na jednodušší úkoly'],
+  [/routine/i, 'Úsporný na rutinu'],
+  [/quick answers/i, 'Nejrychlejší na krátké odpovědi'],
+];
+
+export function czechNote(description?: string): string {
+  if (!description) return '';
+  return NOTES.find(([re]) => re.test(description))?.[1] ?? '';
+}

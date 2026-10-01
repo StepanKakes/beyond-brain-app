@@ -297,25 +297,7 @@ body { background: var(--bb-bg) !important; color: var(--bb-ink); font-family: v
 
 /* ---------------------------------------------------------------- thinking - */
 .bb-think { display: inline-flex; align-items: center; gap: 11px; margin-bottom: 14px; cursor: pointer; user-select: none; border: none; background: transparent; padding: 0; }
-.bb-think__note { font-size: 13px; color: var(--bb-warn); }
-.bb-think__label { font-size: 13.5px; font-weight: 450; color: transparent;
-  background: linear-gradient(90deg, var(--bb-ink3) 25%, var(--bb-ink) 50%, var(--bb-ink3) 75%); background-size: 220% 100%;
-  -webkit-background-clip: text; background-clip: text; animation: bbShimmer 1.9s linear infinite; }
-.bb-think[data-active="false"] .bb-think__label { animation-play-state: paused; }
-.bb-think[data-active="false"] .bb-loader * { animation-play-state: paused; }
-.bb-steps { margin: -4px 0 18px; padding: 2px 0 2px 14px; border-left: 1.5px solid var(--bb-line2); display: flex; flex-direction: column; gap: 9px; }
-.bb-steps > div { font-size: 13.5px; color: var(--bb-ink2); line-height: 1.5; text-wrap: pretty; animation: bbUp .45s var(--bb-spring); }
 
-.bb-loader { flex: none; display: grid; place-items: center; }
-.bb-loader--ring svg circle:last-child { transform-origin: 8px 8px; animation: bbSpinDash 1.4s var(--bb-spring) infinite; }
-.bb-loader--flow { width: 26px; height: 2px; border-radius: 2px; background: var(--bb-line2); overflow: hidden; }
-.bb-loader--flow i { display: block; width: 100%; height: 100%; border-radius: 2px; background: var(--bb-ink); animation: bbFlow 1.4s cubic-bezier(.45,0,.55,1) infinite; }
-.bb-loader--ticks { display: flex; align-items: center; gap: 2.5px; height: 12px; }
-.bb-loader--ticks i { width: 2px; height: 12px; border-radius: 2px; background: var(--bb-ink); animation: bbTick 1.1s ease-in-out infinite; }
-.bb-loader--trail { position: relative; width: 28px; height: 2px; border-radius: 2px; background: var(--bb-line2); }
-.bb-loader--trail i { position: absolute; top: -2px; width: 6px; height: 6px; margin-left: -3px; border-radius: 50%; background: var(--bb-ink); animation: bbTrail 1.15s cubic-bezier(.45,0,.55,1) infinite alternate; }
-.bb-loader--sweep { width: 30px; height: 3px; border-radius: 3px; background-size: 250% 100%;
-  background-image: linear-gradient(90deg, var(--bb-line2) 0%, var(--bb-ink) 45%, var(--bb-ink) 55%, var(--bb-line2) 100%); animation: bbSweep 1.5s linear infinite; }
 
 /* ------------------------------------------------- dotted brain (logo/loader) */
 /* Square matrix dots (transitions.dev matrix-loader look), brain-shaped grid. */
@@ -337,15 +319,7 @@ body { background: var(--bb-bg) !important; color: var(--bb-ink); font-family: v
 }
 
 /* ---------------------------------------------- thinking states (status line) */
-.bb-think2 { position: relative; display: inline-block; text-align: left; font-size: 13.5px; font-weight: 450; line-height: 1.3; }
-.bb-think2-sizer { display: block; visibility: hidden; white-space: nowrap; }
-.bb-think2-text { position: absolute; inset: 0; display: block; white-space: nowrap; color: var(--think-base); will-change: transform, filter, opacity; }
 /* Shimmer sweeps the glyphs only (background-clip: text) while a state holds. */
-.bb-think2-text::before { content: attr(data-text); position: absolute; inset: 0; pointer-events: none;
-  background-image: linear-gradient(90deg, transparent 0%, transparent 40%, var(--think-highlight) 50%, transparent 60%, transparent 100%);
-  background-size: 400% 100%; background-repeat: no-repeat;
-  -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;
-  animation: bbThinkShimmer var(--think-shimmer) linear infinite; }
 @keyframes bbThinkShimmer { 0% { background-position: 100% 0; } 100% { background-position: 0% 0; } }
 
 /* ----------------------------------------------------- streaming text (words) */
@@ -361,7 +335,6 @@ body { background: var(--bb-bg) !important; color: var(--bb-ink); font-family: v
   .bb-brain--in .bb-braindot,
   .bb-brain--pulse .bb-braindot,
   .bb-stream__w { animation: none !important; opacity: 1 !important; filter: none !important; fill: currentColor; }
-  .bb-think2-text::before { display: none !important; }
 }
 
 /* -------------------------------------------------------------- code block - */
@@ -380,7 +353,6 @@ body { background: var(--bb-bg) !important; color: var(--bb-ink); font-family: v
 
 /* tool-step rail (agent tool calls shown inline — not in handoff) */
 .bb-step-badge { background: var(--bb-panel2); color: var(--bb-ink2); }
-.bb-step-line { background: var(--bb-line2); }
 .bb-pre { background: var(--bb-panel2); color: var(--bb-ink2); }
 .bb-pre--error { background: var(--bb-danger-soft); color: var(--bb-danger); }
 
@@ -401,37 +373,12 @@ body { background: var(--bb-bg) !important; color: var(--bb-ink); font-family: v
 
 /* ---------------------------------------------------------------- composer - */
 .bb-composer__wrap { padding: 8px 20px 22px; z-index: 15; background: linear-gradient(to top, var(--bb-bg) 55%, transparent); }
-.bb-composer { position: relative; max-width: 760px; margin: 0 auto; border: 1px solid var(--bb-line); background: var(--bb-raise); border-radius: 26px;
-  backdrop-filter: var(--bb-blur); -webkit-backdrop-filter: var(--bb-blur);
-  box-shadow: 0 1px 2px rgba(18,21,27,.05), 0 10px 24px -16px rgba(18,21,27,.2);
-  transition: box-shadow var(--bb-t-mid) var(--bb-spring), border-color var(--bb-t-mid) ease, transform var(--bb-t-mid) var(--bb-spring); }
-/* Focus is shown by the field waking up, not by a black ring around it. */
-.bb-composer[data-focus="true"], .bb-composer:focus-within { border-color: var(--bb-line); box-shadow: 0 2px 6px rgba(20, 22, 26, .05), 0 18px 40px -24px rgba(20, 22, 26, .25); }
-.bb-composer textarea { width: 100%; border: none; background: transparent; resize: none; padding: 18px 22px 6px; font-size: 15.5px; line-height: 1.55; min-height: 54px; max-height: 240px; color: var(--bb-ink); transition: min-height .3s var(--bb-spring); }
-.bb-composer textarea::placeholder { color: var(--bb-ink3); }
-.bb-composer[data-focus="true"] textarea, .bb-composer:focus-within textarea { min-height: 72px; }
-.bb-composer__bar { display: flex; align-items: center; gap: 7px; padding: 6px 12px 12px 14px; }
-.bb-composer__hint { flex: 1; min-width: 0; display: flex; justify-content: flex-end; overflow: hidden; font-size: 12px; color: var(--bb-ink3); white-space: nowrap; opacity: 0; transition: opacity .3s ease; }
-.bb-composer[data-focus="true"] .bb-composer__hint, .bb-composer:focus-within .bb-composer__hint { opacity: 1; }
 /* The round grey buttons of a composer: one shape for attach, dictate and
    anything else that sits on that row. */
 .bb-ib--tool { width: 34px; height: 34px; border-radius: 50%; background: var(--bb-panel2); color: var(--bb-ink2); }
 .bb-ib--tool:hover { background: var(--bb-bubble); color: var(--bb-ink); }
 .bb-ib--tool[aria-pressed="true"] { background: var(--bb-accent); color: var(--bb-on-accent); }
-.bb-send { width: 34px; height: 34px; flex: none; display: flex; align-items: center; justify-content: center; border: none; border-radius: 50%; cursor: pointer;
-  background: var(--bb-panel2); color: var(--bb-ink3); opacity: .7; transition: background var(--bb-t-fast) ease, opacity var(--bb-t-fast) ease, transform var(--bb-t-fast) var(--bb-spring); }
-.bb-send[data-active="true"] { background: var(--bb-accent); color: var(--bb-on-accent); opacity: 1; }
-.bb-send[data-active="true"]:hover { transform: translateY(-1px) scale(1.03); }
-.bb-send:active { transform: scale(.94); }
-.bb-modelbtn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 999px; border: 1px solid var(--bb-line); background: transparent; color: var(--bb-ink); font-size: 13px; font-weight: 500; cursor: pointer; transition: background var(--bb-t-fast) ease; }
-.bb-modelbtn:hover { background: var(--bb-panel2); }
-.bb-modelbtn__own { margin-top: 4px; padding: 6px 4px 2px; border-top: 1px solid var(--bb-line2); }
-.bb-modelbtn__own input { width: 100%; border: 0; background: none; outline: 0; font: inherit; font-size: 12.5px; color: var(--bb-ink); padding: 4px 6px; }
-.bb-modelbtn__own input::placeholder { color: var(--bb-ink3); }
 .bb-disclaimer { text-align: center; margin-top: 10px; font-size: 11.5px; color: var(--bb-ink3); }
-.bb-mic { display: flex; align-items: center; gap: 12px; padding: 16px 18px 4px; animation: bbFade .3s ease; }
-.bb-mic__bars { display: flex; align-items: center; gap: 3px; height: 22px; }
-.bb-mic__bars i { width: 3px; height: 22px; border-radius: 2px; background: var(--bb-accent); animation: bbWave .9s ease-in-out infinite; }
 
 /* ------------------------------------------------------------ menus/dialog - */
 .bb-menu { position: absolute; bottom: calc(100% + 10px); left: 0; width: 300px; padding: 6px; z-index: 40; background: var(--bb-raise);
@@ -486,7 +433,6 @@ body { background: var(--bb-bg) !important; color: var(--bb-ink); font-family: v
 .bb-radio__dot { background: var(--bb-on-accent); }
 .bb-vdivide > * + * { border-top: 1px solid var(--bb-line2); }
 .bb-sheet { background: var(--bb-panel); backdrop-filter: var(--bb-blur); -webkit-backdrop-filter: var(--bb-blur); border-left: 1px solid var(--bb-line); box-shadow: var(--bb-shadow-lift); }
-.bb-seg-active { background: var(--bb-raise); color: var(--bb-ink); box-shadow: 0 1px 2px rgba(18,21,27,.06); }
 
 /* ------------------------------------------------------------- empty state - */
 .bb-empty { max-width: 720px; width: 100%; margin: 0 auto; padding: 40px 0 20px; text-align: center; animation: bbUp .6s var(--bb-spring); }

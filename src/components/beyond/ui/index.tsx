@@ -6,9 +6,13 @@
  * `styles/beyond-ui.css` are the paint. Nothing here knows about tasks or
  * clients: a board, a list and a dialog all use the same pieces.
  */
-import type { ReactNode } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 
 import { Plus } from '../icons';
+import RubberSegment from '../bits/RubberSegment';
+import SquishSwitch from '../bits/SquishSwitch';
+import HoldButton from '../bits/HoldButton';
+import WarmTooltip from '../bits/WarmTooltip';
 
 type Tone = 'plain' | 'urgent' | 'watch' | 'work' | 'done' | 'p1' | 'p2' | 'p3' | 'p4';
 
@@ -105,15 +109,109 @@ export function Empty({ children }: { children: ReactNode }) {
   return <p className="bb-empty">{children}</p>;
 }
 
-/** Tabs that switch a screen without changing the address. */
-export function Tabs({ items, value, onChange }: { items: { key: string; label: string }[]; value: string; onChange: (key: string) => void }) {
+/** Tabs that switch a screen without changing the address: React Bits
+ *  RubberSegment, the thumb stretches toward where it is going and can be
+ *  dragged across. */
+export function Tabs({
+  items,
+  value,
+  onChange,
+  label = 'Přepnout zobrazení',
+}: {
+  items: { key: string; label: ReactNode }[];
+  value: string;
+  onChange: (key: string) => void;
+  label?: string;
+}) {
   return (
-    <div className="bb-tabs" role="tablist">
-      {items.map((t) => (
-        <button key={t.key} type="button" role="tab" aria-selected={t.key === value} className="bb-tabs__t" onClick={() => onChange(t.key)}>
-          {t.label}
-        </button>
-      ))}
-    </div>
+    <RubberSegment
+      className="bb-rubber"
+      aria-label={label}
+      items={items.map((t) => ({ value: t.key, label: t.label }))}
+      value={value}
+      onChange={(next) => onChange(next)}
+      trackColor="var(--bb-bg2)"
+      thumbColor="var(--bb-raise)"
+      radius={999}
+      size="md"
+      equalSlots={false}
+    />
   );
 }
+
+/** An on/off switch: React Bits SquishSwitch, the thumb stretches as it
+ *  travels and can be dragged. */
+export function Switch({ on, onChange, label }: { on: boolean; onChange: (next: boolean) => void; label: string }) {
+  return (
+    <SquishSwitch
+      checked={on}
+      onChange={onChange}
+      ariaLabel={label}
+      width={40}
+      height={24}
+      radius={12}
+      trackColor="var(--bb-line)"
+      trackOnColor="var(--bb-accent)"
+      thumbColor="var(--bb-raise)"
+      thumbOnColor="var(--bb-on-accent)"
+    />
+  );
+}
+
+/** Sending something to a real person: React Bits HoldButton. The button
+ *  fills while held and fires only when full, so a stray click sends nothing;
+ *  a plain click explains that through `onTap`. */
+export function HoldToSend({
+  children,
+  doneLabel = 'Odesláno',
+  onSend,
+  onTap,
+  disabled,
+  icon,
+}: {
+  children: ReactNode;
+  doneLabel?: ReactNode;
+  onSend: () => void;
+  onTap?: () => void;
+  disabled?: boolean;
+  icon?: ReactNode;
+}) {
+  return (
+    <HoldButton
+      className="bb-hold"
+      size="sm"
+      radius={999}
+      holdTime={900}
+      resetAfter={1600}
+      wave={false}
+      glow={false}
+      icon={icon}
+      doneLabel={doneLabel}
+      disabled={disabled}
+      onHold={onSend}
+      onTap={onTap}
+    >
+      {children}
+    </HoldButton>
+  );
+}
+
+/** A label for an icon button: React Bits WarmTooltip. Inside a `TipGroup`,
+ *  once one tip has shown the next one appears without the wait. */
+export function Tip({
+  label,
+  side = 'bottom',
+  children,
+}: {
+  label: ReactNode;
+  side?: 'top' | 'bottom' | 'left' | 'right';
+  children: ReactElement<Record<string, unknown>>;
+}) {
+  return (
+    <WarmTooltip content={label} side={side} size="sm" delay={450}>
+      {children}
+    </WarmTooltip>
+  );
+}
+
+export { WarmTooltipGroup as TipGroup } from '../bits/WarmTooltip';

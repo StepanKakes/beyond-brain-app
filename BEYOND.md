@@ -30,6 +30,33 @@ Všechno kreslí `--bb-*` tokeny a `.bb-*` třídy. Načítá se v `main.jsx` a�
 | v2 | Hyperminimalismus, bílá, prázdný prostor, skrytý sidebar | zahozeno |
 | v3 | Liquid Glass podle handoffu | **platí** |
 
+### Komponenty z React Bits
+
+Interaktivní prvky jsou přenesené z [React Bits](https://reactbits.dev)
+(varianta TS + čisté CSS, protože appka jede na Tailwindu 3 a jejich
+Tailwind varianta je psaná pro v4) do `src/components/beyond/bits/`.
+Kód zůstává jejich, mění se jen tři věci: `motion/react` → `framer-motion`,
+Hugeicons → `bits/hugeicons.tsx`, který jména ikon překládá na Solar,
+a výchozí barvy → `--bb-*` tokeny. [`src/styles/beyond-bits.css`](src/styles/beyond-bits.css)
+pak jejich proměnné napojuje na tokeny (zdvojená třída, protože jejich CSS
+se načítá později).
+
+| Komponenta | Kde |
+|---|---|
+| PromptBar | `chat/Composer.tsx`, uvítací pole; `bits/GlideMenu.tsx` je jeho menu s klouzavým zvýrazněním pro příkazy, model, konektory a plus |
+| CallChip | kroky nástrojů v chatu |
+| LatticeLoader | přemýšlení v chatu, vzor se volí v Nastavení |
+| RubberSegment | `Tabs` v `ui/`, typ konektoru, vzhled |
+| SquishSwitch | `Switch` v `ui/` |
+| HoldButton | `HoldToSend` v `ui/`: zpráva skutečnému člověku odejde až po podržení |
+| SwipeToast | `toast()` z `ui/toast.ts`, vykresluje `ui/Toaster.tsx` |
+| WarmTooltip | `Tip` a `TipGroup` v `ui/` na ikonových tlačítkách |
+| StatusMark | stav běhů a událostí agenta |
+| CountUp | čísla ve Spotřebě |
+
+Zaškrtávání úkolů na Velínu zůstalo vlastní: React Bits SpringCheck nemá
+stav „pracuje se“ ani barvy priorit.
+
 [`design-system/VISION.md`](design-system/VISION.md) a
 [`design-system/NOTES.md`](design-system/NOTES.md) popisují v1 a v2. Drž je jako
 deník rozhodnutí, ne jako zadání — kód se jimi neřídí.
@@ -121,7 +148,8 @@ Rozdělené z `BeyondChat.tsx`, který měl 2 900 řádků.
 | `PermissionsSheet.tsx` | seznam a odebrání uložených povolení |
 | `WhatsAppActionCard.tsx` | náhled a úprava odchozí WhatsApp zprávy před odesláním |
 | `SessionsMenu.tsx` | historie chatů klienta |
-| `ModelPicker.tsx`, `TokenBudgetChip.tsx`, `AttachmentChip.tsx` | prvky composeru |
+| `Composer.tsx` | pole na zprávu (React Bits PromptBar): plus menu, model, konektory, diktování, odeslat a stop |
+| `TokenBudgetChip.tsx`, `AttachmentChip.tsx` | prvky composeru |
 
 ### Backend — `server/`
 

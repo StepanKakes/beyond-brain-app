@@ -3,9 +3,10 @@ import { motion } from 'framer-motion';
 import { X, Sun, Moon, Monitor, Plug, Check } from './icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import BeyondLoader, { LOADER_KINDS, LOADER_STORAGE_KEY, readLoaderKind, type LoaderKind } from './BeyondLoader';
-import { fetchBeyondModels, fallbackModelOptions, type BeyondModelOption } from './beyondModels';
+import { czechNote, fetchBeyondModels, fallbackModelOptions, type BeyondModelOption } from './beyondModels';
 import { CLAUDE_MODELS } from '../../../shared/modelConstants';
 import TeamSection from './velin/TeamSection';
+import { Switch, Tabs } from './ui';
 
 /**
  * Beyond Brain — Settings dialog (full handoff layout).
@@ -139,7 +140,7 @@ export default function BeyondSettings({ onClose }: { onClose: () => void }) {
                       </span>
                       <span style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
                         <span style={{ display: 'block', fontSize: 14, fontWeight: 500 }}>{m.short || m.value}</span>
-                        {m.description && <span style={{ display: 'block', fontSize: 12.5, color: 'var(--bb-ink2)' }}>{m.description}</span>}
+                        {czechNote(m.description) && <span style={{ display: 'block', fontSize: 12.5, color: 'var(--bb-ink2)' }}>{czechNote(m.description)}</span>}
                       </span>
                       {on && <Check size={15} strokeWidth={2.2} />}
                     </button>
@@ -169,12 +170,12 @@ export default function BeyondSettings({ onClose }: { onClose: () => void }) {
             <section>
               <div className="bb-section__label">Chování</div>
               {BEHAVIOR.map((t) => (
-                <div className="bb-switchrow" key={t.id} onClick={() => toggleFlag(t.id)} role="switch" aria-checked={flags[t.id]}>
+                <div className="bb-switchrow" key={t.id}>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ display: 'block', fontSize: 14 }}>{t.label}</span>
                     <span style={{ display: 'block', fontSize: 12, color: 'var(--bb-ink3)' }}>{t.desc}</span>
                   </span>
-                  <span className="bb-switch" data-on={flags[t.id]}><i /></span>
+                  <Switch on={Boolean(flags[t.id])} onChange={() => toggleFlag(t.id)} label={t.label} />
                 </div>
               ))}
             </section>
@@ -182,15 +183,20 @@ export default function BeyondSettings({ onClose }: { onClose: () => void }) {
             {/* Appearance */}
             <section>
               <div className="bb-section__label">Vzhled</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {themeOptions.map(({ key, label, Icon }) => (
-                  <button type="button" key={key} className="bb-option" aria-selected={themeMode === key} onClick={() => pickTheme(key)}>
-                    <span style={{ width: 30, display: 'grid', placeItems: 'center', flex: 'none', color: 'var(--bb-ink)' }}><Icon size={17} strokeWidth={1.8} /></span>
-                    <span style={{ flex: 1, textAlign: 'left', fontSize: 14, fontWeight: 500 }}>{label}</span>
-                    {themeMode === key && <Check size={15} strokeWidth={2.2} />}
-                  </button>
-                ))}
-              </div>
+              <Tabs
+                label="Vzhled"
+                items={themeOptions.map(({ key, label, Icon }) => ({
+                  key,
+                  label: (
+                    <>
+                      <Icon size={15} />
+                      {label}
+                    </>
+                  ),
+                }))}
+                value={themeMode}
+                onChange={(k) => pickTheme(k as typeof themeMode)}
+              />
             </section>
 
             {/* Extensions */}

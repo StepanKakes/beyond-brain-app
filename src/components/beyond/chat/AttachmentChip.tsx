@@ -2,7 +2,10 @@ import { File as FileIcon, X } from '../icons';
 
 import type { PendingAttachment } from './types';
 
-/** Composer attachment chip — thumbnail for images, name and size for text. */
+/**
+ * Composer attachment chip, the React Bits PromptBar chip: pops in, name
+ * truncates, a small cross removes it. Images carry their thumbnail.
+ */
 export default function AttachmentChip({
   attachment,
   onRemove,
@@ -11,46 +14,20 @@ export default function AttachmentChip({
   onRemove: () => void;
 }) {
   const kb = Math.max(1, Math.round(attachment.size / 1024));
-
-  if (attachment.kind === 'image') {
-    return (
-      <div className="group relative flex items-center gap-2 rounded-xl bg-beyond-ink/[0.04] py-1 pl-1 pr-2">
-        <img
-          src={attachment.data}
-          alt={attachment.name}
-          className="h-9 w-9 flex-shrink-0 rounded-lg object-cover"
-        />
-        <div className="min-w-0">
-          <p className="truncate text-[12px] font-medium text-beyond-ink">{attachment.name}</p>
-          <p className="text-[10px] text-beyond-faint">{kb} kB</p>
-        </div>
-        <button
-          type="button"
-          onClick={onRemove}
-          className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-beyond-ink/[0.08] hover:text-beyond-ink"
-          aria-label="Odebrat"
-        >
-          <X className="h-[12px] w-[12px]" strokeWidth={2} />
-        </button>
-      </div>
-    );
-  }
+  const image = attachment.kind === 'image';
 
   return (
-    <div className="group relative flex items-center gap-2 rounded-xl bg-beyond-ink/[0.04] px-2 py-1.5">
-      <FileIcon className="h-[14px] w-[14px] flex-shrink-0 text-beyond-faint" strokeWidth={1.8} />
-      <div className="min-w-0">
-        <p className="truncate text-[12px] font-medium text-beyond-ink">{attachment.name}</p>
-        <p className="text-[10px] text-beyond-faint">{kb} kB · text</p>
-      </div>
-      <button
-        type="button"
-        onClick={onRemove}
-        className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-beyond-ink/[0.08] hover:text-beyond-ink"
-        aria-label="Odebrat"
-      >
-        <X className="h-[12px] w-[12px]" strokeWidth={2} />
+    <span className="prompt-bar__chip bb-pb__chip" data-image={image ? '' : undefined} title={`${attachment.name}, ${kb} kB`}>
+      {image ? (
+        <img src={attachment.data} alt="" className="bb-pb__thumb" />
+      ) : (
+        <FileIcon size={12} />
+      )}
+      <span className="prompt-bar__chip-name">{attachment.name}</span>
+      <span className="bb-pb__size">{kb} kB</span>
+      <button type="button" className="prompt-bar__chip-x" aria-label={`Odebrat ${attachment.name}`} onClick={onRemove}>
+        <X size={10} />
       </button>
-    </div>
+    </span>
   );
 }

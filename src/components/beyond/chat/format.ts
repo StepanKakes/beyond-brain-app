@@ -26,3 +26,8 @@ export function relativeTime(ts: number): string {
   if (diff < d) return `${Math.round(diff / h)} h`;
   return `${Math.round(diff / d)} d`;
 }
+
+/** The key the server matches a connector on: its name, slugified. */
+export function slug(name: string): string {
+  return String(name).trim().replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase();
+}

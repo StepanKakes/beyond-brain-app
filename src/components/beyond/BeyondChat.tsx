@@ -1,18 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-  ArrowUp,
-  Paperclip,
   ChevronRight,
   ShieldOff,
   Shield,
-  Square,
   Settings as SettingsIcon,
   Upload,
   Plus,
   Sparkles,
   PanelRight,
-  Mic,
 } from './icons';
 
 import { CLAUDE_MODELS } from '../../../shared/modelConstants';
@@ -25,7 +21,6 @@ import {
 } from './beyondModels';
 import BeyondLoader, { readLoaderKind, type LoaderKind } from './BeyondLoader';
 import BeyondBrainMark from './BeyondBrainMark';
-import BeyondThinkingStates from './BeyondThinkingStates';
 import BeyondSlashMenu from './BeyondSlashMenu';
 import { useBeyondSpeech } from './useBeyondSpeech';
 import { useBeyondSlashCommands } from './useBeyondSlashCommands';
@@ -47,8 +42,8 @@ import {
 import { useBrainPath } from './useBrainPath';
 
 import MessageBlock from './chat/MessageBlock';
-import ModelPicker from './chat/ModelPicker';
-import ToolsPicker from './chat/ToolsPicker';
+import Composer from './chat/Composer';
+import { Tip, TipGroup } from './ui';
 import TokenBudgetChip from './chat/TokenBudgetChip';
 import AskPanel from './chat/AskPanel';
 import PermissionPanel from './chat/PermissionPanel';
@@ -239,15 +234,6 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
     onValue: setValue,
     getBase: () => valueRef.current,
   });
-
-  // Auto-grow the composer textarea as the user types a longer prompt; cap at
-  // ~10 lines and let it scroll inside above that.
-  useEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
-  }, [value]);
 
   // Live context usage for the current SDK session, fed by the server's
   // `token_budget` status events (from queryInstance.getContextUsage) after
@@ -1502,41 +1488,53 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
           </button>
         )}
 
-        <div className="flex flex-shrink-0 items-center gap-0.5">
-          <button type="button" onClick={startNewSession} title="Nový chat" className="bb-ib">
-            <Plus className="h-[16px] w-[16px]" strokeWidth={1.8} />
-          </button>
-          <button
-            type="button"
-            onClick={compactContext}
-            disabled={!sessionIdRef.current || thinking || !isConnected}
-            title="Komprimovat kontext (/compact) — Claude shrne konverzaci a uvolní tokeny"
-            className="bb-ib disabled:opacity-30"
-          >
-            <Sparkles className="h-[16px] w-[16px]" strokeWidth={1.8} />
-          </button>
-          <button type="button" onClick={() => setPermsOpen(true)} title="Nastavení oprávnění" className="bb-ib">
-            <SettingsIcon className="h-[16px] w-[16px]" strokeWidth={1.8} />
-          </button>
-          <button
-            type="button"
-            onClick={toggleBypass}
-            title={
-              bypassPermissions
-                ? 'Bypass režim aktivní — agent neprosí o povolení. Klik vypne.'
-                : 'Zapnout bypass režim (dangerously skip permissions)'
-            }
-            aria-pressed={bypassPermissions}
-            className="bb-ib"
-            style={bypassPermissions ? { background: 'rgba(217,119,6,.15)', color: '#B45309' } : undefined}
-          >
-            {bypassPermissions ? (
-              <ShieldOff className="h-[16px] w-[16px]" strokeWidth={1.8} />
-            ) : (
-              <Shield className="h-[16px] w-[16px]" strokeWidth={1.8} />
-            )}
-          </button>
-        </div>
+        <TipGroup>
+          <div className="flex flex-shrink-0 items-center gap-0.5">
+            <Tip label="Nový chat">
+              <button type="button" onClick={startNewSession} aria-label="Nový chat" className="bb-ib">
+                <Plus className="h-[16px] w-[16px]" strokeWidth={1.8} />
+              </button>
+            </Tip>
+            <Tip label="Zhustit kontext, Claude shrne konverzaci a uvolní místo">
+              <button
+                type="button"
+                onClick={compactContext}
+                disabled={!sessionIdRef.current || thinking || !isConnected}
+                aria-label="Zhustit kontext"
+                className="bb-ib disabled:opacity-30"
+              >
+                <Sparkles className="h-[16px] w-[16px]" strokeWidth={1.8} />
+              </button>
+            </Tip>
+            <Tip label="Oprávnění">
+              <button type="button" onClick={() => setPermsOpen(true)} aria-label="Oprávnění" className="bb-ib">
+                <SettingsIcon className="h-[16px] w-[16px]" strokeWidth={1.8} />
+              </button>
+            </Tip>
+            <Tip
+              label={
+                bypassPermissions
+                  ? 'Agent teď nežádá o povolení, klik to vypne'
+                  : 'Pustit agenta bez ptaní na povolení'
+              }
+            >
+              <button
+                type="button"
+                onClick={toggleBypass}
+                aria-label={bypassPermissions ? 'Vypnout režim bez povolení' : 'Zapnout režim bez povolení'}
+                aria-pressed={bypassPermissions}
+                className="bb-ib"
+                style={bypassPermissions ? { background: 'var(--bb-warn-soft)', color: 'var(--bb-warn)' } : undefined}
+              >
+                {bypassPermissions ? (
+                  <ShieldOff className="h-[16px] w-[16px]" strokeWidth={1.8} />
+                ) : (
+                  <Shield className="h-[16px] w-[16px]" strokeWidth={1.8} />
+                )}
+              </button>
+            </Tip>
+          </div>
+        </TipGroup>
 
         <AnimatePresence>
           {sessionsOpen && (
@@ -1581,8 +1579,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
                 style={{ cursor: 'default' }}
               >
                 <BeyondBrainMark size={34} side={0.76} animate="pulse" />
-                {thinkingNote ? <span className="bb-think__note">{thinkingNote}</span> : <BeyondThinkingStates />}
-                <BeyondLoader kind={loader} />
+                <BeyondLoader kind={loader} label={thinkingNote || 'Přemýšlím'} timer />
               </motion.div>
             )}
           </AnimatePresence>
@@ -1651,114 +1648,64 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
         className="bb-composer__wrap"
         style={{ position: 'relative', paddingBottom: 'max(22px, calc(env(safe-area-inset-bottom) + 8px))' }}
       >
-        {slash.open && (
-          <BeyondSlashMenu
-            items={slash.items}
-            activeIndex={slash.activeIndex}
-            onHover={slash.setActiveIndex}
-            onSelect={onChooseCommand}
-          />
-        )}
-        <div className="bb-composer">
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept="image/*,.md,.txt,.json,.csv,.yaml,.yml,.log,.html,.css,.js,.ts,.tsx,.jsx,.py,.sh,.toml,.ini,.env,.jsonl"
-            className="hidden"
-            onChange={async (e) => {
-              const files = Array.from(e.target.files || []);
-              for (const f of files) await ingestFile(f);
-              if (fileInputRef.current) fileInputRef.current.value = '';
-            }}
-          />
-
-          {attachments.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 px-3 pt-3">
-              {attachments.map((a) => (
-                <AttachmentChip key={a.id} attachment={a} onRemove={() => removeAttachment(a.id)} />
-              ))}
-            </div>
-          )}
-
-          {speech.listening && (
-            <div className="bb-mic">
-              <div className="bb-mic__bars" aria-hidden="true">
-                {[0, 1, 2, 3, 4].map((i) => (
-                  <i key={i} style={{ animationDelay: `${i * 0.12}s` }} />
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept="image/*,.md,.txt,.json,.csv,.yaml,.yml,.log,.html,.css,.js,.ts,.tsx,.jsx,.py,.sh,.toml,.ini,.env,.jsonl"
+          className="hidden"
+          onChange={async (e) => {
+            const files = Array.from(e.target.files || []);
+            for (const f of files) await ingestFile(f);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+          }}
+        />
+        <Composer
+          value={value}
+          onChange={setValue}
+          textareaRef={textareaRef}
+          placeholder="Napiš, co řešíme, lomítko pro příkazy"
+          onKeyDown={(e) => {
+            if (slash.onKeyDown(e)) return;
+            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              submit(value);
+            }
+          }}
+          overlay={
+            slash.open && slash.items.length > 0 ? (
+              <BeyondSlashMenu
+                items={slash.items}
+                activeIndex={slash.activeIndex}
+                onHover={slash.setActiveIndex}
+                onSelect={onChooseCommand}
+              />
+            ) : undefined
+          }
+          attachments={
+            attachments.length > 0 ? (
+              <div className="prompt-bar__chips">
+                {attachments.map((a) => (
+                  <AttachmentChip key={a.id} attachment={a} onRemove={() => removeAttachment(a.id)} />
                 ))}
               </div>
-              <span style={{ fontSize: 13.5, color: 'var(--bb-ink2)' }}>Poslouchám… (česky)</span>
-            </div>
-          )}
-
-          <textarea
-            ref={textareaRef}
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (slash.onKeyDown(e)) return;
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                submit(value);
-              }
-            }}
-            placeholder="Napiš, co řešíme… (/ pro příkazy)"
-            rows={1}
-          />
-
-          <div className="bb-composer__bar">
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              tabIndex={-1}
-              aria-label="Příloha"
-              title="Přidat soubor (obrázek nebo text)"
-              className="bb-ib bb-ib--tool"
-            >
-              <Paperclip className="h-[18px] w-[18px]" strokeWidth={1.8} />
-            </button>
-            {speech.supported && (
-              <button
-                type="button"
-                onClick={speech.toggle}
-                aria-pressed={speech.listening}
-                aria-label="Diktovat"
-                title={speech.listening ? 'Zastavit diktování' : 'Diktovat (česky)'}
-                className="bb-ib bb-ib--tool"
-              >
-                <Mic className="h-[18px] w-[18px]" strokeWidth={1.8} />
-              </button>
-            )}
-            <ModelPicker value={model} options={modelOptions} onChange={changeModel} />
-            <ToolsPicker value={connectors} onChange={setConnectors} />
-            <TokenBudgetChip budget={tokenBudget} />
-            <span className="bb-composer__hint">Enter odešle · Shift + Enter nový řádek</span>
-            {thinking ? (
-              <button
-                type="button"
-                onClick={stop}
-                aria-label="Zastav"
-                title="Zastav agenta"
-                className="bb-send"
-                data-active="true"
-              >
-                <Square className="h-[13px] w-[13px] fill-current" strokeWidth={0} />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => submit(value)}
-                disabled={(!value.trim() && attachments.length === 0) || !isConnected}
-                aria-label="Pošli"
-                className="bb-send"
-                data-active={(value.trim() || attachments.length > 0) && isConnected ? 'true' : 'false'}
-              >
-                <ArrowUp className="h-[18px] w-[18px]" strokeWidth={2.2} />
-              </button>
-            )}
-          </div>
-        </div>
+            ) : undefined
+          }
+          onAttach={() => fileInputRef.current?.click()}
+          speechSupported={speech.supported}
+          listening={speech.listening}
+          onToggleDictation={speech.toggle}
+          busy={thinking}
+          canSend={(value.trim().length > 0 || attachments.length > 0) && isConnected}
+          onSend={() => submit(value)}
+          onStop={stop}
+          model={model}
+          modelOptions={modelOptions}
+          onModel={changeModel}
+          connectors={connectors}
+          onConnectors={setConnectors}
+          budget={<TokenBudgetChip budget={tokenBudget} />}
+        />
         <div className="bb-disclaimer">Beyond Brain může chybovat. U důležitých věcí prověř zdroje.</div>
       </div>
 

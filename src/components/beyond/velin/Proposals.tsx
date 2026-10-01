@@ -3,6 +3,8 @@ import { Check, Pencil, X } from '../icons';
 
 import { authenticatedFetch } from '../../../utils/api';
 import { Empty, SectionHead, ago, usePolled } from './bits';
+import { HoldToSend } from '../ui';
+import { toast } from '../ui/toast';
 
 /**
  * Beyond Brain — messages written and waiting for one click.
@@ -188,16 +190,14 @@ export default function Proposals({ compact = false }: { compact?: boolean }) {
                       >
                         <Pencil size={13} strokeWidth={1.9} /> Upravit
                       </button>
-                      <button
-                        type="button"
-                        className="bb-btn-primary"
-                        style={{ padding: '6px 15px', borderRadius: 999, fontSize: 12.5, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 5 }}
+                      <HoldToSend
+                        icon={<Check size={13} />}
                         disabled={busy === p.id || !canSend || !p.target}
-                        onClick={() => void act(p.id, '/odeslat')}
+                        onSend={() => void act(p.id, '/odeslat')}
+                        onTap={() => toast('Podrž tlačítko', 'Zpráva odejde, až se tlačítko celé zaplní')}
                       >
-                        <Check size={13} strokeWidth={2.2} />
-                        {busy === p.id ? 'Odesílám…' : 'Odeslat'}
-                      </button>
+                        {busy === p.id ? 'Odesílám' : 'Podrž a odešli'}
+                      </HoldToSend>
                     </>
                   )}
                 </div>

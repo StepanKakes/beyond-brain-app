@@ -1,5 +1,8 @@
 import { useCallback, useState } from 'react';
 import { Play } from '../icons';
+import { Switch, Tabs } from '../ui';
+import StatusMark, { type StatusMarkStatus } from '../bits/StatusMark';
+import CountUp from '../bits/CountUp';
 
 import { authenticatedFetch } from '../../../utils/api';
 import { Empty, SectionHead, ago, usePolled } from './bits';
@@ -109,6 +112,7 @@ type Usage = {
 
 const fmtK = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
 const fmtUsd = (n: number) => `$${n.toFixed(n >= 10 ? 0 : 2)}`;
+const roundUsd = (n: number) => Number(n.toFixed(n >= 10 ? 0 : 2));
 const SOURCE_LABEL: Record<string, string> = { chat: 'Chat', job: 'Úloha', telegram: 'Telegram', agent: 'Agent', velin: 'Velín', voice: 'Hlasovka' };
 
 function sourceName(r: { source: string; label: string | null }) {
@@ -168,7 +172,7 @@ function UsageSection() {
                     <div className="bb-us__wl">
                       <span>{w.label}</span>
                       <b>
-                        {w.percent} %
+                        <CountUp to={w.percent} duration={0.8} /> %
                         {b && (share != null
                           ? <em title={otherShare != null ? `Zbytek (${otherShare} %) je použití, které appka nevidí — Claude web/app, jiný stroj bez reportéru.` : undefined}> · brain ~{share} %{segYou > 0 ? ` · ty ~${youShare} %` : ''}{otherShare ? ` · ostatní ${otherShare} %` : ''}</em>
                           : <em> brain {fmtUsd(b.brainCostUsd)}, podíl měřím</em>)}
@@ -228,7 +232,7 @@ function UsageSection() {
             return (
               <div key={k} className="bb-us__period">
                 <span className="bb-us__pl">{k === 'today' ? 'Dnes' : k === 'week' ? '7 dní' : '30 dní'}</span>
-                <b className="bb-us__pv">{fmtUsd(p.cost_usd || 0)}</b>
+                <b className="bb-us__pv">$<CountUp to={roundUsd(p.cost_usd || 0)} duration={0.9} separator=" " /></b>
                 <span className="bb-us__pm">{p.runs || 0} běhů · {fmtK((p.input || 0) + (p.cache_write || 0))} in · {fmtK(p.cache_read || 0)} cache · {fmtK(p.output || 0)} out{p.errors ? ` · ${p.errors} chyb` : ''}</span>
               </div>
             );
@@ -408,6 +412,15 @@ const EVENT_LABEL: Record<EventRow['status'], string> = {
   ignored: 'ignorováno',
 };
 
+const EVENT_MARK: Record<EventRow['status'], StatusMarkStatus> = {
+  pending: 'pending',
+  waiting: 'pending',
+  running: 'running',
+  done: 'done',
+  error: 'failed',
+  ignored: 'cancelled',
+};
+
 /** Lines that are only in one of the two texts. Enough to see what a proposal does. */
 function roughDiff(before: string | null, after: string): { removed: string[]; added: string[] } {
   const a = new Set((before || '').split('\n'));
@@ -490,6 +503,13 @@ function MozekQueue({ onChange }: { onChange: () => void }) {
   );
 }
 
+const RUN_MARK: Record<Run['status'], StatusMarkStatus> = {
+  running: 'running',
+  ok: 'done',
+  error: 'failed',
+  skipped: 'cancelled',
+};
+
 const STATUS_LABEL: Record<Run['status'], string> = {
   running: 'běží',
   ok: 'hotovo',
@@ -571,14 +591,23 @@ export default function AgentPage() {
           </button>
         </header>
 
-        <nav className="bb-tabs" aria-label="Části agenta">
-          {TABS.map((t) => (
-            <button key={t.key} type="button" className="bb-tabs__t" aria-pressed={tab === t.key} onClick={() => pickTab(t.key)}>
-              {t.label}
-              {t.key === 'ulohy' && waiting > 0 && <i className="bb-tabs__dot" aria-label={`${waiting} úloh selhává`} />}
-            </button>
-          ))}
-        </nav>
+        <Tabs
+          label="Části agenta"
+          items={TABS.map((t) => ({
+            key: t.key,
+            label:
+              t.key === 'ulohy' && waiting > 0 ? (
+                <span className="bb-tabs__badge">
+                  {t.label}
+                  <i className="bb-tabs__dot" aria-label={`${waiting} úloh selhává`} />
+                </span>
+              ) : (
+                t.label
+              ),
+          }))}
+          value={tab}
+          onChange={(k) => pickTab(k as typeof tab)}
+        />
 
         {tab === 'prehled' && (
           <>
@@ -625,15 +654,11 @@ export default function AgentPage() {
                   >
                     <Play size={14} strokeWidth={1.9} />
                   </button>
-                  <button
-                    type="button"
-                    className="bb-switch"
-                    data-on={j.enabled ? 'true' : 'false'}
-                    aria-label={j.enabled ? 'Vypnout úlohu' : 'Zapnout úlohu'}
-                    onClick={() => void post(`/agent/job/${j.name}`, { enabled: !j.enabled })}
-                  >
-                    <i />
-                  </button>
+                  <Switch
+                    on={j.enabled}
+                    label={j.enabled ? 'Vypnout úlohu' : 'Zapnout úlohu'}
+                    onChange={(next) => void post(`/agent/job/${j.name}`, { enabled: next })}
+                  />
                 </span>
               </div>
             ))}
@@ -661,12 +686,14 @@ export default function AgentPage() {
                     className="bb-sig__row"
                     onClick={() => setOpenRun(open ? null : r.id)}
                   >
-                    <span
-                      className="bb-sev"
-                      data-sev={r.status === 'error' ? 'critical' : r.status === 'ok' ? 'ok' : undefined}
-                    >
-                      {STATUS_LABEL[r.status]}
-                    </span>
+                    <StatusMark
+                      className="bb-mark"
+                      status={RUN_MARK[r.status]}
+                      label={STATUS_LABEL[r.status]}
+                      size={16}
+                      fontSize={12.5}
+                      strike={false}
+                    />
                     <span className="bb-sig__who">
                       {new Date(r.startedAt).toLocaleString('cs-CZ', {
                         day: 'numeric',
@@ -734,9 +761,14 @@ export default function AgentPage() {
             <div className="bb-sig" style={{ marginTop: 10 }}>
               {events.map((e) => (
                 <div key={e.id} className="bb-sig__row" style={{ cursor: 'default' }}>
-                  <span className="bb-sev" data-sev={e.status === 'error' ? 'critical' : e.status === 'done' ? 'ok' : undefined}>
-                    {EVENT_LABEL[e.status]}
-                  </span>
+                  <StatusMark
+                    className="bb-mark"
+                    status={EVENT_MARK[e.status]}
+                    label={EVENT_LABEL[e.status]}
+                    size={16}
+                    fontSize={12.5}
+                    strike={false}
+                  />
                   <span className="bb-sig__who">{ago(e.receivedAt)}</span>
                   <span className="bb-sig__t">
                     {e.route}

@@ -15,6 +15,7 @@ import CallsPage from './velin/CallsPage';
 import AgentPage from './velin/AgentPage';
 import FilesPage from './files/FilesPage';
 import ScreenBoundary from './ScreenBoundary';
+import Toaster from './ui/Toaster';
 import ObsahPage from './velin/ObsahPage';
 import StudioPage from './velin/StudioPage';
 import { useBeyondClients, type BeyondClient } from './useBeyondClients';
@@ -411,6 +412,8 @@ export default function BeyondApp() {
           <BeyondSettings onClose={() => setSettingsOpen(false)} />
         )}
       </AnimatePresence>
+
+      <Toaster />
     </BeyondShell>
   );
 }
