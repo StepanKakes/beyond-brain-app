@@ -73,10 +73,6 @@
 .bb-pb__thumb { width: 24px; height: 24px; border-radius: 7px; object-fit: cover; }
 .bb-pb__size { color: var(--bb-ink3); font-size: 11px; }
 
-/* ------------------------------------------------------------- thinking - */
-.lattice-loader.bb-lattice { color: var(--bb-ink2); }
-.bb-think .lattice-loader__timer { color: var(--bb-ink3); }
-
 /* ------------------------------------------------------- tool call chips - */
 .call-chip.bb-callchip { max-width: 100%; }
 .call-chip.bb-callchip .call-chip__arg { min-width: 0; overflow: hidden; text-overflow: ellipsis; }

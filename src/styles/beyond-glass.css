@@ -297,6 +297,9 @@ body { background: var(--bb-bg) !important; color: var(--bb-ink); font-family: v
 
 /* ---------------------------------------------------------------- thinking - */
 .bb-think { display: inline-flex; align-items: center; gap: 11px; margin-bottom: 14px; cursor: pointer; user-select: none; border: none; background: transparent; padding: 0; }
+.bb-thinkline { display: inline-flex; align-items: baseline; gap: 8px; font-family: var(--bb-font); font-size: 14px; line-height: 1.4; }
+.bb-thinkline__label { color: var(--bb-ink2); font-weight: 500; }
+.bb-thinkline__timer { color: var(--bb-ink3); font-size: 13px; font-variant-numeric: tabular-nums; }
 
 
 /* ------------------------------------------------- dotted brain (logo/loader) */

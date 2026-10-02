@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { X, Sun, Moon, Monitor, Plug, Check } from './icons';
 import { useTheme } from '../../contexts/ThemeContext';
-import BeyondLoader, { LOADER_KINDS, LOADER_STORAGE_KEY, readLoaderKind, type LoaderKind } from './BeyondLoader';
 import { czechNote, fetchBeyondModels, fallbackModelOptions, type BeyondModelOption } from './beyondModels';
 import { CLAUDE_MODELS } from '../../../shared/modelConstants';
 import TeamSection from './velin/TeamSection';
@@ -11,10 +10,9 @@ import { Switch, Tabs } from './ui';
 /**
  * Beyond Brain — Settings dialog (full handoff layout).
  *
- * Sections: Model · Animace přemýšlení · Chování · Vzhled · Rozšíření.
- * Model + loader are shared with the chat via localStorage + custom events
- * (`beyond:set-model`, `beyond:set-loader`), so the composer picker and the
- * thinking indicator stay in sync. Reachable from the sidebar gear.
+ * Sections: Model · Chování · Vzhled · Rozšíření.
+ * The model is shared with the chat via localStorage + the `beyond:set-model`
+ * event, so the composer picker stays in sync. Reachable from the sidebar gear.
  */
 
 const MODEL_STORAGE_KEY = 'beyond.model';
@@ -58,7 +56,6 @@ function readModel(): string {
 export default function BeyondSettings({ onClose }: { onClose: () => void }) {
   const { setTheme } = useTheme() as { setTheme: (m: ThemeMode) => void };
   const [themeMode, setThemeMode] = useState<ThemeMode>(currentThemeMode);
-  const [loader, setLoader] = useState<LoaderKind>(readLoaderKind);
   const [flags, setFlags] = useState<Flags>(readFlags);
   const [modelValue, setModelValue] = useState<string>(readModel);
   const [modelOptions, setModelOptions] = useState<BeyondModelOption[]>(() => fallbackModelOptions());
@@ -83,12 +80,6 @@ export default function BeyondSettings({ onClose }: { onClose: () => void }) {
     setModelValue(value);
     try { localStorage.setItem(MODEL_STORAGE_KEY, value); } catch { /* ignore */ }
     window.dispatchEvent(new CustomEvent('beyond:set-model', { detail: { value } }));
-  };
-
-  const pickLoader = (kind: LoaderKind) => {
-    setLoader(kind);
-    try { localStorage.setItem(LOADER_STORAGE_KEY, kind); } catch { /* ignore */ }
-    window.dispatchEvent(new CustomEvent('beyond:set-loader', { detail: { kind } }));
   };
 
   const toggleFlag = (id: keyof Flags) => {
@@ -146,23 +137,6 @@ export default function BeyondSettings({ onClose }: { onClose: () => void }) {
                     </button>
                   );
                 })}
-              </div>
-            </section>
-
-            {/* Thinking animation */}
-            <section>
-              <div className="bb-section__label">Animace přemýšlení</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {LOADER_KINDS.map((l) => (
-                  <button type="button" key={l.id} className="bb-option" aria-selected={l.id === loader} onClick={() => pickLoader(l.id)}>
-                    <span style={{ width: 30, display: 'grid', placeItems: 'center', flex: 'none' }}><BeyondLoader kind={l.id} /></span>
-                    <span style={{ flex: 1, textAlign: 'left' }}>
-                      <span style={{ display: 'block', fontSize: 13.5, fontWeight: 500 }}>{l.name}</span>
-                      <span style={{ display: 'block', fontSize: 12, color: 'var(--bb-ink2)' }}>{l.desc}</span>
-                    </span>
-                    {l.id === loader && <Check size={15} strokeWidth={2.2} />}
-                  </button>
-                ))}
               </div>
             </section>
 

@@ -1,54 +1,27 @@
-import LatticeLoader, { type LatticePatternName } from './bits/LatticeLoader';
+import { useEffect, useRef, useState } from 'react';
 
 /**
- * Beyond Brain — the thinking loader, React Bits LatticeLoader. The pattern
- * the dots run is user-selectable in Settings → Animace přemýšlení; earlier
- * choices from the CSS loaders fall back to the default.
+ * Beyond Brain — the line next to the pulsing brain while a turn runs: what
+ * the brain is doing and how long it has been at it, in the app's own type.
+ * The brain mark itself is the only animation.
  */
 
-export type LoaderKind = Extract<LatticePatternName, 'orbit' | 'snake' | 'spiral' | 'ripple' | 'rain' | 'pulse'>;
+const fmt = (s: number) => (s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, '0')} s`);
 
-export const LOADER_KINDS: { id: LoaderKind; name: string; desc: string }[] = [
-  { id: 'orbit', name: 'Oběžnice', desc: 'Světlo obíhá kolem středu' },
-  { id: 'snake', name: 'Had', desc: 'Řada teček se plazí mřížkou' },
-  { id: 'spiral', name: 'Spirála', desc: 'Stáčí se od kraje do středu' },
-  { id: 'ripple', name: 'Vlna', desc: 'Kruhy se šíří ze středu' },
-  { id: 'rain', name: 'Déšť', desc: 'Tečky padají shora dolů' },
-  { id: 'pulse', name: 'Tep', desc: 'Celá mřížka dýchá' },
-];
+export default function BeyondLoader({ label = 'Přemýšlím', timer = false }: { label?: string; timer?: boolean }) {
+  const startedAt = useRef(performance.now());
+  const [secs, setSecs] = useState(0);
 
-export const LOADER_STORAGE_KEY = 'beyond.loader';
+  useEffect(() => {
+    if (!timer) return undefined;
+    const id = setInterval(() => setSecs(Math.floor((performance.now() - startedAt.current) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, [timer]);
 
-export function readLoaderKind(): LoaderKind {
-  try {
-    const v = localStorage.getItem(LOADER_STORAGE_KEY) as LoaderKind | null;
-    if (v && LOADER_KINDS.some((l) => l.id === v)) return v;
-  } catch {
-    /* ignore */
-  }
-  return 'orbit';
-}
-
-export default function BeyondLoader({
-  kind = 'orbit',
-  label = '',
-  timer = false,
-}: {
-  kind?: LoaderKind;
-  label?: string;
-  timer?: boolean;
-}) {
   return (
-    <LatticeLoader
-      pattern={kind}
-      label={label}
-      doneLabel="Hotovo za"
-      errorLabel="Selhalo po"
-      showTimer={timer}
-      cellSize={4}
-      gap={2}
-      fontSize={14}
-      className="bb-lattice"
-    />
+    <span role="status" className="bb-thinkline">
+      <span className="bb-thinkline__label">{label}</span>
+      {timer && <span className="bb-thinkline__timer">{fmt(secs)}</span>}
+    </span>
   );
 }

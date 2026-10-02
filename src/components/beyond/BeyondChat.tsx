@@ -19,7 +19,7 @@ import {
   fallbackModelOptions,
   type BeyondModelOption,
 } from './beyondModels';
-import BeyondLoader, { readLoaderKind, type LoaderKind } from './BeyondLoader';
+import BeyondLoader from './BeyondLoader';
 import BeyondBrainMark from './BeyondBrainMark';
 import BeyondSlashMenu from './BeyondSlashMenu';
 import { useBeyondSpeech } from './useBeyondSpeech';
@@ -206,8 +206,6 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
     try { localStorage.setItem(CONNECTORS_KEY, JSON.stringify(connectors)); } catch { /* fine without */ }
   }, [connectors]);
   const [permsOpen, setPermsOpen] = useState(false);
-  // Thinking-loader animation (Settings → Animace přemýšlení), shared via events.
-  const [loader, setLoader] = useState<LoaderKind>(() => readLoaderKind());
   // Id of the assistant message currently streaming in (word-by-word cross-blur).
   // Set on each stream_delta, cleared on complete/error so the bubble swaps to
   // the fully-formatted Markdown render.
@@ -1197,15 +1195,9 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
       const v = (e as CustomEvent<{ value?: string }>).detail?.value;
       if (v) changeModel(v);
     };
-    const onSetLoader = (e: Event) => {
-      const k = (e as CustomEvent<{ kind?: LoaderKind }>).detail?.kind;
-      if (k) setLoader(k);
-    };
     window.addEventListener('beyond:set-model', onSetModel);
-    window.addEventListener('beyond:set-loader', onSetLoader);
     return () => {
       window.removeEventListener('beyond:set-model', onSetModel);
-      window.removeEventListener('beyond:set-loader', onSetLoader);
     };
   }, [changeModel]);
 
@@ -1579,7 +1571,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
                 style={{ cursor: 'default' }}
               >
                 <BeyondBrainMark size={34} side={0.76} animate="pulse" />
-                <BeyondLoader kind={loader} label={thinkingNote || 'Přemýšlím'} timer />
+                <BeyondLoader label={thinkingNote || 'Přemýšlím'} timer />
               </motion.div>
             )}
           </AnimatePresence>

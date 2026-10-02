@@ -45,7 +45,6 @@ se načítá později).
 |---|---|
 | PromptBar | `chat/Composer.tsx`, uvítací pole; `bits/GlideMenu.tsx` je jeho menu s klouzavým zvýrazněním pro příkazy, model, konektory a plus |
 | CallChip | kroky nástrojů v chatu |
-| LatticeLoader | přemýšlení v chatu, vzor se volí v Nastavení |
 | RubberSegment | `Tabs` v `ui/`, typ konektoru, vzhled |
 | SquishSwitch | `Switch` v `ui/` |
 | HoldButton | `HoldToSend` v `ui/`: zpráva skutečnému člověku odejde až po podržení |
