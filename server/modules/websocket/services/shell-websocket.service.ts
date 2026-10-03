@@ -5,7 +5,22 @@ import path from 'node:path';
 import pty, { type IPty } from 'node-pty';
 import { WebSocket, type RawData } from 'ws';
 
+import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
 import { parseIncomingJsonObject } from '@/shared/utils.js';
+
+/**
+ * The service runs with a PATH that does not hold `claude`, so a login typed
+ * as `claude /login` dies with "not recognized". Swap the bare word for the
+ * executable the SDK already finds (CLAUDE_CLI_PATH, npm and install dirs).
+ */
+function useResolvedClaude(command: string): string {
+  const m = /^claude(\s.*)?$/s.exec(command.trim());
+  if (!m) return command;
+  const exe = resolveClaudeCodeExecutablePath();
+  if (!exe || exe === 'claude') return command;
+  const quoted = `"${exe.replace(/"/g, '')}"`;
+  return `${os.platform() === 'win32' ? '& ' : ''}${quoted}${m[1] ?? ''}`;
+}
 
 type ShellIncomingMessage = {
   type?: string;
@@ -93,7 +108,7 @@ function buildShellCommand(
     provider === 'plain-shell';
 
   if (isPlainShell) {
-    return initialCommand;
+    return useResolvedClaude(initialCommand);
   }
 
   if (provider === 'cursor') {
