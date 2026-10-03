@@ -108,7 +108,12 @@ export default function BeyondClaudeLogin({ onClose }: { onClose: () => void }) 
                 aria-label="Kód z přihlášení"
                 autoFocus
               />
-              {sent && <p className="bb-fx__empty" style={{ padding: 0 }}><Spinner size={16} /> Ověřuju kód</p>}
+              {sent && (
+                <>
+                  <p className="bb-fx__empty" style={{ padding: 0 }}><Spinner size={16} /> Ověřuju kód</p>
+                  {slow && status.tail && <pre className="bb-fx__pre">{status.tail}</pre>}
+                </>
+              )}
             </>
           )}
 

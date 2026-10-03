@@ -70,7 +70,12 @@ export function startClaudeLogin() {
       const m = URL_RE.exec(state.out.replace(/\r?\n/g, ''));
       if (m) state.url = m[0];
     }
-    if (/login successful|logged in as|successfully logged in/i.test(state.out)) state.done = true;
+    if (/login successful|logged in as|successfully logged in/i.test(state.out)) {
+      state.done = true;
+      // "Press Enter to continue": nothing more to do, let it go.
+      setTimeout(() => { try { proc.write('\r'); } catch { /* gone */ } }, 500);
+      setTimeout(stop, 4000);
+    }
   });
   proc.onExit(({ exitCode }) => {
     if (exitCode === 0) state.done = true;
@@ -91,7 +96,11 @@ export function submitClaudeLoginCode(code) {
   if (!current || current.done || current.failed) return false;
   const clean = String(code || '').trim();
   if (!clean || /[\r\n]/.test(clean) || clean.length > 400) return false;
-  current.proc.write(`${clean}\r`);
+  // Typed as a paste, so the Enter has to come on its own or it is swallowed.
+  const proc = current.proc;
+  proc.write(clean);
+  setTimeout(() => { try { proc.write('\r'); } catch { /* gone */ } }, 400);
+  setTimeout(() => { try { proc.write('\r'); } catch { /* gone */ } }, 2500);
   return true;
 }
 
