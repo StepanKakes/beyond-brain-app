@@ -24,6 +24,7 @@ import { getSupportedModels, runSdkOneShot } from '../claude-sdk.js';
 import { invalidateClientCache } from '../services/beyond-clients.js';
 import { brainPathExists, resolveBrainPath } from '../utils/brain-path.js';
 import { brainTree, brainGraph } from '../services/beyond-graph.js';
+import { cancelClaudeLogin, claudeLoginStatus, startClaudeLogin, submitClaudeLoginCode } from '../services/beyond-claude-login.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -462,6 +463,25 @@ router.get('/file', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message || 'file read failed' });
   }
+});
+
+// Renewing the machine's Claude login from the UI (see the service).
+router.post('/claude-login/start', (_req, res) => {
+  try {
+    startClaudeLogin();
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'login start failed' });
+  }
+});
+router.get('/claude-login/status', (_req, res) => res.json(claudeLoginStatus()));
+router.post('/claude-login/code', (req, res) => {
+  if (!submitClaudeLoginCode(req.body?.code)) return res.status(400).json({ error: 'Kód nejde odeslat' });
+  res.json({ ok: true });
+});
+router.post('/claude-login/cancel', (_req, res) => {
+  cancelClaudeLogin();
+  res.json({ ok: true });
 });
 
 // ---------------------------------------------------------------------------

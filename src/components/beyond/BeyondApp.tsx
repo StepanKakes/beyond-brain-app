@@ -15,7 +15,7 @@ import CallsPage from './velin/CallsPage';
 import AgentPage from './velin/AgentPage';
 import FilesPage from './files/FilesPage';
 import ScreenBoundary from './ScreenBoundary';
-import ProviderLoginModal from '../provider-auth/view/ProviderLoginModal';
+import BeyondClaudeLogin from './BeyondClaudeLogin';
 import Toaster from './ui/Toaster';
 import ObsahPage from './velin/ObsahPage';
 import StudioPage from './velin/StudioPage';
@@ -392,11 +392,7 @@ export default function BeyondApp() {
       </AnimatePresence>
 
       {claudeLogin && (
-        <ProviderLoginModal
-          isOpen
-          provider="claude"
-          onClose={() => setClaudeLogin(false)}
-        />
+        <BeyondClaudeLogin onClose={() => setClaudeLogin(false)} />
       )}
 
       <AnimatePresence>
