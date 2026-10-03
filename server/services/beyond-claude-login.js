@@ -37,7 +37,8 @@ export function startClaudeLogin() {
       // Wide, so the address is never broken over lines.
       cols: 2000,
       rows: 40,
-      cwd: os.homedir(),
+      // The app's own folder, which the CLI already trusts on this machine.
+      cwd: process.cwd(),
       env: { ...process.env, TERM: 'xterm-256color', BROWSER: 'none' },
     },
   );
@@ -45,6 +46,11 @@ export function startClaudeLogin() {
   state.timer = setTimeout(stop, MAX_AGE_MS);
   proc.onData((chunk) => {
     state.out = (state.out + chunk.replace(ANSI, '')).slice(-20000);
+    // Asked about trusting the folder anyway: answer "Yes" (second choice) once.
+    if (!state.trusted && /trust this folder/i.test(state.out)) {
+      state.trusted = true;
+      setTimeout(() => { try { proc.write('\u001b[B'); setTimeout(() => proc.write('\r'), 200); } catch { /* gone */ } }, 300);
+    }
     if (!state.url) {
       // The terminal may still have wrapped it: join lines before matching.
       const m = URL_RE.exec(state.out.replace(/\r?\n/g, ''));
