@@ -113,6 +113,25 @@ export default function BeyondApp() {
   // The machine's Claude login ran out: a terminal with `claude /login`, opened
   // from Settings or from the toast the chat shows when a turn fails on auth.
   const [claudeLogin, setClaudeLogin] = useState(false);
+  // On a phone the keyboard shrinks the visual viewport but not the layout one;
+  // follow the visual one so the composer stays above the keyboard, and keep
+  // the page itself from scrolling away.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return undefined;
+    const fit = () => {
+      document.documentElement.style.setProperty('--bb-vh', `${Math.round(vv.height)}px`);
+      if (window.scrollY !== 0 || vv.offsetTop !== 0) window.scrollTo(0, 0);
+    };
+    fit();
+    vv.addEventListener('resize', fit);
+    vv.addEventListener('scroll', fit);
+    return () => {
+      vv.removeEventListener('resize', fit);
+      vv.removeEventListener('scroll', fit);
+      document.documentElement.style.removeProperty('--bb-vh');
+    };
+  }, []);
   useEffect(() => {
     const open = () => setClaudeLogin(true);
     window.addEventListener('beyond:open-claude-login', open);

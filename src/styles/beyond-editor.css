@@ -97,3 +97,11 @@
 .bb-cmpop__ta { width: 100%; box-sizing: border-box; resize: none; padding: 8px 10px; border: 1px solid var(--bb-line); border-radius: var(--bb-rs); background: var(--bb-bg); color: var(--bb-ink); font: inherit; font-size: 13.5px; line-height: 1.5; }
 .bb-cmpop__ta:focus { outline: none; border-color: var(--bb-ink3); }
 .bb-cmpop__acts { display: flex; align-items: center; gap: 6px; }
+
+/* --------------------------------------------------------------- mobile --- */
+/* The app is as tall as what is really visible (the keyboard takes its part),
+   and inputs are 16px so iOS does not zoom in and push the composer away. */
+.bb-app { height: var(--bb-vh, 100dvh); }
+@media (max-width: 900px) {
+  .bb-app textarea, .bb-app input, .bb-app select { font-size: 16px !important; }
+}
