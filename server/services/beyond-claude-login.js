@@ -51,6 +51,11 @@ export function startClaudeLogin() {
       state.trusted = true;
       setTimeout(() => { try { proc.write('\u001b[B'); setTimeout(() => proc.write('\r'), 200); } catch { /* gone */ } }, 300);
     }
+    // "Select login method": the first one, a Claude subscription, is preselected.
+    if (!state.method && /select login method/i.test(state.out)) {
+      state.method = true;
+      setTimeout(() => { try { proc.write('\r'); } catch { /* gone */ } }, 300);
+    }
     if (!state.url) {
       // The terminal may still have wrapped it: join lines before matching.
       const m = URL_RE.exec(state.out.replace(/\r?\n/g, ''));
