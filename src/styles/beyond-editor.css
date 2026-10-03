@@ -23,17 +23,30 @@
 .bb-ed__ta[data-kind="text"] { font-family: var(--bb-mono); font-size: 12.5px; line-height: 1.7; }
 .bb-ed__ta::selection { background: color-mix(in srgb, var(--bb-p3) 28%, transparent); }
 
-/* Side by side: the source and the page each scroll on their own. */
-.bb-ed[data-mode="split"] .bb-ed__body { overflow: hidden; }
-.bb-ed__split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0; height: 100%; }
-.bb-ed__pane { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 22px 40px 0; }
-.bb-ed__pane--view { padding: 0 0 40px 22px; border-left: 1px solid var(--bb-line2); }
-.bb-ed__pane--src .bb-ed__ta { height: 100%; min-height: 100%; overflow: hidden; }
+/* The page is the editor. */
+.bb-ed__doc { min-height: 100%; }
+.bb-ed__pm { outline: none; min-height: 60vh; caret-color: var(--bb-ink); }
+.bb-ed__pm > :first-child { margin-top: 0; }
+.bb-ed__pm ::selection { background: color-mix(in srgb, var(--bb-p3) 26%, transparent); }
+.bb-ed__pm p.is-editor-empty:first-child::before { content: attr(data-placeholder); float: left; height: 0; pointer-events: none; color: var(--bb-ink3); }
+.bb-ed__pm a { cursor: text; text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--bb-ink) 28%, transparent); text-underline-offset: 2px; }
+.bb-ed__pm pre { background: var(--bb-bg2); border-radius: var(--bb-rs); padding: 12px 14px; overflow-x: auto; font-family: var(--bb-mono); font-size: 12.5px; line-height: 1.65; }
+.bb-ed__pm code { font-family: var(--bb-mono); font-size: .88em; background: var(--bb-bg2); border-radius: 5px; padding: 1px 5px; }
+.bb-ed__pm pre code { background: none; padding: 0; }
+.bb-ed__pm table { border-collapse: collapse; table-layout: fixed; }
+.bb-ed__pm th, .bb-ed__pm td { position: relative; vertical-align: top; }
+.bb-ed__pm th { font-weight: 600; }
+.bb-ed__pm .selectedCell::after { content: ''; position: absolute; inset: 0; background: color-mix(in srgb, var(--bb-p3) 14%, transparent); pointer-events: none; }
+.bb-ed__pm ul[data-type="taskList"] { list-style: none; padding-left: 2px; }
+.bb-ed__pm ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 9px; }
+.bb-ed__pm ul[data-type="taskList"] li > label { flex: none; margin-top: 4px; user-select: none; }
+.bb-ed__pm ul[data-type="taskList"] li > label input { accent-color: var(--bb-accent); width: 15px; height: 15px; cursor: pointer; margin: 0; }
+.bb-ed__pm ul[data-type="taskList"] li > div { flex: 1; min-width: 0; }
+.bb-ed__pm ul[data-type="taskList"] li[data-checked="true"] > div { color: var(--bb-ink3); text-decoration: line-through; }
 
-/* Ticking in the rendered note. */
-.bb-doc li[data-task="true"] { cursor: pointer; border-radius: 6px; }
-.bb-doc li[data-task="true"]:hover { background: var(--bb-panel2); }
-.bb-doc__check { margin-right: 8px; accent-color: var(--bb-accent); pointer-events: none; vertical-align: -1px; }
+/* The bar that appears over a selection. */
+.bb-ed__bubble { display: flex; align-items: center; gap: 2px; padding: 4px; border: 1px solid var(--bb-line); border-radius: 12px; background: var(--bb-raise); box-shadow: var(--bb-shadow-pop); z-index: 60; }
+.bb-ed__tool[data-on="true"] { background: var(--bb-accent-soft); color: var(--bb-ink); }
 
 /* ------------------------------------------------------- file sheet --- */
 /* The scrim is plain tint: a blurred backdrop under a scrolling panel makes the
@@ -56,8 +69,6 @@
 @media (max-width: 760px) {
   .bb-fsheet[data-wide="true"] { max-width: 100vw; height: 100%; margin: 0; border-radius: 0; border: none; }
   .bb-fsheet__body { padding: 14px 16px 0; }
-  .bb-ed__split { grid-template-columns: minmax(0, 1fr); }
-  .bb-ed__pane--view { display: none; }
 }
 
 /* --------------------------------------------------- reels, nový script --- */

@@ -390,7 +390,6 @@ export default function BeyondFilePreview({
               path={filePath}
               payload={payload}
               kind={kind}
-              allowSplit={wide}
               onOpenPath={(p) => window.dispatchEvent(new CustomEvent('beyond:open-file', { detail: { path: p } }))}
               onSaved={(m) => setSavedMtime(m || null)}
             />

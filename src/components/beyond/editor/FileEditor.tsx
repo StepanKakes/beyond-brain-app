@@ -1,31 +1,51 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Tabs } from '../ui';
-import { fetchFile, saveFile, SaveConflict, type FilePayload } from '../files/api';
-import MarkdownDoc from './MarkdownDoc';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Markdown } from '@tiptap/markdown';
+import { TableKit } from '@tiptap/extension-table';
+import { TaskItem } from '@tiptap/extension-task-item';
+import { TaskList } from '@tiptap/extension-task-list';
+import { Placeholder } from '@tiptap/extensions';
+import { EditorContent, useEditor } from '@tiptap/react';
+import { BubbleMenu } from '@tiptap/react/menus';
+import StarterKit from '@tiptap/starter-kit';
+
+import { dirname, fetchFile, saveFile, SaveConflict, type FilePayload } from '../files/api';
+import { PROSE } from './MarkdownDoc';
 
 /**
  * One editor for every text file the brain shows: the side sheet, its full
- * screen form and the Soubory reader. Three modes: Číst (the rendered note,
- * checkboxes tick), Psát (the source, with a small toolbar) and Půl na půl
- * (source and rendering side by side, only where there is room).
+ * screen form and the Soubory reader. A note is the finished page and is also
+ * the thing you type in: click anywhere and write, select text and a small bar
+ * offers bold, italic, heading, list and link. Markdown typed the usual way
+ * (`## `, `- `, `[ ] `, `**x**`) turns into formatting as you go.
  *
  * Saving is automatic, a second after the last keystroke, and Cmd/Ctrl+S saves
  * now. Each save carries the mtime it is based on, so when the agent rewrote
- * the file in the meantime the editor says so instead of overwriting it.
+ * the file in the meantime the editor says so instead of overwriting it. The
+ * file is only rewritten when you changed something, so a note you merely read
+ * is never reformatted behind your back.
  */
 
-type Mode = 'read' | 'edit' | 'split';
 type Status = 'saved' | 'dirty' | 'saving' | 'error' | 'conflict';
 
 const AUTOSAVE_MS = 1000;
 /** Words a minute of speech for a reel, a touch faster than a lecture. */
 const WORDS_PER_SECOND = 2.5;
+const FRONTMATTER = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/;
+
+function resolveRelative(fromDir: string, target: string): string {
+  const parts: string[] = [];
+  const base = target.startsWith('/') ? [] : fromDir ? fromDir.split('/') : [];
+  for (const seg of [...base, ...target.replace(/^\//, '').split('/')]) {
+    if (!seg || seg === '.') continue;
+    if (seg === '..') parts.pop(); else parts.push(seg);
+  }
+  return parts.join('/');
+}
 
 export default function FileEditor({
   path,
   payload,
   kind,
-  allowSplit = false,
   startInEdit = false,
   onOpenPath,
   onSaved,
@@ -34,7 +54,6 @@ export default function FileEditor({
   path: string;
   payload: FilePayload;
   kind: 'markdown' | 'text';
-  allowSplit?: boolean;
   startInEdit?: boolean;
   onOpenPath?: (path: string) => void;
   onSaved?: (mtime: string) => void;
@@ -42,7 +61,11 @@ export default function FileEditor({
   onStatus?: (status: Status) => void;
 }) {
   const editable = payload.writable !== false;
-  const [mode, setMode] = useState<Mode>(editable && startInEdit ? 'edit' : 'read');
+  const isMd = kind === 'markdown';
+  // A block of `---` metadata at the top is kept out of the page and put back on save.
+  const front = useRef(isMd ? (FRONTMATTER.exec(payload.content)?.[0] ?? '') : '');
+  const body = isMd ? payload.content.slice(front.current.length) : payload.content;
+
   const [draft, setDraft] = useState(payload.content);
   const [status, setStatus] = useState<Status>('saved');
   const [message, setMessage] = useState<string | null>(null);
@@ -98,6 +121,27 @@ export default function FileEditor({
     if (statusRef.current !== 'conflict') setSt('dirty');
   }, [setSt]);
 
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({ underline: false, link: { openOnClick: false, autolink: true } }),
+      Markdown,
+      TaskList,
+      TaskItem.configure({ nested: true }),
+      TableKit,
+      Placeholder.configure({ placeholder: 'Piš…' }),
+    ],
+    content: isMd ? body : '',
+    contentType: 'markdown',
+    editable: editable && isMd,
+    autofocus: startInEdit && isMd ? 'end' : false,
+    editorProps: {
+      attributes: { class: 'bb-ed__pm', 'aria-label': 'Obsah souboru', spellcheck: 'true', lang: 'cs' },
+    },
+    onUpdate: ({ editor: ed }) => {
+      change(front.current + ed.getMarkdown());
+    },
+  }, [path]);
+
   // Autosave after a pause in typing.
   useEffect(() => {
     if (status !== 'dirty' && status !== 'error') return;
@@ -120,15 +164,22 @@ export default function FileEditor({
     return () => window.removeEventListener('beforeunload', warn);
   }, []);
 
-  // The textarea grows with its text when it is the only column; in split it
-  // scrolls on its own. Either way it never shows its own scrollbar twice.
-  useLayoutEffect(() => {
+  // Cmd/Ctrl+S saves now, wherever the focus is.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); void flush(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [flush]);
+
+  // The text file's box grows with its text.
+  useEffect(() => {
     const ta = taRef.current;
     if (!ta) return;
-    if (mode !== 'edit') { ta.style.height = ''; return; }
     ta.style.height = 'auto';
-    ta.style.height = `${Math.max(ta.scrollHeight, 0)}px`;
-  }, [draft, mode]);
+    ta.style.height = `${ta.scrollHeight}px`;
+  }, [draft]);
 
   const take = (mine: boolean) => {
     if (mine) { void flush(serverMtime ?? undefined); return; }
@@ -137,7 +188,9 @@ export default function FileEditor({
       savedRef.current = fresh.content;
       draftRef.current = fresh.content;
       mtimeRef.current = fresh.mtime;
+      front.current = isMd ? (FRONTMATTER.exec(fresh.content)?.[0] ?? '') : '';
       setDraft(fresh.content);
+      if (isMd) editor?.commands.setContent(fresh.content.slice(front.current.length), { contentType: 'markdown', emitUpdate: false });
       setServerMtime(null);
       setSt('saved');
       onSaved?.(fresh.mtime || '');
@@ -147,143 +200,34 @@ export default function FileEditor({
     });
   };
 
-  // --- source helpers -------------------------------------------------------
-  const apply = (from: number, to: number, text: string, selFrom: number, selTo: number) => {
-    const ta = taRef.current;
-    if (!ta) return;
-    ta.focus();
-    ta.setSelectionRange(from, to);
-    // execCommand keeps the browser's undo stack; the plain assignment is the fallback.
-    const ok = typeof document.execCommand === 'function' && document.execCommand('insertText', false, text);
-    if (!ok) {
-      const v = ta.value;
-      change(v.slice(0, from) + text + v.slice(to));
-    }
-    requestAnimationFrame(() => { ta.setSelectionRange(selFrom, selTo); });
+  // Cmd/Ctrl click follows a link; a plain click just puts the cursor in it.
+  const onClickCapture = (e: React.MouseEvent) => {
+    const a = (e.target as HTMLElement).closest('a');
+    if (!a) return;
+    const href = a.getAttribute('href') || '';
+    if (editable && !(e.metaKey || e.ctrlKey)) { e.preventDefault(); return; }
+    e.preventDefault();
+    if (/^[a-z][a-z0-9+.-]*:/i.test(href)) { window.open(href, '_blank', 'noopener,noreferrer'); return; }
+    if (href && !href.startsWith('#') && onOpenPath) onOpenPath(resolveRelative(dirname(path), href.split('#')[0]));
   };
 
-  const wrap = (mark: string, placeholder: string) => {
-    const ta = taRef.current;
-    if (!ta) return;
-    const { selectionStart: a, selectionEnd: b, value } = ta;
-    const sel = value.slice(a, b) || placeholder;
-    const already = value.slice(a - mark.length, a) === mark && value.slice(b, b + mark.length) === mark;
-    if (already && a !== b) {
-      apply(a - mark.length, b + mark.length, sel, a - mark.length, a - mark.length + sel.length);
-      return;
-    }
-    apply(a, b, mark + sel + mark, a + mark.length, a + mark.length + sel.length);
+  const setLink = () => {
+    if (!editor) return;
+    const prev = editor.getAttributes('link').href as string | undefined;
+    const url = window.prompt('Adresa odkazu', prev || 'https://');
+    if (url === null) return;
+    if (url.trim() === '') { editor.chain().focus().unsetLink().run(); return; }
+    editor.chain().focus().extendMarkRange('link').setLink({ href: url.trim() }).run();
   };
 
-  /** Put `prefix` at the start of every selected line; take it off when all have it. */
-  const linePrefix = (prefix: string, strip?: RegExp) => {
-    const ta = taRef.current;
-    if (!ta) return;
-    const { selectionStart: a, selectionEnd: b, value } = ta;
-    const start = value.lastIndexOf('\n', a - 1) + 1;
-    let end = value.indexOf('\n', b);
-    if (end === -1) end = value.length;
-    const lines = value.slice(start, end).split('\n');
-    const allHave = lines.every((l) => l.startsWith(prefix));
-    const next = lines.map((l) => {
-      if (allHave) return l.slice(prefix.length);
-      return prefix + (strip ? l.replace(strip, '') : l);
-    }).join('\n');
-    apply(start, end, next, start, start + next.length);
-  };
-
-  const link = () => {
-    const ta = taRef.current;
-    if (!ta) return;
-    const { selectionStart: a, selectionEnd: b, value } = ta;
-    const sel = value.slice(a, b) || 'text';
-    const text = `[${sel}](adresa)`;
-    apply(a, b, text, a + sel.length + 3, a + sel.length + 9);
-  };
-
-  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    const mod = e.metaKey || e.ctrlKey;
-    if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); void flush(); return; }
-    if (mod && e.key.toLowerCase() === 'b') { e.preventDefault(); wrap('**', 'tučně'); return; }
-    if (mod && e.key.toLowerCase() === 'i') { e.preventDefault(); wrap('*', 'kurzívou'); return; }
-    if (e.key === 'Enter' && !e.shiftKey && !mod && kind === 'markdown') {
-      const ta = e.currentTarget;
-      if (ta.selectionStart !== ta.selectionEnd) return;
-      const pos = ta.selectionStart;
-      const value = ta.value;
-      const ls = value.lastIndexOf('\n', pos - 1) + 1;
-      const line = value.slice(ls, pos);
-      const m = /^(\s*)((?:[-*+] \[[ xX]\] )|(?:[-*+] )|(?:(\d+)\. ))/.exec(line);
-      if (!m) return;
-      e.preventDefault();
-      // An empty item ends the list.
-      if (line.length === m[0].length) { apply(ls, pos, '', ls, ls); return; }
-      const marker = m[3] ? `${Number(m[3]) + 1}. ` : m[2].replace(/\[[xX]\]/, '[ ]');
-      const ins = `\n${m[1]}${marker}`;
-      apply(pos, pos, ins, pos + ins.length, pos + ins.length);
-    }
-  };
-
-  const toggleTask = (line: number) => {
-    const lines = draftRef.current.split('\n');
-    const l = lines[line];
-    if (l == null) return;
-    const next = /\[ \]/.test(l) ? l.replace('[ ]', '[x]') : l.replace(/\[[xX]\]/, '[ ]');
-    if (next === l) return;
-    lines[line] = next;
-    change(lines.join('\n'));
-  };
-
-  // Keep Cmd+S working when the focus is on the buttons or the preview.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); void flush(); }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [flush]);
-
-  const stats = useMemo(() => (kind === 'markdown' ? speakStats(draft) : null), [draft, kind]);
-  const tabs = [
-    { key: 'read', label: 'Číst' },
-    ...(editable ? [{ key: 'edit', label: 'Psát' }] : []),
-    ...(editable && allowSplit && kind === 'markdown' ? [{ key: 'split', label: 'Půl na půl' }] : []),
-  ];
-  const showTools = mode !== 'read' && kind === 'markdown';
-
-  const source = (
-    <textarea
-      ref={taRef}
-      className="bb-ed__ta"
-      data-kind={kind}
-      value={draft}
-      onChange={(e) => change(e.target.value)}
-      onKeyDown={onKeyDown}
-      spellCheck={false}
-      aria-label="Obsah souboru"
-      autoFocus={startInEdit}
-    />
-  );
+  const stats = useMemo(() => (isMd ? speakStats(draft) : null), [draft, isMd]);
 
   return (
-    <div className="bb-ed" data-mode={mode}>
+    <div className="bb-ed">
       <div className="bb-ed__bar">
-        {tabs.length > 1 && <Tabs label="Režim" items={tabs} value={mode} onChange={(k) => setMode(k as Mode)} />}
-        {showTools && (
-          <div className="bb-ed__tools" role="toolbar" aria-label="Formátování">
-            <Tool label="Nadpis" onClick={() => linePrefix('## ', /^#{1,6} /)}>H</Tool>
-            <Tool label="Tučně (Cmd B)" onClick={() => wrap('**', 'tučně')}><b>B</b></Tool>
-            <Tool label="Kurzíva (Cmd I)" onClick={() => wrap('*', 'kurzívou')}><i>I</i></Tool>
-            <span className="bb-ed__sep" />
-            <Tool label="Odrážky" onClick={() => linePrefix('- ', /^(\d+\. |- \[[ xX]\] |[-*+] )/)}>Odrážky</Tool>
-            <Tool label="Úkoly s checkboxem" onClick={() => linePrefix('- [ ] ', /^(\d+\. |- \[[ xX]\] |[-*+] )/)}>Úkoly</Tool>
-            <Tool label="Citace" onClick={() => linePrefix('> ')}>Citace</Tool>
-            <Tool label="Odkaz" onClick={link}>Odkaz</Tool>
-          </div>
-        )}
         <div className="bb-ed__state" data-status={status} aria-live="polite">
           {stats && <span className="bb-ed__count" title="Odhad mluvení podle počtu slov">{stats}</span>}
-          {editable ? <span className="bb-ed__st">{STATUS_LABEL[status]}</span> : <span className="bb-ed__st">Jen ke čtení</span>}
+          <span className="bb-ed__st">{editable ? STATUS_LABEL[status] : 'Jen ke čtení'}</span>
         </div>
       </div>
 
@@ -298,20 +242,34 @@ export default function FileEditor({
       )}
       {status === 'error' && message && <div className="bb-ed__note bb-ed__note--err" role="alert"><span>{message}</span></div>}
 
-      <div className="bb-ed__body">
-        {mode === 'read' && (
-          kind === 'markdown'
-            ? <MarkdownDoc content={draft} path={path} onOpenPath={onOpenPath} onToggleTask={editable ? toggleTask : undefined} />
-            : <pre className="bb-ed__pre">{draft}</pre>
-        )}
-        {mode === 'edit' && source}
-        {mode === 'split' && (
-          <div className="bb-ed__split">
-            <div className="bb-ed__pane bb-ed__pane--src">{source}</div>
-            <div className="bb-ed__pane bb-ed__pane--view">
-              <MarkdownDoc content={draft} path={path} onOpenPath={onOpenPath} onToggleTask={toggleTask} />
-            </div>
-          </div>
+      <div className="bb-ed__body" onClickCapture={onClickCapture}>
+        {isMd ? (
+          <>
+            {editor && editable && (
+              <BubbleMenu editor={editor} options={{ placement: 'top' }} className="bb-ed__bubble">
+                <BubbleBtn label="Tučně (Cmd B)" on={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()}><b>B</b></BubbleBtn>
+                <BubbleBtn label="Kurzíva (Cmd I)" on={editor.isActive('italic')} onClick={() => editor.chain().focus().toggleItalic().run()}><i>I</i></BubbleBtn>
+                <BubbleBtn label="Nadpis" on={editor.isActive('heading', { level: 2 })} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}>H</BubbleBtn>
+                <span className="bb-ed__sep" />
+                <BubbleBtn label="Odrážky" on={editor.isActive('bulletList')} onClick={() => editor.chain().focus().toggleBulletList().run()}>Odrážky</BubbleBtn>
+                <BubbleBtn label="Úkoly" on={editor.isActive('taskList')} onClick={() => editor.chain().focus().toggleTaskList().run()}>Úkoly</BubbleBtn>
+                <BubbleBtn label="Citace" on={editor.isActive('blockquote')} onClick={() => editor.chain().focus().toggleBlockquote().run()}>Citace</BubbleBtn>
+                <BubbleBtn label="Odkaz" on={editor.isActive('link')} onClick={setLink}>Odkaz</BubbleBtn>
+              </BubbleMenu>
+            )}
+            <EditorContent editor={editor} className={`${PROSE} bb-ed__doc`} />
+          </>
+        ) : (
+          <textarea
+            ref={taRef}
+            className="bb-ed__ta"
+            data-kind="text"
+            value={draft}
+            readOnly={!editable}
+            onChange={(e) => change(e.target.value)}
+            spellCheck={false}
+            aria-label="Obsah souboru"
+          />
         )}
       </div>
     </div>
@@ -326,9 +284,9 @@ const STATUS_LABEL: Record<Status, string> = {
   conflict: 'Konflikt verzí',
 };
 
-function Tool({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
+function BubbleBtn({ label, on, onClick, children }: { label: string; on: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button type="button" className="bb-ed__tool" title={label} aria-label={label} onMouseDown={(e) => e.preventDefault()} onClick={onClick}>
+    <button type="button" className="bb-ed__tool" data-on={on ? 'true' : undefined} title={label} aria-label={label} onMouseDown={(e) => e.preventDefault()} onClick={onClick}>
       {children}
     </button>
   );
@@ -337,7 +295,7 @@ function Tool({ label, onClick, children }: { label: string; onClick: () => void
 /** Words and the speaking time they come to, without the markdown furniture. */
 function speakStats(md: string): string {
   const text = md
-    .replace(/^---[\s\S]*?\n---\n/, '')
+    .replace(FRONTMATTER, '')
     .replace(/```[\s\S]*?```/g, ' ')
     .replace(/`[^`]*`/g, ' ')
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
