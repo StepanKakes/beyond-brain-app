@@ -28,11 +28,11 @@ export default function BeyondClaudeLogin({ onClose }: { onClose: () => void }) 
     return () => window.clearTimeout(t);
   }, []);
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (keepErr = false) => {
     setStatus({ state: 'starting' });
     setSent(false);
     setCode('');
-    setErr(null);
+    if (!keepErr) setErr(null);
     try {
       const r = await post('start');
       if (!r.ok) throw new Error((await r.json().catch(() => null))?.error || `HTTP ${r.status}`);
@@ -67,7 +67,17 @@ export default function BeyondClaudeLogin({ onClose }: { onClose: () => void }) 
     setErr(null);
     try {
       const r = await post('code', { code: v });
-      if (!r.ok) throw new Error((await r.json().catch(() => null))?.error || `HTTP ${r.status}`);
+      if (!r.ok) {
+        const data = await r.json().catch(() => null);
+        if (data?.status?.state === 'done') { setStatus(data.status); return; }
+        // The login this code belongs to is gone; a code is good for one login only.
+        if (r.status === 409) {
+          setErr(`${data?.error || 'Přihlášení skončilo'}. Spouštím nové, otevři přihlášení znovu a vlož nový kód.`);
+          await start(true);
+          return;
+        }
+        throw new Error(data?.error || `HTTP ${r.status}`);
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Kód se nepodařilo odeslat');
       setSent(false);
@@ -131,7 +141,7 @@ export default function BeyondClaudeLogin({ onClose }: { onClose: () => void }) 
           {err && <p className="bb-fx__err" style={{ margin: 0 }}>{err}</p>}
 
           <div className="bb-set__acts">
-            {status.state === 'failed' && <button type="button" className="bb-pill bb-pill--primary" onClick={() => void start()}>Zkusit znovu</button>}
+            {status.state === 'failed' && <button type="button" className="bb-pill bb-pill--primary" onClick={() => void start(false)}>Zkusit znovu</button>}
             <button type="button" className="bb-pill" onClick={onClose}>{status.state === 'done' ? 'Zavřít' : 'Zrušit'}</button>
           </div>
         </div>

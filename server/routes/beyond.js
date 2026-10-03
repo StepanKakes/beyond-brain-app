@@ -476,7 +476,13 @@ router.post('/claude-login/start', (_req, res) => {
 });
 router.get('/claude-login/status', (_req, res) => res.json(claudeLoginStatus()));
 router.post('/claude-login/code', (req, res) => {
-  if (!submitClaudeLoginCode(req.body?.code)) return res.status(400).json({ error: 'Kód nejde odeslat' });
+  if (!submitClaudeLoginCode(req.body?.code)) {
+    const st = claudeLoginStatus();
+    const why = st.state === 'idle' ? 'Přihlášení už neběží, vypršelo nebo ho ukončil restart služby'
+      : st.state === 'failed' ? 'Přihlášení se mezitím ukončilo chybou'
+        : st.state === 'done' ? 'Přihlášení už je hotové' : 'Kód nejde odeslat';
+    return res.status(409).json({ error: why, status: st });
+  }
   res.json({ ok: true });
 });
 router.post('/claude-login/cancel', (_req, res) => {
