@@ -51,10 +51,19 @@ export function startClaudeLogin() {
       state.trusted = true;
       setTimeout(() => { try { proc.write('\u001b[B'); setTimeout(() => proc.write('\r'), 200); } catch { /* gone */ } }, 300);
     }
-    // "Select login method": the first one, a Claude subscription, is preselected.
+    // "Select login method": the first one, a Claude subscription. The menu may
+    // not be listening yet when it first draws, so press again until the
+    // address shows up (number key, then Enter).
     if (!state.method && /select login method/i.test(state.out)) {
       state.method = true;
-      setTimeout(() => { try { proc.write('\r'); } catch { /* gone */ } }, 300);
+      let tries = 0;
+      const press = () => {
+        if (state.url || state.done || state.failed || tries >= 6) return;
+        tries += 1;
+        try { proc.write('1'); setTimeout(() => { try { proc.write('\r'); } catch { /* gone */ } }, 150); } catch { return; }
+        setTimeout(press, 2500);
+      };
+      setTimeout(press, 500);
     }
     if (!state.url) {
       // The terminal may still have wrapped it: join lines before matching.
