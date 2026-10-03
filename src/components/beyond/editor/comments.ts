@@ -72,7 +72,7 @@ export function commentsPrompt(path: string, comments: NoteComment[]): string {
     .map((c, i) => `${i + 1}. Místo: „${clip(c.quote.replace(/\s*\n\s*/g, ' '))}"\n   Komentář: ${c.text.trim()}`)
     .join('\n');
   return [
-    `Uprav soubor ${path} podle mých komentářů.`,
+    `Uprav soubor ${path} podle mých komentářů k označeným místům.`,
     'Postup: pro každý komentář najdi citované místo (citace je z vykresleného textu a může se lišit o znaky markdownu, hledej Grepem krátký úsek) a změň ho nástrojem Edit.',
     'Soubor nečti celý, nepřepisuj ho a jinde nic neměň. Když je komentář otázka, odpověz na ni a soubor neměň.',
     'Na konci napiš jednu větu, co jsi změnil, a cestu k souboru.',

@@ -1414,6 +1414,18 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
     send(initialPrompt);
   }, [initialPrompt, isConnected, send]);
 
+  // A message handed over from elsewhere in the app (comments on a note).
+  useEffect(() => {
+    const onSend = (e: Event) => {
+      const text = (e as CustomEvent<{ text?: string }>).detail?.text;
+      if (!text) return;
+      if (isConnected) send(text);
+      else setValue(text);
+    };
+    window.addEventListener('beyond:chat-send', onSend);
+    return () => window.removeEventListener('beyond:chat-send', onSend);
+  }, [isConnected, send]);
+
   const header = useMemo(() => {
     const week = client.week ? ` · ${client.week}` : '';
     return `${client.name}${week}`;

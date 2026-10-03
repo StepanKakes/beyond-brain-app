@@ -245,21 +245,6 @@ export default function BeyondApp() {
     [navigate],
   );
 
-  // Comments sent from a note: a clean chat holding only the commented places,
-  // so the agent starts from a few lines and not from a long history.
-  useEffect(() => {
-    const onSend = (e: Event) => {
-      const text = (e as CustomEvent<{ text?: string }>).detail?.text;
-      if (!text) return;
-      setPreviewPath(null);
-      setInitialPrompt(text);
-      setFreshEpoch((n) => n + 1);
-      navigate(pathForChat(UNIVERSAL_SLUG));
-    };
-    window.addEventListener('beyond:send-to-chat', onSend);
-    return () => window.removeEventListener('beyond:send-to-chat', onSend);
-  }, [navigate]);
-
   const handleGoHome = useCallback(() => {
     setInitialPrompt(undefined);
     navigate('/');
@@ -329,6 +314,27 @@ export default function BeyondApp() {
     });
   }, [chatKey, activeClient, sessionOverride, initialPrompt, openChat]);
   const chatVisible = view.kind === 'chat' && Boolean(activeClient);
+
+  // Comments sent from a note go into the chat the person is already in, so
+  // the agent has the whole conversation behind them; only when no chat is
+  // open do they start a new one.
+  useEffect(() => {
+    const onSend = (e: Event) => {
+      const text = (e as CustomEvent<{ text?: string }>).detail?.text;
+      if (!text) return;
+      setPreviewPath(null);
+      if (mountedChat) {
+        handleReturnToChat();
+        window.dispatchEvent(new CustomEvent('beyond:chat-send', { detail: { text } }));
+        return;
+      }
+      setInitialPrompt(text);
+      setFreshEpoch((n) => n + 1);
+      navigate(pathForChat(UNIVERSAL_SLUG));
+    };
+    window.addEventListener('beyond:send-to-chat', onSend);
+    return () => window.removeEventListener('beyond:send-to-chat', onSend);
+  }, [mountedChat, handleReturnToChat, navigate]);
 
   const openClient = useCallback((slug: string) => navigate(`/klient/${encodeURIComponent(slug)}`), [navigate]);
   const openBoard = useCallback(() => navigate('/klienti'), [navigate]);
