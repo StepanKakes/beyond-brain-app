@@ -99,9 +99,11 @@
 .bb-cmpop__acts { display: flex; align-items: center; gap: 6px; }
 
 /* --------------------------------------------------------------- mobile --- */
-/* The app is as tall as what is really visible (the keyboard takes its part),
-   and inputs are 16px so iOS does not zoom in and push the composer away. */
-.bb-app { height: var(--bb-vh, 100dvh); }
-@media (max-width: 900px) {
+/* On a phone the app is pinned to what is really visible: the keyboard takes
+   its part, and iOS may also slide the visible area down (offsetTop). Inputs
+   are 16px so iOS does not zoom in and push the composer away. */
+.bb-main { height: 100%; min-height: 0; overflow: hidden; }
+@media (max-width: 899px) {
+  .bb-app { position: fixed; left: 0; right: 0; top: var(--bb-vt, 0px); height: var(--bb-vh, 100dvh); width: auto; }
   .bb-app textarea, .bb-app input, .bb-app select { font-size: 16px !important; }
 }

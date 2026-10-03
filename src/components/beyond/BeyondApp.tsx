@@ -121,7 +121,7 @@ export default function BeyondApp() {
     if (!vv) return undefined;
     const fit = () => {
       document.documentElement.style.setProperty('--bb-vh', `${Math.round(vv.height)}px`);
-      if (window.scrollY !== 0 || vv.offsetTop !== 0) window.scrollTo(0, 0);
+      document.documentElement.style.setProperty('--bb-vt', `${Math.round(vv.offsetTop)}px`);
     };
     fit();
     vv.addEventListener('resize', fit);
@@ -130,6 +130,7 @@ export default function BeyondApp() {
       vv.removeEventListener('resize', fit);
       vv.removeEventListener('scroll', fit);
       document.documentElement.style.removeProperty('--bb-vh');
+      document.documentElement.style.removeProperty('--bb-vt');
     };
   }, []);
   useEffect(() => {
