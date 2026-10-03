@@ -66,17 +66,10 @@ export const CommentMarks = Extension.create<{ getComments: () => NoteComment[] 
 
 const clip = (q: string) => (q.length > 200 ? `${q.slice(0, 120)} … ${q.slice(-60)}` : q);
 
-/** The prompt for the chat: only the commented places, never the whole note. */
+/** The message for the chat: only the commented places. How to act on it is in the brain's CLAUDE.md, not repeated here. */
 export function commentsPrompt(path: string, comments: NoteComment[]): string {
   const items = comments
     .map((c, i) => `${i + 1}. Místo: „${clip(c.quote.replace(/\s*\n\s*/g, ' '))}"\n   Komentář: ${c.text.trim()}`)
     .join('\n');
-  return [
-    `Uprav soubor ${path} podle mých komentářů k označeným místům.`,
-    'Postup: pro každý komentář najdi citované místo (citace je z vykresleného textu a může se lišit o znaky markdownu, hledej Grepem krátký úsek) a změň ho nástrojem Edit.',
-    'Soubor nečti celý, nepřepisuj ho a jinde nic neměň. Když je komentář otázka, odpověz na ni a soubor neměň.',
-    'Na konci napiš jednu větu, co jsi změnil, a cestu k souboru.',
-    '',
-    items,
-  ].join('\n');
+  return `Komentáře k ${path}\n${items}`;
 }
