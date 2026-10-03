@@ -806,7 +806,8 @@ html.dark .bb-uk__wa, .dark .bb-uk__wa { background: #005C4B; color: #E9EDEF; }
 .bb-fx__dot[data-group="second-brain"] { background: var(--bb-warn); }
 
 .bb-fx__lh { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-.bb-fx__seg { display: flex; gap: 4px; flex-wrap: wrap; }
+.bb-fx__seg { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.bb-fx__raw { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--bb-ink2); cursor: pointer; }
 .bb-fx__seg .bb-pill[aria-pressed="true"] { background: var(--bb-accent); color: var(--bb-on-accent); border-color: var(--bb-accent); }
 .bb-fx__ll { display: flex; flex-direction: column; }
 .bb-fx__n { font-weight: 400; color: var(--bb-ink3); margin-left: 4px; font-variant-numeric: tabular-nums; }

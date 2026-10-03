@@ -581,14 +581,10 @@ export default function AgentPage() {
                     : `Hlídá, kontroluje každou minutu`}
             </p>
           </div>
-          <button
-            type="button"
-            className="bb-pill"
-            aria-pressed={scheduler.paused}
-            onClick={() => void post('/agent/pause', { paused: !scheduler.paused })}
-          >
-            {scheduler.paused ? 'Spustit' : 'Pozastavit vše'}
-          </button>
+          <label className="bb-fx__raw">
+            <Switch on={!scheduler.paused} onChange={(on) => void post('/agent/pause', { paused: !on })} label="Úlohy běží" />
+            {scheduler.paused ? 'Pozastaveno' : 'Běží'}
+          </label>
         </header>
 
         <Tabs

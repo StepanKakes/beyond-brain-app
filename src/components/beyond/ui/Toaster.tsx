@@ -23,6 +23,8 @@ export default function Toaster() {
       key={note.id}
       title={note.title}
       description={note.description}
+      actionLabel={note.action?.label}
+      onAction={note.action?.run}
       duration={4200}
       width={340}
       onClose={() => setNote((n) => (n && n.id === note.id ? null : n))}

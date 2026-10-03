@@ -20,6 +20,7 @@ import {
   type BeyondModelOption,
 } from './beyondModels';
 import BeyondLoader from './BeyondLoader';
+import { toast } from './ui/toast';
 import BeyondBrainMark from './BeyondBrainMark';
 import BeyondSlashMenu from './BeyondSlashMenu';
 import { useBeyondSpeech } from './useBeyondSpeech';
@@ -117,6 +118,15 @@ type Props = {
 
 /** Which connectors the last chat used, so the next one starts the same way. */
 const CONNECTORS_KEY = 'beyond:chat-connectors';
+
+/** A failed turn that says the login lapsed gets a button to renew it. */
+function offerClaudeLogin(text: string) {
+  if (!/authenticat|OAuth session|přihlášení Claude/i.test(text)) return;
+  toast('Claude na stroji je odhlášený', 'Přihlas ho znovu a pošli zprávu ještě jednou.', {
+    label: 'Přihlásit',
+    run: () => window.dispatchEvent(new CustomEvent('beyond:open-claude-login')),
+  });
+}
 
 export default function BeyondChat({ client, initialPrompt, sessionOverride }: Props) {
   const { sendMessage, latestMessage, isConnected, subscribeMessages } = useWebSocket();
@@ -375,7 +385,20 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
   const deleteSession = useCallback(
     (uuid: string) => {
       setSessions((prev) => {
+        const removed = prev.find((s) => s.uuid === uuid);
         const next = prev.filter((s) => s.uuid !== uuid);
+        if (removed) {
+          toast('Chat smazaný', 'Přepis na disku zůstal.', {
+            label: 'Vrátit',
+            run: () => setSessions((cur) => {
+              if (cur.some((s) => s.uuid === uuid)) return cur;
+              const back = [removed, ...cur];
+              persistSessionIndex(client.slug, { activeUuid: sessionIdRef.current, sessions: back });
+              notifySessionsChanged(client.slug);
+              return back;
+            }),
+          });
+        }
         const stillActive =
           sessionIdRef.current && sessionIdRef.current !== uuid
             ? sessionIdRef.current
@@ -968,6 +991,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
       streamBubbleIdRef.current = null;
       setStreamingId(null);
       const err = (m.content as string | undefined) || 'Hm, něco se rozbilo. Zkusíme znovu?';
+      offerClaudeLogin(err);
       setMessages((prev) => [...prev, { id: uid(), role: 'assistant', kind: 'text', text: err }]);
       return;
     }
@@ -983,6 +1007,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
     // would run for ever over nothing.
     if (m.type === 'error' && thinkingRef.current) {
       const err = typeof m.error === 'string' && m.error ? m.error : 'Server odmítl zprávu, zkus to znovu.';
+      offerClaudeLogin(err);
       setThinking(false);
       setThinkingNote(null);
       streamBubbleIdRef.current = null;
@@ -1264,9 +1289,6 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
     if (thinking) return;
     if (!sessionIdRef.current) return;
     if (!isConnected) return;
-    if (!window.confirm('Komprimovat kontext této session?\nClaude shrne dosavadní konverzaci a uvolní tokeny pro pokračování.')) {
-      return;
-    }
     send('/compact');
   }, [thinking, isConnected, send]);
 

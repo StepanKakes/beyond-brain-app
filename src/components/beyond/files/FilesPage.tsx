@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronRight, Copy, Check, ExternalLink, FileText, Folder, FolderOpen, Search } from '../icons';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { Check, ChevronRight, Clapperboard, Copy, ExternalLink, FileText, Folder, FolderOpen, Plus, Search } from '../icons';
 
 import { copyTextToClipboard } from '../../../utils/clipboard';
-import BeyondCodeBlock from '../BeyondCodeBlock';
+import FileEditor from '../editor/FileEditor';
+import { Switch, Tabs } from '../ui';
 import { classifyFile } from '../beyondFilePaths';
-import { basename, dirname, fetchFile, fetchGraph, fetchTree, flattenFiles, type FilePayload, type Graph, type TreeNode } from './api';
+import { basename, createFile, dirname, fetchFile, fetchGraph, fetchTree, flattenFiles, type FilePayload, type Graph, type TreeNode } from './api';
 import FileGraph, { GROUP_LABEL, groupOf } from './FileGraph';
 
 /**
@@ -18,6 +17,9 @@ import FileGraph, { GROUP_LABEL, groupOf } from './FileGraph';
  * the whole graph, so the shape of the brain is one glance: what is central,
  * what hangs loose.
  */
+
+/** Where reels scripts live. Folder is created with the first script. */
+const REELS_DIR = 'workspace/reels';
 
 const fold = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
@@ -36,6 +38,10 @@ export default function FilesPage({ path, onOpen }: { path: string | null; onOpe
   // fan of citations and the notes themselves are invisible. Off by default,
   // the way one filters a vault's attachments folder in Obsidian.
   const [withRaw, setWithRaw] = useState(false);
+  const [reload, setReload] = useState(0);
+  const [newReel, setNewReel] = useState(false);
+  // A script made a moment ago opens straight in writing mode.
+  const [fresh, setFresh] = useState<string | null>(null);
 
   // Load once, and again when the sidebar pulled a fresh brain.
   useEffect(() => {
@@ -47,7 +53,7 @@ export default function FilesPage({ path, onOpen }: { path: string | null; onOpe
     load();
     window.addEventListener('beyond:brain-synced', load);
     return () => { cancelled = true; window.removeEventListener('beyond:brain-synced', load); };
-  }, []);
+  }, [reload]);
 
   // The folders above the selected file open on their own.
   useEffect(() => {
@@ -65,6 +71,10 @@ export default function FilesPage({ path, onOpen }: { path: string | null; onOpe
   }, [path]);
 
   const allFiles = useMemo(() => flattenFiles(roots), [roots]);
+  const reels = useMemo(() => {
+    const dir = findDir(roots, REELS_DIR);
+    return dir ? dir.children.filter((c) => c.type === 'file' && /\.md$/i.test(c.name)).map((c) => c.path).sort().reverse() : [];
+  }, [roots]);
   const hits = useMemo(() => {
     const q = fold(query.trim());
     if (!q) return null;
@@ -106,18 +116,41 @@ export default function FilesPage({ path, onOpen }: { path: string | null; onOpe
 
   return (
     <div className="bb-fx" data-pane={pane}>
-      <div className="bb-fx__tabs" role="tablist">
-        {(['tree', 'file', 'links'] as Pane[]).map((p) => (
-          <button key={p} type="button" role="tab" aria-selected={pane === p} className="bb-pill bb-pill--sm" onClick={() => setPane(p)}>
-            {p === 'tree' ? 'Strom' : p === 'file' ? 'Soubor' : 'Odkazy'}
-          </button>
-        ))}
+      <div className="bb-fx__tabs">
+        <Tabs label="Část" items={[{ key: 'tree', label: 'Strom' }, { key: 'file', label: 'Soubor' }, { key: 'links', label: 'Odkazy' }]} value={pane} onChange={(k) => setPane(k as Pane)} />
       </div>
 
       <aside className="bb-fx__tree">
         <div className="bb-search bb-fx__search">
           <Search size={14} strokeWidth={1.8} className="flex-none" style={{ color: 'var(--bb-ink3)' }} aria-hidden />
           <input id="bb-fx-search" type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Hledat soubor" />
+        </div>
+        <div className="bb-fx__quick">
+          <div className="bb-fx__qh">
+            <span className="bb-group__label" style={{ padding: 0 }}>Reels</span>
+            <button type="button" className="bb-ib" onClick={() => setNewReel(true)} title="Nový reels script" aria-label="Nový reels script"><Plus size={15} strokeWidth={1.8} /></button>
+          </div>
+          {reels.length === 0 ? (
+            <p className="bb-fx__empty" style={{ padding: '2px 8px 4px' }}>Zatím žádný script.</p>
+          ) : (
+            <ul className="bb-fx__list">
+              {reels.slice(0, 6).map((p) => (
+                <li key={p}>
+                  <button type="button" className="bb-fx__row" aria-current={p === path ? 'true' : undefined} onClick={() => select(p)} title={p}>
+                    <Clapperboard size={14} strokeWidth={1.7} />
+                    <span className="bb-fx__name">{basename(p).replace(/\.md$/, '')}</span>
+                  </button>
+                </li>
+              ))}
+              {reels.length > 6 && (
+                <li>
+                  <button type="button" className="bb-fx__row" onClick={() => { setOpen((prev) => new Set(prev).add('workspace').add(REELS_DIR)); }}>
+                    <span className="bb-fx__name" style={{ color: 'var(--bb-ink3)' }}>Dalších {reels.length - 6} ve stromu</span>
+                  </button>
+                </li>
+              )}
+            </ul>
+          )}
         </div>
         <div className="bb-fx__scroll">
           {hits ? (
@@ -143,7 +176,7 @@ export default function FilesPage({ path, onOpen }: { path: string | null; onOpe
 
       <main className="bb-fx__main">
         {path ? (
-          <Reader path={path} onOpen={select} />
+          <Reader key={path} path={path} onOpen={select} startInEdit={fresh === path} />
         ) : (
           <div className="bb-fx__overview">
             <div className="bb-fx__ovhead">
@@ -155,9 +188,10 @@ export default function FilesPage({ path, onOpen }: { path: string | null; onOpe
               </div>
               <div className="bb-fx__ovtools">
                 <Legend />
-                <button type="button" className="bb-pill bb-pill--sm" aria-pressed={withRaw} onClick={() => setWithRaw((v) => !v)} title="Přepisy, hlasovky a stažená data">
-                  {withRaw ? 'Se surovinami' : 'Bez surovin'}
-                </button>
+                <label className="bb-fx__raw" title="Přepisy, hlasovky a stažená data">
+                  <Switch on={withRaw} onChange={setWithRaw} label="Suroviny" />
+                  Suroviny
+                </label>
               </div>
             </div>
             {shownGraph && shownGraph.nodes.length > 0 ? (
@@ -177,16 +211,14 @@ export default function FilesPage({ path, onOpen }: { path: string | null; onOpe
             <div className="bb-fx__lh">
               <span className="bb-group__label" style={{ padding: 0 }}>Graf</span>
               <div className="bb-fx__seg">
-                <button type="button" className="bb-pill bb-pill--sm" aria-pressed={mode === 'local'} onClick={() => setMode('local')}>Okolí</button>
-                <button type="button" className="bb-pill bb-pill--sm" aria-pressed={mode === 'all'} onClick={() => setMode('all')}>Celý mozek</button>
+                <Tabs label="Rozsah grafu" items={[{ key: 'local', label: 'Okolí' }, { key: 'all', label: 'Celý mozek' }]} value={mode} onChange={(k) => setMode(k as typeof mode)} />
                 {mode === 'local' && (
-                  <button type="button" className="bb-pill bb-pill--sm" onClick={() => setDepth((d) => (d === 1 ? 2 : 1))} title="Kolik kroků od souboru">
-                    {depth === 1 ? '1 krok' : '2 kroky'}
-                  </button>
+                  <Tabs label="Kolik kroků od souboru" items={[{ key: '1', label: '1 krok' }, { key: '2', label: '2 kroky' }]} value={String(depth)} onChange={(k) => setDepth(k === '2' ? 2 : 1)} />
                 )}
-                <button type="button" className="bb-pill bb-pill--sm" aria-pressed={withRaw} onClick={() => setWithRaw((v) => !v)} title="Přepisy, hlasovky a stažená data">
+                <label className="bb-fx__raw" title="Přepisy, hlasovky a stažená data">
+                  <Switch on={withRaw} onChange={setWithRaw} label="Suroviny" />
                   Suroviny
-                </button>
+                </label>
               </div>
             </div>
             <div className="bb-fx__small">
@@ -199,6 +231,94 @@ export default function FilesPage({ path, onOpen }: { path: string | null; onOpe
           <p className="bb-fx__empty">Vyber soubor, tady uvidíš, s čím je propojený.</p>
         )}
       </aside>
+      {newReel && (
+        <NewReelDialog
+          onClose={() => setNewReel(false)}
+          onCreated={(p) => { setNewReel(false); setFresh(p); setReload((n) => n + 1); onOpen(p); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function findDir(nodes: TreeNode[], target: string): Extract<TreeNode, { type: 'dir' }> | null {
+  for (const n of nodes) {
+    if (n.type !== 'dir') continue;
+    if (n.path === target) return n;
+    if (target.startsWith(n.path + '/')) {
+      const hit = findDir(n.children, target);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+
+const slugify = (t: string) =>
+  t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+
+function today(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function reelTemplate(title: string): string {
+  return `# ${title}
+
+_${today()}, talking head, cíl 45 až 60 s_
+
+## Hook
+
+## Tělo
+
+## Závěr a výzva
+
+## Poznámky k natáčení
+`;
+}
+
+/** The only way a script is born here: a name, then it opens ready to write. */
+function NewReelDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (path: string) => void }) {
+  const [title, setTitle] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const slug = slugify(title);
+
+  const create = async () => {
+    if (!slug || busy) return;
+    const p = `${REELS_DIR}/${today()}-${slug}.md`;
+    setBusy(true);
+    setErr(null);
+    try {
+      await createFile(p, reelTemplate(title.trim()));
+      onCreated(p);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Nepovedlo se založit');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="bb-dialog__scrim" onClick={onClose} role="presentation">
+      <div className="bb-dialog" role="dialog" aria-modal="true" aria-labelledby="bb-reel-title" onClick={(e) => e.stopPropagation()}>
+        <div className="bb-dialog__head" id="bb-reel-title">Nový reels script</div>
+        <div className="bb-dialog__body">
+          <input
+            className="bb-set__in"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') void create(); if (e.key === 'Escape') onClose(); }}
+            placeholder="O čem je, třeba Proč nikdo neodpovídá"
+            aria-label="Název scriptu"
+            autoFocus
+          />
+          {err && <p className="bb-fx__err">{err}</p>}
+          <div className="bb-set__acts">
+            <button type="button" className="bb-pill bb-pill--primary" disabled={!slug || busy} onClick={() => void create()}>Založit</button>
+            <button type="button" className="bb-pill" onClick={onClose}>Zrušit</button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -274,12 +394,13 @@ function Row({ node, depth, open, selected, onToggle, onSelect }: {
   );
 }
 
-function Reader({ path, onOpen }: { path: string; onOpen: (p: string) => void }) {
+function Reader({ path, onOpen, startInEdit }: { path: string; onOpen: (p: string) => void; startInEdit: boolean }) {
   const kind = classifyFile(path);
   const textual = kind === 'markdown' || kind === 'text';
   const [payload, setPayload] = useState<FilePayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -306,7 +427,7 @@ function Reader({ path, onOpen }: { path: string; onOpen: (p: string) => void })
           ))}
         </p>
         <div className="bb-fx__acts">
-          {payload?.mtime && <span className="bb-fx__meta">{new Date(payload.mtime).toLocaleString('cs-CZ', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>}
+          {(savedAt || payload?.mtime) && <span className="bb-fx__meta">{new Date((savedAt || payload?.mtime) as string).toLocaleString('cs-CZ', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>}
           <button type="button" className="bb-ib" onClick={copyPath} title="Kopírovat cestu">{copied ? <Check size={15} strokeWidth={2} /> : <Copy size={15} strokeWidth={1.8} />}</button>
           <button type="button" className="bb-ib" onClick={openSheet} title="Otevřít v náhledu"><ExternalLink size={15} strokeWidth={1.8} /></button>
         </div>
@@ -320,47 +441,18 @@ function Reader({ path, onOpen }: { path: string; onOpen: (p: string) => void })
         )}
         {error && <p className="bb-fx__err">{error}</p>}
         {textual && !payload && !error && <p className="bb-fx__empty">Načítám…</p>}
-        {payload && kind === 'markdown' && (
-          <div className="beyond-prose bb-fx__prose text-[15px] leading-relaxed text-beyond-ink [&_p]:my-2 [&_p:first-child]:mt-0 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1 [&_strong]:font-semibold [&_em]:italic [&_h1]:mb-3 [&_h1]:mt-6 [&_h1]:text-[22px] [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:mt-5 [&_h2]:text-[17px] [&_h2]:font-semibold [&_h3]:mb-1 [&_h3]:mt-4 [&_h3]:text-[15px] [&_h3]:font-semibold [&_hr]:my-4 [&_hr]:border-beyond-ink/10 [&_blockquote]:my-3 [&_blockquote]:border-l-2 [&_blockquote]:border-beyond-ink/10 [&_blockquote]:pl-3 [&_blockquote]:text-beyond-dim [&_table]:my-3 [&_table]:w-full [&_th]:border-b [&_th]:border-beyond-ink/10 [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_th]:text-[12px] [&_th]:uppercase [&_th]:tracking-wide [&_th]:text-beyond-faint [&_td]:border-b [&_td]:border-beyond-ink/[0.04] [&_td]:px-2 [&_td]:py-1.5">
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={{
-                a: ({ href, children, ...rest }) => {
-                  const h = String(href || '');
-                  const local = h && !/^[a-z][a-z0-9+.-]*:/i.test(h) && !h.startsWith('#');
-                  if (local) {
-                    const target = resolveRelative(dirname(path), h.split('#')[0]);
-                    return (
-                      <button type="button" className="bb-fx__a" onClick={() => onOpen(target)} title={target}>{children}</button>
-                    );
-                  }
-                  return <a {...rest} href={href} target="_blank" rel="noopener noreferrer" className="text-beyond-ink underline decoration-beyond-ink/20 underline-offset-2 hover:decoration-beyond-ink/50">{children}</a>;
-                },
-                code: ({ className, children }) => {
-                  const raw = String(children ?? '');
-                  if (/\n/.test(raw)) return <BeyondCodeBlock code={raw.replace(/\n$/, '')} className={className} />;
-                  return <code className="bb-inlinecode rounded px-1 py-0.5 font-mono text-[0.88em]">{children}</code>;
-                },
-              }}
-            >
-              {payload.content}
-            </ReactMarkdown>
-          </div>
-        )}
-        {payload && kind === 'text' && (
-          <pre className="bb-fx__pre">{payload.content}</pre>
+        {payload && !payload.binary && (kind === 'markdown' || kind === 'text') && (
+          <FileEditor
+            key={path}
+            path={path}
+            payload={payload}
+            kind={kind}
+            startInEdit={startInEdit}
+            onOpenPath={onOpen}
+            onSaved={(m) => setSavedAt(m || null)}
+          />
         )}
       </div>
     </div>
   );
-}
-
-function resolveRelative(fromDir: string, target: string): string {
-  const parts: string[] = [];
-  const base = target.startsWith('/') ? [] : fromDir ? fromDir.split('/') : [];
-  for (const seg of [...base, ...target.replace(/^\//, '').split('/')]) {
-    if (!seg || seg === '.') continue;
-    if (seg === '..') parts.pop(); else parts.push(seg);
-  }
-  return parts.join('/');
 }

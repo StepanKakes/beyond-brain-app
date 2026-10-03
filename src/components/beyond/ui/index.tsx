@@ -12,6 +12,8 @@ import { Plus } from '../icons';
 import RubberSegment from '../bits/RubberSegment';
 import SquishSwitch from '../bits/SquishSwitch';
 import HoldButton from '../bits/HoldButton';
+import { toast } from './toast';
+import StatusMark from '../bits/StatusMark';
 import WarmTooltip from '../bits/WarmTooltip';
 
 type Tone = 'plain' | 'urgent' | 'watch' | 'work' | 'done' | 'p1' | 'p2' | 'p3' | 'p4';
@@ -190,6 +192,50 @@ export function HoldToSend({
       disabled={disabled}
       onHold={onSend}
       onTap={onTap}
+    >
+      {children}
+    </HoldButton>
+  );
+}
+
+/** Waiting on the server: the running state of React Bits StatusMark, in
+ *  the colour of the text around it. */
+export function Spinner({ size = 18, label }: { size?: number; label?: string }) {
+  return <StatusMark className="bb-mark" status="running" size={size} color="currentColor" strike={false} label={label} />;
+}
+
+/** Deleting what cannot come back: the same React Bits HoldButton in the
+ *  danger tone, so a stray click never removes anything. */
+export function HoldToDelete({
+  children,
+  doneLabel = 'Smazáno',
+  onDelete,
+  onTap,
+  disabled,
+}: {
+  children: ReactNode;
+  doneLabel?: ReactNode;
+  onDelete: () => void;
+  onTap?: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <HoldButton
+      className="bb-hold bb-hold--danger"
+      size="sm"
+      radius={999}
+      holdTime={900}
+      resetAfter={1600}
+      wave={false}
+      glow={false}
+      backgroundColor="var(--bb-danger-soft)"
+      fillColor="var(--bb-danger)"
+      textColor="var(--bb-danger)"
+      fillTextColor="var(--bb-on-accent)"
+      doneLabel={doneLabel}
+      disabled={disabled}
+      onHold={onDelete}
+      onTap={onTap ?? (() => toast('Podrž tlačítko', 'Smaže se, až se celé zaplní.'))}
     >
       {children}
     </HoldButton>

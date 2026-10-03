@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Empty, ago, usePolled } from './bits';
-import { Tabs } from '../ui';
+import { HoldToDelete, Tabs } from '../ui';
 import StoryViewer from './StoryViewer';
 import { cutObsah, deleteObsah, fetchObsah, patchObsah, type ObsahItem } from './api';
 import { authenticatedFetch } from '../../../utils/api';
@@ -63,7 +63,6 @@ export default function ObsahPage({ onOpenStudio, onOpenClient }: { onOpenStudio
     void data.reload();
   };
   const remove = async (item: ObsahItem) => {
-    if (!window.confirm('Smazat z osy? Nejde vrátit.')) return;
     await deleteObsah(item.id);
     void data.reload();
   };
@@ -125,7 +124,7 @@ export default function ObsahPage({ onOpenStudio, onOpenClient }: { onOpenStudio
                   <div key={item.id} className="bb-ob__binrow">
                     <span>{item.kind === 'reel' ? 'Reel' : 'Stories'} · {item.title || item.hook}</span>
                     <button type="button" className="bb-uk__x" onClick={() => void move(item, 'navrh')}>vrátit</button>
-                    <button type="button" className="bb-uk__x" onClick={() => void remove(item)}>smazat</button>
+                    <HoldToDelete onDelete={() => void remove(item)}>Podrž a smaž</HoldToDelete>
                   </div>
                 ))}
               </div>
@@ -301,7 +300,7 @@ function Card({ item, open, onToggle, onMove, onRemove, onDiscard, onOpenClient,
                 </div>
               )}
               {item.client && <button type="button" className="bb-uk__x" onClick={() => onOpenClient(item.client!)}>otevřít klienta</button>}
-              <button type="button" className="bb-uk__x" onClick={onRemove}>smazat z osy</button>
+              <HoldToDelete onDelete={onRemove}>Podrž a smaž z osy</HoldToDelete>
             </div>
           </div>
         </div>

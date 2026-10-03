@@ -45,13 +45,17 @@ se načítá později).
 |---|---|
 | PromptBar | `chat/Composer.tsx`, uvítací pole; `bits/GlideMenu.tsx` je jeho menu s klouzavým zvýrazněním pro příkazy, model, konektory a plus |
 | CallChip | kroky nástrojů v chatu |
-| RubberSegment | `Tabs` v `ui/`, typ konektoru, vzhled |
-| SquishSwitch | `Switch` v `ui/` |
-| HoldButton | `HoldToSend` v `ui/`: zpráva skutečnému člověku odejde až po podržení |
-| SwipeToast | `toast()` z `ui/toast.ts`, vykresluje `ui/Toaster.tsx` |
+| RubberSegment | `Tabs` v `ui/`: záložky, filtr lidí na Velínu, rozsah grafu v Souborech, typ konektoru, vzhled |
+| SquishSwitch | `Switch` v `ui/`: nastavení, úlohy agenta, pauza plánovače, suroviny v Souborech |
+| HoldButton | `HoldToSend` v `ui/`: zpráva skutečnému člověku odejde až po podržení; `HoldToDelete`: smazání z osy a odebrání konektoru |
+| GlideSelect | priorita, vlastník a klient v editoru úkolu na Velínu |
+| SwipeToast | `toast()` z `ui/toast.ts`, vykresluje `ui/Toaster.tsx`; volitelná akce, třeba Vrátit po smazání chatu |
 | WarmTooltip | `Tip` a `TipGroup` v `ui/` na ikonových tlačítkách |
-| StatusMark | stav běhů a událostí agenta |
+| StatusMark | stav běhů a událostí agenta; `Spinner` v `ui/` pro čekání na server |
 | CountUp | čísla ve Spotřebě |
+
+Přemýšlení v chatu ukazuje jen náš tečkovaný mozek, text a časovač v písmu appky
+(`BeyondLoader.tsx`); LatticeLoader je pryč.
 
 Zaškrtávání úkolů na Velínu zůstalo vlastní: React Bits SpringCheck nemá
 stav „pracuje se“ ani barvy priorit.
@@ -155,7 +159,7 @@ Rozdělené z `BeyondChat.tsx`, který měl 2 900 řádků.
 | Mount | Auth | K čemu |
 |---|---|---|
 | `/api/beyond/velin` | JWT | Velín, mřížka, detail klienta, hovory, přestavba indexu |
-| `/api/beyond` | JWT | `config`, `clients`, `status`, `repo-status`, `file`, `raw-file`, `tree`, `models`, `sync`, `sessions/*` |
+| `/api/beyond` | JWT | `config`, `clients`, `status`, `repo-status`, `file` (GET čte, PUT ukládá s kontrolou mtime, POST zakládá; zapisuje se jen do brainu a jen textové typy), `raw-file`, `tree`, `models`, `sync`, `sessions/*` |
 | `/api/beyond/mcp` | JWT | CRUD konektorů, test, start OAuth |
 | `/api/beyond-mcp-oauth` | žádná (callback) | návrat z OAuth |
 | `/api/beyond-agent` | sdílený secret | jednorázové dotazy pro n8n a Telegram |
@@ -629,3 +633,16 @@ nebo tlačítko v Obsahu; přehrání a stažení jde přes
 Story Studio uvnitř brainu (záložka Stories) se otevírá přes
 `GET /api/beyond/velin/studio`, který z konektoru vezme klíč a složí
 přihlašovací odkaz Story Studia (`/api/auth/login?key=`).
+
+## Editor souborů (3.10.2026)
+
+Jeden editor (`src/components/beyond/editor/FileEditor.tsx`) pro boční panel
+náhledu, jeho režim na celou obrazovku a čtečku v Souborech. Režimy Číst, Psát,
+Půl na půl (jen na celé obrazovce). Ukládá samo vteřinu po psaní, Cmd+S hned;
+každé uložení nese mtime, ze kterého se vycházelo, takže soubor přepsaný agentem
+mezitím editor ohlásí (409) a nabídne načíst novou verzi nebo přepsat. Odškrtávání
+checkboxů funguje i v režimu Číst. Skripty na reels žijí v `workspace/reels/`
+(tlačítko plus v Souborech, šablona hook, tělo, závěr). Panely (`.bb-sheetscrim`,
+`.bb-sheet`) nesmí mít `backdrop-filter`: rozmazání pod scrollujícím panelem
+dělalo cukání. Chyba o vypršelém přihlášení Claude v chatu ukáže tlačítko, které
+otevře terminál s `claude /login` (událost `beyond:open-claude-login`, také v Nastavení).

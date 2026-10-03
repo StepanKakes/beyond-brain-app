@@ -93,15 +93,7 @@ export default function SessionsMenu({
                     </button>
                     <button
                       type="button"
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            `Smazat chat „${s.title}" z indexu?\n(transkript na disku zůstane.)`,
-                          )
-                        ) {
-                          onDelete(s.uuid);
-                        }
-                      }}
+                      onClick={() => onDelete(s.uuid)}
                       title="Odebrat z indexu"
                       className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint opacity-0 transition-all hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
                     >

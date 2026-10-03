@@ -15,6 +15,7 @@ import CallsPage from './velin/CallsPage';
 import AgentPage from './velin/AgentPage';
 import FilesPage from './files/FilesPage';
 import ScreenBoundary from './ScreenBoundary';
+import ProviderLoginModal from '../provider-auth/view/ProviderLoginModal';
 import Toaster from './ui/Toaster';
 import ObsahPage from './velin/ObsahPage';
 import StudioPage from './velin/StudioPage';
@@ -109,6 +110,14 @@ export default function BeyondApp() {
   // The prompt typed on the Welcome screen, carried into the chat we route to.
   const [initialPrompt, setInitialPrompt] = useState<string | undefined>(undefined);
   const [previewPath, setPreviewPath] = useState<string | null>(null);
+  // The machine's Claude login ran out: a terminal with `claude /login`, opened
+  // from Settings or from the toast the chat shows when a turn fails on auth.
+  const [claudeLogin, setClaudeLogin] = useState(false);
+  useEffect(() => {
+    const open = () => setClaudeLogin(true);
+    window.addEventListener('beyond:open-claude-login', open);
+    return () => window.removeEventListener('beyond:open-claude-login', open);
+  }, []);
   const [htmlDoc, setHtmlDoc] = useState<{ html: string; title?: string } | null>(null);
   const [connectorsOpen, setConnectorsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -381,6 +390,14 @@ export default function BeyondApp() {
         </motion.div>
         )}
       </AnimatePresence>
+
+      {claudeLogin && (
+        <ProviderLoginModal
+          isOpen
+          provider="claude"
+          onClose={() => setClaudeLogin(false)}
+        />
+      )}
 
       <AnimatePresence>
         {previewPath && (

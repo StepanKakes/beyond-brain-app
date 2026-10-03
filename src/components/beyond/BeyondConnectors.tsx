@@ -4,8 +4,6 @@ import {
   X,
   Plug,
   Plus,
-  Loader2,
-  Trash2,
   RefreshCw,
   Globe,
   Terminal,
@@ -17,6 +15,7 @@ import {
 } from './icons';
 import { useBeyondConnectors } from './useBeyondConnectors';
 import RubberSegment from './bits/RubberSegment';
+import { HoldToDelete, Spinner } from './ui';
 import { applyToCurrentChat } from './beyondConnectorsApi';
 import type { Connector, ConnectorStatus, Preset } from './beyondConnectorsApi';
 
@@ -226,7 +225,6 @@ export default function BeyondConnectors({ onClose }: { onClose: () => void }) {
     withBusy(c.id, () => update(c.id, { enabled: !c.enabled }));
 
   const handleRemove = (c: Connector) => {
-    if (!window.confirm(`Odebrat konektor „${c.name}"?`)) return;
     return withBusy(c.id, () => remove(c.id));
   };
 
@@ -236,7 +234,7 @@ export default function BeyondConnectors({ onClose }: { onClose: () => void }) {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.18 }}
-      className="fixed inset-0 z-50 flex items-stretch justify-end bg-black/30 backdrop-blur-[2px]"
+      className="bb-sheetscrim"
       onClick={onClose}
     >
       <motion.div
@@ -349,7 +347,7 @@ export default function BeyondConnectors({ onClose }: { onClose: () => void }) {
 
             {loading && connectors.length === 0 ? (
               <div className="flex items-center justify-center py-8 text-beyond-faint">
-                <Loader2 className="h-5 w-5 animate-spin" strokeWidth={1.8} />
+                <Spinner />
               </div>
             ) : error ? (
               <p className="py-4 text-[13px] text-red-600">⚠ {error}</p>
@@ -541,7 +539,7 @@ function AddForm(props: AddFormProps) {
             disabled={submitting}
             className="inline-flex items-center gap-2 bb-btn-primary rounded-full px-4 py-2 text-[13px] font-medium disabled:opacity-50"
           >
-            {submitting && <Loader2 className="h-[14px] w-[14px] animate-spin" strokeWidth={2} />}
+            {submitting && <Spinner size={14} />}
             Přidat
           </button>
           <button
@@ -608,7 +606,7 @@ function ConnectorRow({
             </p>
           )}
         </div>
-        {busy && <Loader2 className="mt-1 h-4 w-4 flex-shrink-0 animate-spin text-beyond-faint" strokeWidth={1.8} />}
+        {busy && <span className="mt-1 flex-shrink-0 text-beyond-faint"><Spinner size={16} /></span>}
       </div>
 
       {manual && (
@@ -660,10 +658,7 @@ function ConnectorRow({
         <RowAction onClick={onToggle} disabled={busy}>
           {c.enabled ? 'Vypnout' : 'Zapnout'}
         </RowAction>
-        <RowAction onClick={onRemove} disabled={busy} danger>
-          <Trash2 className="h-[12px] w-[12px]" strokeWidth={1.8} />
-          Odebrat
-        </RowAction>
+        <HoldToDelete onDelete={onRemove} disabled={busy} doneLabel="Odebráno">Podrž a odeber</HoldToDelete>
       </div>
     </li>
   );

@@ -5,6 +5,7 @@ import { authenticatedFetch } from '../../../utils/api';
 import { HoldToSend, Tabs } from '../ui';
 import { toast } from '../ui/toast';
 import BoardPage from '../board/BoardPage';
+import GlideSelect from '../bits/GlideSelect';
 
 import {
   createQuick,
@@ -443,7 +444,7 @@ function TaskEditor({ task, people, clients, onClose, onSaved, onRemove }: {
 }) {
   const [text, setText] = useState(task.text);
   const [cur, setCur] = useState<{ priority: Task['priority']; due: string | null; owner: string; client: string | null }>({ priority: task.priority, due: task.due, owner: task.owner, client: task.client?.slug ?? null });
-  const [menu, setMenu] = useState<'p' | 'due' | 'owner' | 'client' | null>(null);
+  const [menu, setMenu] = useState<'due' | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const boxRef = useRef<HTMLDivElement | null>(null);
   const textTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -485,8 +486,6 @@ function TaskEditor({ task, people, clients, onClose, onSaved, onRemove }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text]);
 
-  const person = people.find((p) => p.key === cur.owner);
-  const clientName = clients.find((c) => c.slug === cur.client)?.name;
   const dueLabelOf = (iso: string | null) => (iso ? dueLabel(iso, null) : 'bez termínu');
 
   return (
@@ -500,31 +499,47 @@ function TaskEditor({ task, people, clients, onClose, onSaved, onRemove }: {
     >
       <input id={`bb-te-text-${task.id}`} className="bb-te__text" type="text" value={text} onChange={(e) => onText(e.target.value)} onBlur={flushText} autoFocus placeholder="Co je potřeba udělat" />
       <div className="bb-te__chips">
-        <Chip label={`P${cur.priority}`} tone={`p${cur.priority}`} open={menu === 'p'} onToggle={() => setMenu(menu === 'p' ? null : 'p')}>
-          {([1, 2, 3, 4] as Task['priority'][]).map((p) => (
-            <button key={p} type="button" className="bb-te__opt" data-tone={`p${p}`} aria-pressed={cur.priority === p} onClick={() => pick({ priority: p })}>
-              <i className="bb-te__flag" />P{p}{p === 1 ? ' nejvyšší' : p === 4 ? ' běžná' : ''}
-            </button>
-          ))}
-        </Chip>
+        <span className="bb-te__gs" data-tone={`p${cur.priority}`}>
+          <GlideSelect
+            className="bb-gs"
+            ariaLabel="Priorita"
+            size="sm"
+            menuWidth={150}
+            value={String(cur.priority)}
+            options={([1, 2, 3, 4] as Task['priority'][]).map((p) => ({
+              value: String(p),
+              label: <><i className="bb-te__flag" style={{ background: `var(--bb-p${p})` }} />P{p}{p === 1 ? ' nejvyšší' : p === 4 ? ' běžná' : ''}</>,
+            }))}
+            onChange={(v) => pick({ priority: Number(v) as Task['priority'] })}
+          />
+        </span>
         <Chip label={dueLabelOf(cur.due)} tone={cur.due ? 'due' : undefined} open={menu === 'due'} onToggle={() => setMenu(menu === 'due' ? null : 'due')}>
           {DUE_QUICK.map((q) => (
             <button key={q.label} type="button" className="bb-te__opt" aria-pressed={cur.due === q.iso()} onClick={() => pick({ due: q.iso() })}>{q.label}</button>
           ))}
           <input id={`bb-te-due-${task.id}`} className="bb-te__date" type="date" value={cur.due || ''} onChange={(e) => pick({ due: e.target.value || null })} aria-label="Datum" />
         </Chip>
-        <Chip label={<><Avatar person={cur.owner} people={people} me="" />{cur.owner === 'all' ? 'Všichni' : person?.displayName || cur.owner}</>} open={menu === 'owner'} onToggle={() => setMenu(menu === 'owner' ? null : 'owner')}>
-          {people.map((p) => (
-            <button key={p.key} type="button" className="bb-te__opt" aria-pressed={cur.owner === p.key} onClick={() => pick({ owner: p.key })}><Avatar person={p.key} people={people} me="" />{p.displayName}</button>
-          ))}
-          <button type="button" className="bb-te__opt" aria-pressed={cur.owner === 'all'} onClick={() => pick({ owner: 'all' })}><span className="bb-uk__av bb-uk__av--all">∗</span>Všichni</button>
-        </Chip>
-        <Chip label={clientName || 'bez klienta'} open={menu === 'client'} onToggle={() => setMenu(menu === 'client' ? null : 'client')}>
-          <button type="button" className="bb-te__opt" aria-pressed={!cur.client} onClick={() => pick({ client: null })}>bez klienta</button>
-          {clients.map((c) => (
-            <button key={c.slug} type="button" className="bb-te__opt" aria-pressed={cur.client === c.slug} onClick={() => pick({ client: c.slug })}>{c.name}</button>
-          ))}
-        </Chip>
+        <GlideSelect
+          className="bb-gs"
+          ariaLabel="Kdo to dělá"
+          size="sm"
+          menuWidth={190}
+          value={cur.owner}
+          options={[
+            ...people.map((p) => ({ value: p.key, label: <><Avatar person={p.key} people={people} me="" />{p.displayName}</> })),
+            { value: 'all', label: <><span className="bb-uk__av bb-uk__av--all">∗</span>Všichni</> },
+          ]}
+          onChange={(v) => pick({ owner: v })}
+        />
+        <GlideSelect
+          className="bb-gs"
+          ariaLabel="Klient"
+          size="sm"
+          menuWidth={210}
+          value={cur.client ?? ''}
+          options={[{ value: '', label: 'bez klienta' }, ...clients.map((c) => ({ value: c.slug, label: c.name }))]}
+          onChange={(v) => pick({ client: v || null })}
+        />
         <button type="button" className="bb-te__del" onClick={onRemove} title="Smazat úkol">smazat</button>
         {err && <span className="bb-fx__err">{err}</span>}
       </div>
@@ -837,17 +852,19 @@ export default function VelinPage({ onOpenClient, onOpenCalls, onOpenChat }: Pro
           <div>
             <QuickAdd me={me} owner={viewedPerson || me} people={people} onAdded={() => void ukoly.reload()} />
             <div className="bb-uk__filters">
-              {people.map((p) => {
-                const key = p.key === me ? 'me' : p.key;
-                return (
-                  <button key={p.key} type="button" className="bb-pill bb-pill--sm bb-pill--person" aria-pressed={view === key} onClick={() => setView(key)}>
-                    <Avatar person={p.key} people={people} me="" />
-                    {p.key === me ? 'Já' : p.displayName}
-                  </button>
-                );
-              })}
-              <button type="button" className="bb-pill bb-pill--sm" aria-pressed={view === 'all'} onClick={() => setView('all')}>Všichni</button>
-              <button type="button" className="bb-pill bb-pill--sm" aria-pressed={view === 'ready'} onClick={() => setView('ready')}>Připravené brainem</button>
+              <Tabs
+                label="Čí úkoly"
+                value={view}
+                onChange={setView}
+                items={[
+                  ...people.map((p) => ({
+                    key: p.key === me ? 'me' : p.key,
+                    label: <span className="bb-uk__who"><Avatar person={p.key} people={people} me="" />{p.key === me ? 'Já' : p.displayName}</span>,
+                  })),
+                  { key: 'all', label: 'Všichni' },
+                  { key: 'ready', label: 'Připravené brainem' },
+                ]}
+              />
             </div>
 
             {ukoly.error && !ukoly.data && <Empty>Úkoly se nenačetly: {ukoly.error}</Empty>}

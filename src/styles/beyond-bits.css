@@ -96,3 +96,20 @@
 /* ------------------------------------------------------- hold to send - */
 .hold-button.bb-hold { font-size: 12.5px; font-weight: 500; }
 .status-mark.bb-mark { flex: none; min-width: 92px; color: var(--bb-ink2); }
+
+/* ---------------------------------------------------------- glide select - */
+.glide-select.bb-gs { --gs-chip: 28px; --gs-font: 12.5px; }
+.glide-select.bb-gs .glide-select__trigger { height: 28px; padding: 0 8px 0 10px; gap: 6px; border: 1px solid var(--bb-line); border-radius: 8px; background: var(--bb-raise); color: var(--bb-ink2); font-size: 12.5px; }
+.glide-select.bb-gs .glide-select__trigger:hover,
+.glide-select.bb-gs .glide-select__trigger[aria-expanded="true"] { border-color: var(--bb-ink3); color: var(--bb-ink); background: var(--bb-raise); }
+.glide-select.bb-gs .glide-select__label { display: inline-flex; align-items: center; gap: 6px; }
+.glide-select.bb-gs .glide-select__menu { border: 1px solid var(--bb-line); box-shadow: var(--bb-shadow-pop); }
+.glide-select.bb-gs .glide-select__list { max-height: 300px; overflow-y: auto; overscroll-behavior: contain; }
+.glide-select.bb-gs .glide-select__name { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.glide-select.bb-gs .bb-uk__av { width: 18px; height: 18px; font-size: 10px; flex: none; }
+.bb-te__gs[data-tone="p1"] .glide-select__trigger { color: var(--bb-p1); }
+.bb-te__gs[data-tone="p2"] .glide-select__trigger { color: var(--bb-p2); }
+.bb-te__gs[data-tone="p3"] .glide-select__trigger { color: var(--bb-p3); }
+.glide-select.bb-gs .bb-te__flag { flex: none; }
+.bb-uk__who { display: inline-flex; align-items: center; gap: 6px; }
+.bb-uk__who .bb-uk__av { width: 18px; height: 18px; font-size: 10px; }

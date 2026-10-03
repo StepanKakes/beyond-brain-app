@@ -457,9 +457,86 @@ router.get('/file', async (req, res) => {
       content,
       encoding: 'utf8',
       mtime: stat.mtime.toISOString(),
+      writable: !resolveWritablePath(req.query.path).error,
     });
   } catch (err) {
     res.status(500).json({ error: err.message || 'file read failed' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Writing from the editor. Narrower than reading: only text files inside the
+// brain repo itself (not tmp, not the extra read roots), and a save carries the
+// mtime it was based on, so a file the agent rewrote meanwhile is not silently
+// overwritten by a stale editor.
+// ---------------------------------------------------------------------------
+const WRITABLE_EXT_RE = /\.(md|markdown|txt|json|csv|html?|ya?ml)$/i;
+const MAX_WRITE_BYTES = 1024 * 1024;
+
+function resolveWritablePath(input) {
+  const resolved = resolveOpenablePath(input);
+  if (resolved.error) return resolved;
+  const root = path.resolve(BRAIN_PATH);
+  if (resolved.abs !== root && !resolved.abs.startsWith(root + path.sep)) {
+    return { error: 'Zapisovat jde jen do brainu', status: 403 };
+  }
+  if (!WRITABLE_EXT_RE.test(resolved.abs)) {
+    return { error: 'Tenhle typ souboru se tu nedá upravovat', status: 400 };
+  }
+  return resolved;
+}
+
+router.put('/file', async (req, res) => {
+  try {
+    const { path: p, content, baseMtime } = req.body || {};
+    if (typeof content !== 'string') return res.status(400).json({ error: 'Chybí obsah' });
+    if (Buffer.byteLength(content, 'utf8') > MAX_WRITE_BYTES) {
+      return res.status(413).json({ error: 'Soubor je moc velký na úpravu (nad 1 MB)' });
+    }
+    const resolved = resolveWritablePath(p);
+    if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
+    let stat;
+    try {
+      stat = await fs.stat(resolved.abs);
+    } catch {
+      return res.status(404).json({ error: 'Soubor už neexistuje' });
+    }
+    if (!stat.isFile()) return res.status(400).json({ error: 'Not a file' });
+    if (baseMtime && stat.mtime.toISOString() !== baseMtime) {
+      return res.status(409).json({
+        error: 'Soubor se mezitím změnil',
+        mtime: stat.mtime.toISOString(),
+      });
+    }
+    await fs.writeFile(resolved.abs, content, 'utf8');
+    const after = await fs.stat(resolved.abs);
+    res.json({ ok: true, size: after.size, mtime: after.mtime.toISOString() });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'file write failed' });
+  }
+});
+
+// A new text file (a new reels script); refuses to overwrite an existing one.
+router.post('/file', async (req, res) => {
+  try {
+    const { path: p, content } = req.body || {};
+    const resolved = resolveWritablePath(p);
+    if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
+    const text = typeof content === 'string' ? content : '';
+    if (Buffer.byteLength(text, 'utf8') > MAX_WRITE_BYTES) {
+      return res.status(413).json({ error: 'Soubor je moc velký' });
+    }
+    await fs.mkdir(path.dirname(resolved.abs), { recursive: true });
+    try {
+      await fs.writeFile(resolved.abs, text, { encoding: 'utf8', flag: 'wx' });
+    } catch (e) {
+      if (e && e.code === 'EEXIST') return res.status(409).json({ error: 'Soubor se stejným názvem už existuje' });
+      throw e;
+    }
+    const after = await fs.stat(resolved.abs);
+    res.json({ ok: true, size: after.size, mtime: after.mtime.toISOString() });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'file create failed' });
   }
 });
 

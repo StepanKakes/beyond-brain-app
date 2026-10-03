@@ -173,6 +173,23 @@ export default function BeyondSettings({ onClose }: { onClose: () => void }) {
               />
             </section>
 
+            {/* The login of the machine the brain runs on. It lapses now and then. */}
+            <section>
+              <div className="bb-section__label">Přihlášení Claude</div>
+              <button
+                type="button"
+                className="bb-option"
+                style={{ width: '100%' }}
+                onClick={() => window.dispatchEvent(new CustomEvent('beyond:open-claude-login'))}
+              >
+                <span style={{ width: 30, display: 'grid', placeItems: 'center', flex: 'none', color: 'var(--bb-ink)' }}><Plug size={17} strokeWidth={1.8} /></span>
+                <span style={{ flex: 1, textAlign: 'left' }}>
+                  <span style={{ display: 'block', fontSize: 14, fontWeight: 500 }}>Přihlásit znovu</span>
+                  <span style={{ display: 'block', fontSize: 12, color: 'var(--bb-ink3)' }}>Když chat hlásí vypršelé přihlášení (OAuth session expired)</span>
+                </span>
+              </button>
+            </section>
+
             {/* Extensions */}
             <section>
               <div className="bb-section__label">Rozšíření</div>

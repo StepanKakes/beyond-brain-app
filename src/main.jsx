@@ -5,6 +5,7 @@ import './index.css'
 import './styles/beyond-glass.css'
 import './styles/beyond-ui.css'
 import './styles/beyond-bits.css'
+import './styles/beyond-editor.css'
 import 'katex/dist/katex.min.css'
 
 // Initialize i18n

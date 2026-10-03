@@ -15,6 +15,8 @@ export type FilePayload = {
   binary: boolean;
   encoding: string;
   mtime?: string;
+  /** The server accepts a save to this file (inside the brain, text type). */
+  writable?: boolean;
 };
 
 async function getJson<T>(url: string): Promise<T> {
@@ -34,6 +36,38 @@ export function fetchGraph(): Promise<Graph> {
 
 export function fetchFile(path: string): Promise<FilePayload> {
   return getJson(`/api/beyond/file?path=${encodeURIComponent(path)}`);
+}
+
+export class SaveConflict extends Error {
+  mtime: string;
+  constructor(mtime: string) {
+    super('Soubor se mezitím změnil');
+    this.mtime = mtime;
+  }
+}
+
+/** Save an edit. `baseMtime` is the version the edit was made on; a different
+ *  one on disk means someone else (usually the agent) wrote the file since. */
+export async function saveFile(path: string, content: string, baseMtime?: string): Promise<{ mtime: string; size: number }> {
+  const r = await authenticatedFetch('/api/beyond/file', {
+    method: 'PUT',
+    body: JSON.stringify({ path, content, baseMtime }),
+  });
+  const data = await r.json().catch(() => null);
+  if (r.status === 409 && data?.mtime) throw new SaveConflict(data.mtime);
+  if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
+  return data as { mtime: string; size: number };
+}
+
+/** Create a new text file; refuses to overwrite one that exists. */
+export async function createFile(path: string, content: string): Promise<{ mtime: string }> {
+  const r = await authenticatedFetch('/api/beyond/file', {
+    method: 'POST',
+    body: JSON.stringify({ path, content }),
+  });
+  const data = await r.json().catch(() => null);
+  if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
+  return data as { mtime: string };
 }
 
 /** Flatten a tree to file paths, for search. */

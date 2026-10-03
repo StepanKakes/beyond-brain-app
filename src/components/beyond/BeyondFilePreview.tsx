@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, ArrowUpRight, FileText, Loader2, Download, Copy, Check, PanelRight } from './icons';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { X, ArrowUpRight, FileText, Download, Copy, Check, PanelRight } from './icons';
 import { authenticatedFetch } from '../../utils/api';
 import { copyTextToClipboard } from '../../utils/clipboard';
 import { classifyFile, fileBasename, fileDirname, type FileKind } from './beyondFilePaths';
-import BeyondCodeBlock from './BeyondCodeBlock';
+import { Spinner, Tip } from './ui';
+import FileEditor from './editor/FileEditor';
 
 /**
  * Beyond Brain — file preview sheet.
@@ -45,6 +44,8 @@ export default function BeyondFilePreview({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [wide, setWide] = useState(false);
+  const [savedMtime, setSavedMtime] = useState<string | null>(null);
 
   // Text / markdown → JSON read.
   useEffect(() => {
@@ -201,7 +202,7 @@ export default function BeyondFilePreview({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.18 }}
-      className="fixed inset-0 z-50 flex items-stretch justify-end bg-black/30 backdrop-blur-[2px]"
+      className="bb-sheetscrim"
       onClick={onClose}
     >
       <motion.div
@@ -209,17 +210,16 @@ export default function BeyondFilePreview({
         animate={{ x: 0 }}
         exit={{ x: '100%' }}
         transition={{ duration: 0.28, ease: [0.21, 1.02, 0.73, 1] }}
-        className="bb-scope bb-sheet flex h-full w-full max-w-[680px] flex-col"
+        className="bb-scope bb-sheet bb-fsheet"
+        data-wide={wide ? 'true' : undefined}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <header className="flex flex-shrink-0 items-center gap-2.5 border-b border-beyond-ink/[0.06] px-5 py-3.5">
+        <header className="bb-fsheet__head">
           <FileText className="h-[16px] w-[16px] flex-shrink-0 text-beyond-faint" strokeWidth={1.8} />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[13px] font-medium text-beyond-ink">{fileName}</p>
-            {folder && (
-              <p className="truncate text-[11px] text-beyond-faint">{folder}</p>
-            )}
+          <div className="bb-fsheet__title">
+            <p className="bb-fsheet__name">{fileName}</p>
+            {folder && <p className="bb-fsheet__dir">{folder}</p>}
           </div>
           {hasText && (
             <button
@@ -275,6 +275,16 @@ export default function BeyondFilePreview({
             Vložit do chatu
             <ArrowUpRight className="h-[12px] w-[12px]" strokeWidth={2} />
           </button>
+          <Tip label={wide ? 'Zpět na panel' : 'Na celou obrazovku'}>
+            <button
+              type="button"
+              onClick={() => setWide((v) => !v)}
+              aria-label={wide ? 'Zpět na panel' : 'Na celou obrazovku'}
+              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-beyond-faint transition-colors hover:bg-beyond-ink/[0.04] hover:text-beyond-dim"
+            >
+              <ExpandIcon wide={wide} />
+            </button>
+          </Tip>
           <button
             type="button"
             onClick={onClose}
@@ -286,10 +296,10 @@ export default function BeyondFilePreview({
         </header>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-6">
+        <div className="bb-fsheet__body">
           {loading && (
             <div className="flex h-full items-center justify-center text-beyond-faint">
-              <Loader2 className="h-5 w-5 animate-spin" strokeWidth={1.8} />
+              <Spinner />
             </div>
           )}
 
@@ -373,55 +383,28 @@ export default function BeyondFilePreview({
             </div>
           )}
 
-          {/* Markdown */}
-          {payload && !payload.binary && kind === 'markdown' && (
-            <div className="beyond-prose text-[14.5px] leading-relaxed text-beyond-ink [&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1 [&_strong]:font-semibold [&_em]:italic [&_h1]:mb-3 [&_h1]:mt-5 [&_h1]:text-[20px] [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-[17px] [&_h2]:font-semibold [&_h3]:mb-1 [&_h3]:mt-3 [&_h3]:text-[15px] [&_h3]:font-semibold [&_hr]:my-4 [&_hr]:border-beyond-ink/10 [&_blockquote]:my-3 [&_blockquote]:border-l-2 [&_blockquote]:border-beyond-ink/10 [&_blockquote]:pl-3 [&_blockquote]:text-beyond-dim [&_table]:my-3 [&_table]:w-full [&_th]:border-b [&_th]:border-beyond-ink/10 [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_th]:text-[12px] [&_th]:uppercase [&_th]:tracking-wide [&_th]:text-beyond-faint [&_td]:border-b [&_td]:border-beyond-ink/[0.04] [&_td]:px-2 [&_td]:py-1.5">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                components={{
-                  a: ({ ...rest }) => (
-                    <a
-                      {...rest}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-beyond-ink underline decoration-beyond-ink/20 underline-offset-2 hover:decoration-beyond-ink/50"
-                    />
-                  ),
-                  code: ({ className, children }) => {
-                    const raw = String(children ?? '');
-                    const isBlock = /\n/.test(raw);
-                    if (isBlock) {
-                      return <BeyondCodeBlock code={raw.replace(/\n$/, '')} className={className} />;
-                    }
-                    return (
-                      <code className="bb-inlinecode rounded-md px-1.5 py-0.5 font-mono text-[0.9em]">
-                        {children}
-                      </code>
-                    );
-                  },
-                }}
-              >
-                {payload.content}
-              </ReactMarkdown>
-            </div>
-          )}
-
-          {/* Plain text / code */}
-          {payload && !payload.binary && kind === 'text' && (
-            <pre className="bb-pre overflow-x-auto whitespace-pre-wrap break-words rounded-[12px] px-4 py-3 font-mono text-[12.5px] leading-relaxed">
-              {payload.content}
-            </pre>
+          {/* Markdown and plain text: read it, or write in it. */}
+          {payload && !payload.binary && (kind === 'markdown' || kind === 'text') && (
+            <FileEditor
+              key={filePath}
+              path={filePath}
+              payload={payload}
+              kind={kind}
+              allowSplit={wide}
+              onOpenPath={(p) => window.dispatchEvent(new CustomEvent('beyond:open-file', { detail: { path: p } }))}
+              onSaved={(m) => setSavedMtime(m || null)}
+            />
           )}
         </div>
 
         {/* Footer — meta */}
         {(sizeBytes != null || payload?.mtime) && (
-          <footer className="flex flex-shrink-0 items-center justify-between gap-2 border-t border-beyond-ink/[0.06] px-5 py-2 text-[11px] text-beyond-faint">
+          <footer className="bb-fsheet__foot">
             <span>{sizeBytes != null ? `${Math.round(sizeBytes / 1024) || 1} kB` : ''}</span>
-            {payload?.mtime && (
-              <span title={payload.mtime}>
+            {(savedMtime || payload?.mtime) && (
+              <span title={savedMtime || payload?.mtime}>
                 Upraveno{' '}
-                {new Date(payload.mtime).toLocaleString('cs-CZ', {
+                {new Date((savedMtime || payload?.mtime) as string).toLocaleString('cs-CZ', {
                   day: '2-digit',
                   month: '2-digit',
                   hour: '2-digit',
@@ -433,6 +416,28 @@ export default function BeyondFilePreview({
         )}
       </motion.div>
     </motion.div>
+  );
+}
+
+function ExpandIcon({ wide }: { wide: boolean }) {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      {wide ? (
+        <>
+          <path d="M9 4v3a2 2 0 0 1-2 2H4" />
+          <path d="M20 9h-3a2 2 0 0 1-2-2V4" />
+          <path d="M4 15h3a2 2 0 0 1 2 2v3" />
+          <path d="M15 20v-3a2 2 0 0 1 2-2h3" />
+        </>
+      ) : (
+        <>
+          <path d="M4 9V6a2 2 0 0 1 2-2h3" />
+          <path d="M15 4h3a2 2 0 0 1 2 2v3" />
+          <path d="M20 15v3a2 2 0 0 1-2 2h-3" />
+          <path d="M9 20H6a2 2 0 0 1-2-2v-3" />
+        </>
+      )}
+    </svg>
   );
 }
 

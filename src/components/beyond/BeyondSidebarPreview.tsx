@@ -13,6 +13,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../auth';
 import { useBeyondCounts } from './useBeyondCounts';
 import { Tip, TipGroup } from './ui';
+import { toast } from './ui/toast';
 
 /**
  * Beyond Brain — v3 Sidebar (Liquid Glass).
@@ -211,11 +212,17 @@ function UniversalSessions({ onSwitch, query, openUuid }: { onSwitch?: (uuid: st
   if (sessions.length === 0) return null;
 
   const handleDelete = (s: BeyondSession) => {
-    if (!window.confirm(`Smazat chat „${s.title}" z indexu?\n(transkript na disku zůstane.)`)) return;
     const nextSessions = sessions.filter((x) => x.uuid !== s.uuid);
     const nextActive = activeUuid === s.uuid ? null : activeUuid;
     persistSessionIndex(UNIVERSAL_SLUG, { activeUuid: nextActive, sessions: nextSessions }, [s.uuid]);
     window.dispatchEvent(new CustomEvent('beyond:sessions-changed', { detail: { slug: UNIVERSAL_SLUG } }));
+    toast('Chat smazaný', 'Přepis na disku zůstal.', {
+      label: 'Vrátit',
+      run: () => {
+        persistSessionIndex(UNIVERSAL_SLUG, { activeUuid: nextActive, sessions });
+        window.dispatchEvent(new CustomEvent('beyond:sessions-changed', { detail: { slug: UNIVERSAL_SLUG } }));
+      },
+    });
   };
 
   const hidden = sessions.length - shown.length;
