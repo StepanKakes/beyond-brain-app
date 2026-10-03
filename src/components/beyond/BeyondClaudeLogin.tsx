@@ -20,7 +20,13 @@ export default function BeyondClaudeLogin({ onClose }: { onClose: () => void }) 
   const [code, setCode] = useState('');
   const [sent, setSent] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [slow, setSlow] = useState(false);
   const alive = useRef(true);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setSlow(true), 7000);
+    return () => window.clearTimeout(t);
+  }, []);
 
   const start = useCallback(async () => {
     setStatus({ state: 'starting' });
@@ -73,7 +79,12 @@ export default function BeyondClaudeLogin({ onClose }: { onClose: () => void }) 
       <div className="bb-dialog" role="dialog" aria-modal="true" aria-labelledby="bb-login-title" onClick={(e) => e.stopPropagation()}>
         <div className="bb-dialog__head" id="bb-login-title">Přihlášení Claude</div>
         <div className="bb-dialog__body">
-          {status.state === 'starting' && <p className="bb-fx__empty" style={{ padding: 0 }}><Spinner size={16} /> Připravuju přihlášení</p>}
+          {status.state === 'starting' && (
+            <>
+              <p className="bb-fx__empty" style={{ padding: 0 }}><Spinner size={16} /> Připravuju přihlášení</p>
+              {slow && status.tail && <pre className="bb-fx__pre">{status.tail}</pre>}
+            </>
+          )}
 
           {status.state === 'url' && (
             <>

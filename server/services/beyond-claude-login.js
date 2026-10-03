@@ -35,7 +35,7 @@ export function startClaudeLogin() {
     {
       name: 'xterm-256color',
       // Wide, so the address is never broken over lines.
-      cols: 500,
+      cols: 2000,
       rows: 40,
       cwd: os.homedir(),
       env: { ...process.env, TERM: 'xterm-256color', BROWSER: 'none' },
@@ -46,7 +46,8 @@ export function startClaudeLogin() {
   proc.onData((chunk) => {
     state.out = (state.out + chunk.replace(ANSI, '')).slice(-20000);
     if (!state.url) {
-      const m = URL_RE.exec(state.out);
+      // The terminal may still have wrapped it: join lines before matching.
+      const m = URL_RE.exec(state.out.replace(/\r?\n/g, ''));
       if (m) state.url = m[0];
     }
     if (/login successful|logged in as|successfully logged in/i.test(state.out)) state.done = true;
