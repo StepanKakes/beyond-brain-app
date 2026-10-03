@@ -52,7 +52,7 @@
 /* The scrim is plain tint: a blurred backdrop under a scrolling panel makes the
    browser re-sample the page behind it on every frame, which is what made the
    sheet stutter while scrolling. The panel is opaque for the same reason. */
-.bb-sheetscrim { position: fixed; inset: 0; z-index: 50; display: flex; align-items: stretch; justify-content: flex-end; background: rgba(12, 13, 16, .34); overscroll-behavior: contain; }
+.bb-sheetscrim { position: fixed; inset: 0; z-index: 70; display: flex; align-items: stretch; justify-content: flex-end; background: rgba(12, 13, 16, .34); overscroll-behavior: contain; }
 
 .bb-sheet { background: var(--bb-raise); backdrop-filter: none; -webkit-backdrop-filter: none; border-left: 1px solid var(--bb-line); box-shadow: var(--bb-shadow-lift); }
 .bb-fsheet { width: 100%; max-width: 680px; height: 100%; display: flex; flex-direction: column; min-height: 0;
