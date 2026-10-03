@@ -245,6 +245,21 @@ export default function BeyondApp() {
     [navigate],
   );
 
+  // Comments sent from a note: a clean chat holding only the commented places,
+  // so the agent starts from a few lines and not from a long history.
+  useEffect(() => {
+    const onSend = (e: Event) => {
+      const text = (e as CustomEvent<{ text?: string }>).detail?.text;
+      if (!text) return;
+      setPreviewPath(null);
+      setInitialPrompt(text);
+      setFreshEpoch((n) => n + 1);
+      navigate(pathForChat(UNIVERSAL_SLUG));
+    };
+    window.addEventListener('beyond:send-to-chat', onSend);
+    return () => window.removeEventListener('beyond:send-to-chat', onSend);
+  }, [navigate]);
+
   const handleGoHome = useCallback(() => {
     setInitialPrompt(undefined);
     navigate('/');

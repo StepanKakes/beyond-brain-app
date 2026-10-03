@@ -9,6 +9,7 @@ import { BubbleMenu } from '@tiptap/react/menus';
 import StarterKit from '@tiptap/starter-kit';
 
 import { dirname, fetchFile, saveFile, SaveConflict, type FilePayload } from '../files/api';
+import { CommentMarks, commentsPrompt, type NoteComment } from './comments';
 import { PROSE } from './MarkdownDoc';
 
 /**
@@ -71,6 +72,14 @@ export default function FileEditor({
   const [message, setMessage] = useState<string | null>(null);
   const [serverMtime, setServerMtime] = useState<string | null>(null);
 
+  // Comments made on this note, kept between visits until they are sent.
+  const storeKey = `beyond:comments:${path}`;
+  const [comments, setComments] = useState<NoteComment[]>(() => {
+    try { return JSON.parse(localStorage.getItem(storeKey) || '[]') as NoteComment[]; } catch { return []; }
+  });
+  const commentsRef = useRef<NoteComment[]>(comments);
+  const [pop, setPop] = useState<null | { id?: string; quote: string; text: string; x: number; y: number }>(null);
+
   const savedRef = useRef(payload.content);
   const mtimeRef = useRef<string | undefined>(payload.mtime);
   const draftRef = useRef(payload.content);
@@ -128,6 +137,7 @@ export default function FileEditor({
       TaskList,
       TaskItem.configure({ nested: true }),
       TableKit,
+      CommentMarks.configure({ getComments: () => commentsRef.current }),
       Placeholder.configure({ placeholder: 'Piš…' }),
     ],
     content: isMd ? body : '',
@@ -141,6 +151,42 @@ export default function FileEditor({
       change(front.current + ed.getMarkdown());
     },
   }, [path]);
+
+  // Keep the comments, and redraw their highlights when they change.
+  useEffect(() => {
+    commentsRef.current = comments;
+    try {
+      if (comments.length) localStorage.setItem(storeKey, JSON.stringify(comments));
+      else localStorage.removeItem(storeKey);
+    } catch { /* storage full or blocked: comments live for this visit */ }
+    if (editor && !editor.isDestroyed) editor.view.dispatch(editor.state.tr.setMeta('bbComments', true));
+  }, [comments, editor, storeKey]);
+
+  const openNewComment = () => {
+    if (!editor) return;
+    const { from, to } = editor.state.selection;
+    if (from === to) return;
+    const quote = editor.state.doc.textBetween(from, to, '\n').trim();
+    if (!quote) return;
+    const at = editor.view.coordsAtPos(to);
+    setPop({ quote, text: '', x: at.left, y: at.bottom });
+  };
+
+  const savePop = () => {
+    if (!pop || !pop.text.trim()) return;
+    setComments((prev) => (pop.id
+      ? prev.map((c) => (c.id === pop.id ? { ...c, text: pop.text.trim() } : c))
+      : [...prev, { id: Math.random().toString(36).slice(2, 9), quote: pop.quote, text: pop.text.trim() }]));
+    setPop(null);
+    if (editor) editor.commands.setTextSelection(editor.state.selection.to);
+  };
+
+  const sendComments = async () => {
+    if (!comments.length) return;
+    await flush();
+    window.dispatchEvent(new CustomEvent('beyond:send-to-chat', { detail: { text: commentsPrompt(path, comments) } }));
+    setComments([]);
+  };
 
   // Autosave after a pause in typing.
   useEffect(() => {
@@ -202,6 +248,11 @@ export default function FileEditor({
 
   // Cmd/Ctrl click follows a link; a plain click just puts the cursor in it.
   const onClickCapture = (e: React.MouseEvent) => {
+    const mark = (e.target as HTMLElement).closest('.bb-cm');
+    if (mark && !(e.target as HTMLElement).closest('a')) {
+      const c = commentsRef.current.find((x) => x.id === mark.getAttribute('data-cid'));
+      if (c) { const r = (mark as HTMLElement).getBoundingClientRect(); setPop({ id: c.id, quote: c.quote, text: c.text, x: r.left, y: r.bottom }); }
+    }
     const a = (e.target as HTMLElement).closest('a');
     if (!a) return;
     const href = a.getAttribute('href') || '';
@@ -225,6 +276,13 @@ export default function FileEditor({
   return (
     <div className="bb-ed">
       <div className="bb-ed__bar">
+        {comments.length > 0 && (
+          <div className="bb-ed__cmbar">
+            <span>{comments.length} {comments.length === 1 ? 'komentář' : comments.length < 5 ? 'komentáře' : 'komentářů'}</span>
+            <button type="button" className="bb-pill bb-pill--sm bb-pill--primary" onClick={() => void sendComments()}>Poslat do chatu</button>
+            <button type="button" className="bb-ed__link" onClick={() => setComments([])}>zahodit</button>
+          </div>
+        )}
         <div className="bb-ed__state" data-status={status} aria-live="polite">
           {stats && <span className="bb-ed__count" title="Odhad mluvení podle počtu slov">{stats}</span>}
           <span className="bb-ed__st">{editable ? STATUS_LABEL[status] : 'Jen ke čtení'}</span>
@@ -255,6 +313,8 @@ export default function FileEditor({
                 <BubbleBtn label="Úkoly" on={editor.isActive('taskList')} onClick={() => editor.chain().focus().toggleTaskList().run()}>Úkoly</BubbleBtn>
                 <BubbleBtn label="Citace" on={editor.isActive('blockquote')} onClick={() => editor.chain().focus().toggleBlockquote().run()}>Citace</BubbleBtn>
                 <BubbleBtn label="Odkaz" on={editor.isActive('link')} onClick={setLink}>Odkaz</BubbleBtn>
+                <span className="bb-ed__sep" />
+                <BubbleBtn label="Komentář k označenému" on={false} onClick={openNewComment}>Komentář</BubbleBtn>
               </BubbleMenu>
             )}
             <EditorContent editor={editor} className={`${PROSE} bb-ed__doc`} />
@@ -272,6 +332,36 @@ export default function FileEditor({
           />
         )}
       </div>
+
+      {pop && (
+        <div
+          className="bb-cmpop"
+          style={{ left: Math.max(12, Math.min(pop.x, window.innerWidth - 340)), top: Math.min(pop.y + 8, window.innerHeight - 190) }}
+          role="dialog"
+          aria-label="Komentář"
+        >
+          <p className="bb-cmpop__q">„{pop.quote.length > 90 ? `${pop.quote.slice(0, 90)}…` : pop.quote}"</p>
+          <textarea
+            className="bb-cmpop__ta"
+            value={pop.text}
+            onChange={(e) => setPop({ ...pop, text: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setPop(null);
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); savePop(); }
+            }}
+            placeholder="Co tu změnit"
+            rows={3}
+            autoFocus
+          />
+          <div className="bb-cmpop__acts">
+            <button type="button" className="bb-pill bb-pill--sm bb-pill--primary" disabled={!pop.text.trim()} onClick={savePop}>{pop.id ? 'Uložit' : 'Přidat'}</button>
+            <button type="button" className="bb-pill bb-pill--sm" onClick={() => setPop(null)}>Zrušit</button>
+            {pop.id && (
+              <button type="button" className="bb-ed__link" style={{ marginLeft: 'auto' }} onClick={() => { setComments((prev) => prev.filter((c) => c.id !== pop.id)); setPop(null); }}>smazat</button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
