@@ -312,7 +312,10 @@ function mapCliOptionsToSDK(options = {}) {
   // but being explicit ensures forward compatibility and clarity.
   sdkOptions.tools = { type: 'preset', preset: 'claude_code' };
 
-  sdkOptions.disallowedTools = settings.disallowedTools || [];
+  // Monitor re-wakes the agent every time a watched command expires, and each
+  // wake-up is a full model turn that nobody asked for (a chat kept answering
+  // "expired monitor, nothing new" for hours). The brain does not need it.
+  sdkOptions.disallowedTools = [...new Set([...(settings.disallowedTools || []), 'Monitor'])];
 
   // Map model (default to sonnet)
   // Valid models: sonnet, opus, haiku, opusplan, sonnet[1m]
