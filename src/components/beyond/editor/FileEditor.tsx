@@ -8,8 +8,8 @@ import { EditorContent, useEditor } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
 import StarterKit from '@tiptap/starter-kit';
 
-import { dirname, fetchFile, saveFile, SaveConflict, type FilePayload } from '../files/api';
-import { CommentMarks, commentsPrompt, type NoteComment } from './comments';
+import { dirname, fetchFile, reviseFile, saveFile, SaveConflict, type FilePayload } from '../files/api';
+import { CommentMarks, commentsPrompt, findQuote, type NoteComment, type Revision } from './comments';
 import { PROSE } from './MarkdownDoc';
 
 /**
@@ -78,6 +78,12 @@ export default function FileEditor({
     try { return JSON.parse(localStorage.getItem(storeKey) || '[]') as NoteComment[]; } catch { return []; }
   });
   const commentsRef = useRef<NoteComment[]>(comments);
+  // Comments handled in place: ids being worked on, then proposals awaiting a yes or no.
+  const [working, setWorking] = useState<string[]>([]);
+  const workingRef = useRef<string[]>([]);
+  const [revs, setRevs] = useState<Revision[]>([]);
+  const revsRef = useRef<Revision[]>([]);
+  const [reviseError, setReviseError] = useState<string | null>(null);
   const [pop, setPop] = useState<null | { id?: string; quote: string; text: string; x: number; y: number }>(null);
 
   const savedRef = useRef(payload.content);
@@ -137,7 +143,7 @@ export default function FileEditor({
       TaskList,
       TaskItem.configure({ nested: true }),
       TableKit,
-      CommentMarks.configure({ getComments: () => commentsRef.current }),
+      CommentMarks.configure({ getComments: () => commentsRef.current, getWorking: () => workingRef.current, getRevisions: () => revsRef.current }),
       Placeholder.configure({ placeholder: 'Piš…' }),
     ],
     content: isMd ? body : '',
@@ -161,6 +167,58 @@ export default function FileEditor({
     } catch { /* storage full or blocked: comments live for this visit */ }
     if (editor && !editor.isDestroyed) editor.view.dispatch(editor.state.tr.setMeta('bbComments', true));
   }, [comments, editor, storeKey]);
+
+  // Redraw the sweep and the proposals when they change; the page is locked while the agent works.
+  useEffect(() => {
+    workingRef.current = working;
+    revsRef.current = revs;
+    if (editor && !editor.isDestroyed) {
+      editor.setEditable(editable && isMd && working.length === 0);
+      editor.view.dispatch(editor.state.tr.setMeta('bbComments', true));
+    }
+  }, [working, revs, editor, editable, isMd]);
+
+  const reviseComments = async () => {
+    if (!comments.length || working.length) return;
+    setReviseError(null);
+    await flush();
+    const batch = comments;
+    setWorking(batch.map((c) => c.id));
+    try {
+      const out = await reviseFile(path, batch);
+      const next: Revision[] = [];
+      for (const r of out) {
+        const c = batch.find((x) => x.id === r.id);
+        if (c) next.push({ id: c.id, quote: c.quote, text: r.text });
+      }
+      setRevs(next);
+      if (!next.length) setReviseError('Agent nic nenavrhl');
+    } catch (e) {
+      setReviseError((e as Error).message || 'Úprava se nepovedla');
+    } finally {
+      setWorking([]);
+    }
+  };
+
+  const resolveRev = (id: string, accept: boolean) => {
+    const rev = revsRef.current.find((r) => r.id === id);
+    if (rev && accept && editor) {
+      const r = findQuote(editor.state.doc, rev.quote);
+      if (r) editor.chain().insertContentAt({ from: r.from, to: r.to }, rev.text, { contentType: 'markdown' }).run();
+    }
+    setRevs((prev) => prev.filter((x) => x.id !== id));
+    setComments((prev) => prev.filter((c) => c.id !== id));
+  };
+
+  const resolveAll = (accept: boolean) => {
+    // Bottom of the page first, so earlier places keep their positions.
+    const order = [...revsRef.current].sort((a, b) => {
+      const pa = editor ? findQuote(editor.state.doc, a.quote)?.from ?? 0 : 0;
+      const pb = editor ? findQuote(editor.state.doc, b.quote)?.from ?? 0 : 0;
+      return pb - pa;
+    });
+    for (const r of order) resolveRev(r.id, accept);
+  };
 
   const openNewComment = () => {
     if (!editor) return;
@@ -248,6 +306,8 @@ export default function FileEditor({
 
   // Cmd/Ctrl click follows a link; a plain click just puts the cursor in it.
   const onClickCapture = (e: React.MouseEvent) => {
+    const rb = (e.target as HTMLElement).closest('[data-rev]') as HTMLElement | null;
+    if (rb) { e.preventDefault(); resolveRev(rb.dataset.rev || '', rb.dataset.act === 'ok'); return; }
     const mark = (e.target as HTMLElement).closest('.bb-cm');
     if (mark && !(e.target as HTMLElement).closest('a')) {
       const c = commentsRef.current.find((x) => x.id === mark.getAttribute('data-cid'));
@@ -276,13 +336,22 @@ export default function FileEditor({
   return (
     <div className="bb-ed">
       <div className="bb-ed__bar">
-        {comments.length > 0 && (
+        {working.length > 0 ? (
+          <div className="bb-ed__cmbar"><span className="bb-ed__think">Upravuju {working.length} {working.length === 1 ? 'místo' : 'místa'}</span></div>
+        ) : revs.length > 0 ? (
+          <div className="bb-ed__cmbar">
+            <span>{revs.length} {revs.length === 1 ? 'návrh' : revs.length < 5 ? 'návrhy' : 'návrhů'}</span>
+            <button type="button" className="bb-pill bb-pill--sm bb-pill--primary" onClick={() => resolveAll(true)}>Přijmout vše</button>
+            <button type="button" className="bb-pill bb-pill--sm" onClick={() => resolveAll(false)}>Zamítnout vše</button>
+          </div>
+        ) : comments.length > 0 ? (
           <div className="bb-ed__cmbar">
             <span>{comments.length} {comments.length === 1 ? 'komentář' : comments.length < 5 ? 'komentáře' : 'komentářů'}</span>
-            <button type="button" className="bb-pill bb-pill--sm bb-pill--primary" onClick={() => void sendComments()}>Poslat do chatu</button>
+            <button type="button" className="bb-pill bb-pill--sm bb-pill--primary" onClick={() => void reviseComments()}>Upravit</button>
+            <button type="button" className="bb-ed__link" onClick={() => void sendComments()}>poslat do chatu</button>
             <button type="button" className="bb-ed__link" onClick={() => setComments([])}>zahodit</button>
           </div>
-        )}
+        ) : null}
         <div className="bb-ed__state" data-status={status} aria-live="polite">
           {stats && <span className="bb-ed__count" title="Odhad mluvení podle počtu slov">{stats}</span>}
           <span className="bb-ed__st">{editable ? STATUS_LABEL[status] : 'Jen ke čtení'}</span>
@@ -298,6 +367,7 @@ export default function FileEditor({
           </span>
         </div>
       )}
+      {reviseError && <div className="bb-ed__note bb-ed__note--err" role="alert"><span>{reviseError}</span><button type="button" className="bb-ed__link" onClick={() => setReviseError(null)}>zavřít</button></div>}
       {status === 'error' && message && <div className="bb-ed__note bb-ed__note--err" role="alert"><span>{message}</span></div>}
 
       <div className="bb-ed__body" onClickCapture={onClickCapture}>

@@ -830,6 +830,77 @@ router.post('/sessions/suggest-title', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/beyond/file/revise  { path, comments: [{ id, quote, text }] }
+ * The editor's comments, handled in place: the model gets the note and the
+ * comments and answers with the new text for each commented place only, so
+ * the reply is small. Nothing is written here; the editor shows the proposals
+ * and the user accepts them. Returns { revisions: [{ id, text }] }.
+ */
+router.post('/file/revise', async (req, res) => {
+  const { path: p, comments } = req.body || {};
+  const resolved = resolveWritablePath(p);
+  if (resolved.error) return res.status(resolved.status).json({ error: resolved.error });
+  const list = Array.isArray(comments)
+    ? comments
+        .filter((c) => c && typeof c.id === 'string' && typeof c.quote === 'string' && typeof c.text === 'string')
+        .slice(0, 30)
+    : [];
+  if (!list.length) return res.status(400).json({ error: 'Chybí komentáře' });
+  let doc;
+  try {
+    doc = await fs.readFile(resolved.abs, 'utf8');
+  } catch {
+    return res.status(404).json({ error: 'Soubor neexistuje' });
+  }
+  if (doc.length > 80_000) return res.status(413).json({ error: 'Soubor je moc dlouhý na rychlou úpravu' });
+
+  const items = list
+    .map((c, i) => `${i + 1}. Místo: """${c.quote.slice(0, 1500)}"""\n   Komentář: ${c.text.slice(0, 1500)}`)
+    .join('\n');
+  const system =
+    'Jsi redaktor textů v češtině. Dostaneš poznámku (markdown) a komentáře k označeným místům. ' +
+    'Pro každý komentář napiš nový text pouze pro to označené místo, ve stejném hlase a stylu jako okolní text, ' +
+    'tak aby zapadl mezi okolní věty. Zachovej markdown syntaxi, pokud ji místo mělo. ' +
+    'Žádná emoji, žádné pomlčky ani spojovníky jako interpunkce, žádné tečky na konci krátkých řádků, pokud je původní text nemá. ' +
+    'Odpověz POUZE JSON polem ve tvaru [{"n":1,"text":"nový text"}], bez vysvětlování a bez bloku kódu.';
+  const prompt = `Poznámka:\n"""\n${doc}\n"""\n\nKomentáře:\n${items}`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 120_000);
+  req.on('close', () => { if (!res.writableEnded) controller.abort(); });
+  try {
+    const result = await runSdkOneShot({
+      command: prompt,
+      cwd: BRAIN_PATH,
+      model: 'sonnet',
+      bare: true,
+      bareTools: [],
+      systemPrompt: system,
+      skipPermissions: true,
+      signal: controller.signal,
+    });
+    let raw = String(result?.text || '').trim();
+    const a = raw.indexOf('[');
+    const b = raw.lastIndexOf(']');
+    if (a >= 0 && b > a) raw = raw.slice(a, b + 1);
+    let parsed;
+    try { parsed = JSON.parse(raw); } catch { parsed = null; }
+    if (!Array.isArray(parsed)) return res.status(502).json({ error: 'Odpověď se nepodařilo přečíst, zkus to znovu' });
+    const revisions = [];
+    for (const r of parsed) {
+      const c = list[Number(r?.n) - 1];
+      if (c && typeof r.text === 'string' && r.text.trim()) revisions.push({ id: c.id, text: r.text.trim() });
+    }
+    res.json({ revisions });
+  } catch (err) {
+    console.warn('[beyond] revise failed', err?.message || err);
+    res.status(500).json({ error: controller.signal.aborted ? 'Trvalo to moc dlouho' : 'Úprava se nepovedla' });
+  } finally {
+    clearTimeout(timer);
+  }
+});
+
 /** Trim a model reply down to a clean one-line title. */
 function sanitizeTitle(text) {
   let t = String(text || '').trim();

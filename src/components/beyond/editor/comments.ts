@@ -39,22 +39,62 @@ export function findQuote(doc: PMNode, quote: string): { from: number; to: numbe
   return { from: a, to: b + 1 };
 }
 
-export const CommentMarks = Extension.create<{ getComments: () => NoteComment[] }>({
+/** What the agent proposed for one comment: the new text for the commented place. */
+export type Revision = { id: string; quote: string; text: string };
+
+type MarkOptions = {
+  getComments: () => NoteComment[];
+  /** Ids of the comments being worked on right now (the sweep animation). */
+  getWorking: () => string[];
+  /** Proposed changes waiting for a yes or no. */
+  getRevisions: () => Revision[];
+};
+
+function revisionWidget(r: Revision): HTMLElement {
+  const el = document.createElement('span');
+  el.className = 'bb-rev';
+  el.contentEditable = 'false';
+  const txt = document.createElement('span');
+  txt.className = 'bb-rev__new';
+  txt.textContent = r.text;
+  const acts = document.createElement('span');
+  acts.className = 'bb-rev__acts';
+  for (const [act, label] of [['ok', 'Přijmout'], ['no', 'Zamítnout']] as const) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.rev = r.id;
+    b.dataset.act = act;
+    b.className = act === 'ok' ? 'bb-rev__b bb-rev__b--ok' : 'bb-rev__b';
+    b.textContent = label;
+    b.onmousedown = (e) => e.preventDefault();
+    acts.appendChild(b);
+  }
+  el.append(txt, acts);
+  return el;
+}
+
+export const CommentMarks = Extension.create<MarkOptions>({
   name: 'commentMarks',
   addOptions() {
-    return { getComments: () => [] };
+    return { getComments: () => [], getWorking: () => [], getRevisions: () => [] };
   },
   addProseMirrorPlugins() {
-    const get = this.options.getComments;
+    const { getComments, getWorking, getRevisions } = this.options;
     return [
       new Plugin({
         key: new PluginKey('bbComments'),
         props: {
           decorations(state) {
             const decos: Decoration[] = [];
-            for (const c of get()) {
+            const working = getWorking();
+            const revs = getRevisions();
+            for (const c of getComments()) {
               const r = findQuote(state.doc, c.quote);
-              if (r) decos.push(Decoration.inline(r.from, r.to, { class: 'bb-cm', 'data-cid': c.id }));
+              if (!r) continue;
+              const rev = revs.find((x) => x.id === c.id);
+              const cls = working.includes(c.id) ? 'bb-cm bb-cm--work' : rev ? 'bb-cm bb-cm--old' : 'bb-cm';
+              decos.push(Decoration.inline(r.from, r.to, { class: cls, 'data-cid': c.id }));
+              if (rev) decos.push(Decoration.widget(r.to, () => revisionWidget(rev), { key: `rev-${rev.id}-${rev.text.length}`, side: 1 }));
             }
             return DecorationSet.create(state.doc, decos);
           },

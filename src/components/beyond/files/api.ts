@@ -86,3 +86,17 @@ export function basename(p: string): string {
 export function dirname(p: string): string {
   return p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '';
 }
+
+/** Ask the agent to rework the commented places. Nothing is saved; it returns proposals. */
+export async function reviseFile(
+  path: string,
+  comments: { id: string; quote: string; text: string }[],
+): Promise<{ id: string; text: string }[]> {
+  const r = await authenticatedFetch('/api/beyond/file/revise', {
+    method: 'POST',
+    body: JSON.stringify({ path, comments }),
+  });
+  const data = await r.json().catch(() => null);
+  if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
+  return data.revisions as { id: string; text: string }[];
+}
