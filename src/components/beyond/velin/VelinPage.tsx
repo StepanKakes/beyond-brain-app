@@ -752,6 +752,19 @@ function QuickAdd({ me, owner, people, onAdded }: { me: string; owner: string; p
 }
 
 const MODE_KEY = 'beyond:velin-mode';
+const WHEN_KEY = 'beyond:velin-kdy';
+const WHENS = [
+  { key: 'dnes', label: 'Dnes' },
+  { key: 'zitra', label: 'Zítra' },
+  { key: 'vse', label: 'Vše' },
+];
+
+/** Dnes keeps what is late, due today or has no date; Zítra only tomorrow. */
+function inWhen(task: Task, when: string): boolean {
+  if (when === 'vse') return true;
+  if (when === 'zitra') return task.due === isoPlus(1);
+  return !task.due || task.due <= isoPlus(0);
+}
 const MODES = [
   { key: 'dnes', label: 'Dnes' },
   { key: 'stav', label: 'Stav' },
@@ -774,6 +787,10 @@ export default function VelinPage({ onOpenClient, onOpenCalls, onOpenChat }: Pro
   // Whose Google calendar is being wired, when the dialog is open.
   const [calFor, setCalFor] = useState<string | null>(null);
   const [showDone, setShowDone] = useState(false);
+  const [when, setWhen] = useState<string>(() => {
+    try { return localStorage.getItem(WHEN_KEY) || 'dnes'; } catch { return 'dnes'; }
+  });
+  useEffect(() => { try { localStorage.setItem(WHEN_KEY, when); } catch { /* private window */ } }, [when]);
   const [local, setLocal] = useState<Task[] | null>(null);
 
   const today = useMemo(() => new Date().toLocaleDateString('cs-CZ', DATE_FMT), []);
@@ -803,6 +820,7 @@ export default function VelinPage({ onOpenClient, onOpenCalls, onOpenChat }: Pro
 
   const visible = sortTasks(
     tasks.filter((t) => {
+      if (!inWhen(t, when)) return false;
       if (viewedPerson) return t.owner === viewedPerson || t.owner === 'all';
       if (view === 'ready') return Boolean(t.prep) && t.state !== 'done';
       return true;
@@ -865,6 +883,9 @@ export default function VelinPage({ onOpenClient, onOpenCalls, onOpenChat }: Pro
                   { key: 'ready', label: 'Připravené brainem' },
                 ]}
               />
+              <span className="bb-uk__when">
+                <Tabs label="Kdy" value={when} onChange={setWhen} items={WHENS} />
+              </span>
             </div>
 
             {ukoly.error && !ukoly.data && <Empty>Úkoly se nenačetly: {ukoly.error}</Empty>}
@@ -885,7 +906,7 @@ export default function VelinPage({ onOpenClient, onOpenCalls, onOpenChat }: Pro
               </div>
             )}
             {ukoly.data && work.length === 0 && open.length === 0 && (
-              <Empty>{view === 'ready' ? 'Brain teď nic připraveného nemá.' : 'Nic na řadě. Napiš úkol nahoře, nebo počkej, co ráno přinese brain.'}</Empty>
+              <Empty>{view === 'ready' ? 'Brain teď nic připraveného nemá.' : when === 'zitra' ? 'Na zítřek zatím nic.' : 'Nic na řadě. Napiš úkol nahoře, nebo počkej, co ráno přinese brain.'}</Empty>
             )}
             {done.length > 0 && (
               <div className="bb-uk__group">

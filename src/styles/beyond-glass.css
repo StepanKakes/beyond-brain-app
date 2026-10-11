@@ -612,6 +612,7 @@ body { background: var(--bb-bg) !important; color: var(--bb-ink); font-family: v
 .bb-uk__hint { font-size: 12px; color: var(--bb-ink3); }
 .bb-uk__hint code { font-family: inherit; color: var(--bb-ink2); background: var(--bb-panel2); padding: 0 5px; border-radius: 5px; }
 .bb-uk__filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; align-items: center; }
+.bb-uk__when { margin-left: auto; }
 .bb-pill--person { padding-left: 4px; gap: 6px; }
 .bb-pill--person .bb-uk__av { width: 20px; height: 20px; font-size: 10px; }
 
