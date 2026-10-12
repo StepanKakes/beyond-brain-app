@@ -1039,6 +1039,23 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
         reloadHistory(sessionIdRef.current);
         setThinking(false);
       }
+      // A question or approval sent while we were away never reached this
+      // screen. The server keeps it until answered, so show it again; one
+      // it no longer knows was answered or cancelled elsewhere.
+      const pending = Array.isArray(m.pendingPermissions)
+        ? (m.pendingPermissions as Record<string, unknown>[])
+        : [];
+      const pendingIds = new Set(pending.map((p) => String(p.requestId ?? '')));
+      setAskRequest((prev) => (prev && !pendingIds.has(prev.requestId) ? null : prev));
+      setPermRequest((prev) => (prev && !pendingIds.has(prev.requestId) ? null : prev));
+      for (const p of pending) {
+        handleStreamMessage({
+          kind: 'permission_request',
+          requestId: p.requestId,
+          toolName: p.toolName,
+          input: p.input,
+        });
+      }
       return;
     }
   };

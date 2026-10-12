@@ -292,6 +292,10 @@ export function handleChatConnection(
           provider,
           isProcessing: isActive,
           turnActive,
+          // Questions and approvals still waiting for an answer, so a browser
+          // that was away when they were sent can show them again.
+          pendingPermissions:
+            provider === 'claude' && sessionId ? dependencies.getPendingApprovalsForSession(sessionId) : [],
         });
         return;
       }

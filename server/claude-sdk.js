@@ -1275,6 +1275,9 @@ async function startNewBeyondStream(command, options, ws) {
     const decision = await waitForToolApproval(requestId, {
       timeoutMs: requiresInteraction ? 0 : undefined,
       signal: context?.signal,
+      // Lets a browser that comes back later ask for this prompt again; the
+      // original permission_request may have gone to a socket that was dead.
+      metadata: { _sessionId: entry.sdkSessionId, _toolName: toolName, _input: input, _receivedAt: new Date() },
       onCancel: (reason) => {
         entry.ws?.send(createNormalizedMessage({
           kind: 'permission_cancelled',
