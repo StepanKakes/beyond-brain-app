@@ -263,6 +263,49 @@ export const fetchCalls = (days = 14) => get<CallsPage>(`/calls?days=${days}`);
 
 export const fetchUkoly = () => get<Ukoly>('/ukoly');
 
+/* KPI (Q4) */
+
+export type KpiArea = 'akvizice' | 'cally' | 'trzby' | 'reklama' | 'obsah';
+export type KpiMetric = {
+  key: string;
+  area: KpiArea;
+  label: string;
+  unit: 'count' | 'czk' | 'pct';
+  /** max: more is better; min: less is better. */
+  dir: 'max' | 'min';
+  agg: 'sum' | 'ratio' | null;
+};
+export type KpiValues = Record<string, number | null>;
+export type KpiWeek = {
+  week: string;
+  from: string;
+  to: string;
+  month: string;
+  status: 'past' | 'current' | 'future';
+  hasFile: boolean;
+  final: boolean;
+  updatedAt: string | null;
+  errors: string[];
+  values: KpiValues;
+  targets: KpiValues;
+  leadsBySource: { source: string; count: number }[] | null;
+};
+export type KpiMonth = { month: string; weeksIn: number; values: KpiValues; targets: KpiValues };
+export type Kpi = {
+  configured: boolean;
+  fetchedAt: string;
+  period: { from: string; to: string; weeks: number };
+  currentWeek: string;
+  hasWeekFiles: boolean;
+  calcom: { configured: boolean; error: string | null; events: string[] };
+  metrics: KpiMetric[];
+  weeks: KpiWeek[];
+  months: KpiMonth[];
+  errors: string[];
+};
+
+export const fetchKpi = (force = false) => get<Kpi>(`/kpi${force ? '?force=1' : ''}`);
+
 async function send<T>(pathname: string, method: string, body?: unknown): Promise<T> {
   const res = await authenticatedFetch(`/api/beyond/velin${pathname}`, {
     method,

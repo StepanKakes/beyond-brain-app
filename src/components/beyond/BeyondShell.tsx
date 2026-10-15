@@ -40,6 +40,7 @@ type Props = {
   onOpenFiles?: () => void;
   onOpenObsah?: () => void;
   onOpenStudio?: () => void;
+  onOpenKpi?: () => void;
   onOpenUniversalChat?: () => void;
   /** Back to the chat that is open, as opposed to starting a new one. */
   onReturnToChat?: () => void;
@@ -60,6 +61,7 @@ export default function BeyondShell({
   onOpenFiles,
   onOpenObsah,
   onOpenStudio,
+  onOpenKpi,
   onOpenUniversalChat,
   onReturnToChat,
   onSwitchUniversalSession,
@@ -122,6 +124,7 @@ export default function BeyondShell({
             onOpenFiles={onOpenFiles ? () => { onOpenFiles(); closeOnMobile(); } : undefined}
             onOpenObsah={onOpenObsah ? () => { onOpenObsah(); closeOnMobile(); } : undefined}
             onOpenStudio={onOpenStudio ? () => { onOpenStudio(); closeOnMobile(); } : undefined}
+            onOpenKpi={onOpenKpi ? () => { onOpenKpi(); closeOnMobile(); } : undefined}
             onOpenUniversalChat={onOpenUniversalChat ? handleOpenUniversal : undefined}
             onReturnToChat={onReturnToChat ? handleReturnToChat : undefined}
             onSwitchUniversalSession={onSwitchUniversalSession ? handleSwitchUniversal : undefined}

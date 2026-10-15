@@ -105,6 +105,7 @@ Deploy pouští obojí na runneru, takže rozbitý typecheck nenasadí, ale nepr
 /klienti             mřížka klientů podle naléhavosti
 /klient/<slug>       detail: časová osa, sliby, měření, vlajky
 /hovory              naplánované hovory z Cal.com
+/kpi                 KPI Q4: skutečnost proti cíli týdne, trend 12 týdnů
 /c/<client-slug>     chat klienta (naváže na jeho aktivní session)
 /c/new               čerstvý univerzální chat
 /c/new/<uuid>        konkrétní univerzální session
@@ -233,6 +234,7 @@ obrazovka Agent neukazuje fantoma.
 | `pripomenout-hovor` | každých 10 min | Hodinu před hovorem pošle na Telegram, s kým je, co je otevřené a na co si dát pozor |
 | `napsat-co-dluzime` | denně 07:10 | U slibů na naší straně zkusí rovnou napsat ten výstup do `workspace/drafty/`. Když nemá podklad, řekne, co chybí |
 | `zalozit-soubory` | denně 07:30 | Aktivnímu klientovi bez `mereni.md` nebo `_action-items.md` je založí podle vzoru |
+| `kpi-raw` | denně 06:30 | Z Beo (leady podle keyword workflow, nepřečtené, pipeline, platby) a Meta Ads (spend, konverzace) zapíše čísla týdne do `workspace/kpi/tydny/<YYYY-Www>.json`, v pondělí uzavře minulý týden. Jen čte, nic neposílá. Schéma v `server/services/beyond-kpi.js` a `workspace/kpi/README.md` |
 | `ranni-brief` | denně 06:40 | Spočítá signály, napíše krátký brief, uloží do `workspace/reporty/` a pošle na Telegram |
 | `pripravit-hovory` | denně 18:30 | Pro každý hovor do 36 hodin vygeneruje brief skillem `pre-call` do `workspace/briefy/` |
 | `roadmap-check` | pondělí 08:00 | Plán proti realitě u všech aktivních klientů |
@@ -646,3 +648,7 @@ checkboxů funguje i v režimu Číst. Skripty na reels žijí v `workspace/reel
 `.bb-sheet`) nesmí mít `backdrop-filter`: rozmazání pod scrollujícím panelem
 dělalo cukání. Chyba o vypršelém přihlášení Claude v chatu ukáže tlačítko, které
 otevře terminál s `claude /login` (událost `beyond:open-claude-login`, také v Nastavení).
+
+## KPI (15.10.2026)
+
+Obrazovka `/kpi` (sidebar KPI) čte `GET /api/beyond/velin/kpi` (`server/services/beyond-kpi.js`, cache 60 s, `?force=1` obejde). Tři zdroje: cíle `workspace/kpi/cile.json` (ručně), týdenní soubory od úlohy `kpi-raw` (Beo a Meta Ads přes MCP `beo`, `meta-ads`) a Cal.com živě (ICP cally = typy událostí z `cile.json` → `cally.udalosti`, výchozí `strategicky-hovor`, `webinar-2030-hovor`; no show z `attendees[].absent`). Neznámé je `null`, v grafu mezera, na dlaždici „chybí data". Aktuální týden se barví podle tempa (cíl krát uplynulé dny), jinak by každé pondělí svítilo červeně.

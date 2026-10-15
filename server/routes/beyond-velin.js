@@ -11,6 +11,7 @@ import express from 'express';
 import { getBrainIndex, invalidateBrainIndex, daysSince } from '../services/brain-index.js';
 import { inbox, signalsForClient } from '../services/brain-signals.js';
 import { getCalls, isConfigured as callsConfigured, invalidateCallsCache } from '../services/beyond-calls.js';
+import { getKpi } from '../services/beyond-kpi.js';
 import { calendarStatus, invalidateCalendars, testIcsUrl } from '../services/beyond-kalendar.js';
 import { usageReport, subscriptionLimits, brainShare } from '../services/beyond-usage.js';
 import { getPeople, personForUser } from '../services/beyond-people.js';
@@ -247,6 +248,19 @@ router.get('/calls', async (req, res) => {
   } catch (err) {
     console.error('[velin] /calls failed', err);
     res.status(500).json({ error: err?.message || 'hovory selhaly' });
+  }
+});
+
+/**
+ * Q4 KPI: targets from workspace/kpi/cile.json, week files from the kpi-raw
+ * job, sales calls live from Cal.com. Unknown stays null.
+ */
+router.get('/kpi', async (req, res) => {
+  try {
+    res.json(await getKpi({ force: req.query.force === '1' }));
+  } catch (err) {
+    console.error('[velin] /kpi failed', err);
+    res.status(500).json({ error: err?.message || 'KPI selhalo' });
   }
 });
 

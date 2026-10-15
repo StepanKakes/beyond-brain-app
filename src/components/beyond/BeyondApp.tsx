@@ -19,6 +19,7 @@ import BeyondClaudeLogin from './BeyondClaudeLogin';
 import Toaster from './ui/Toaster';
 import ObsahPage from './velin/ObsahPage';
 import StudioPage from './velin/StudioPage';
+import KpiPage from './velin/KpiPage';
 import { useBeyondClients, type BeyondClient } from './useBeyondClients';
 import { UNIVERSAL_SLUG } from './beyondSessionsApi';
 
@@ -61,6 +62,7 @@ type View =
   | { kind: 'files'; path: string | null }
   | { kind: 'obsah' }
   | { kind: 'studio' }
+  | { kind: 'kpi' }
   | { kind: 'chat' };
 
 function parseView(pathname: string): View {
@@ -71,6 +73,7 @@ function parseView(pathname: string): View {
   if (parts[0] === 'agent') return { kind: 'agent' };
   if (parts[0] === 'obsah') return { kind: 'obsah' };
   if (parts[0] === 'stories') return { kind: 'studio' };
+  if (parts[0] === 'kpi') return { kind: 'kpi' };
   if (parts[0] === 'soubory') {
     const rest = parts.slice(1).map((p) => decodeURIComponent(p)).join('/');
     return { kind: 'files', path: rest || null };
@@ -362,6 +365,7 @@ export default function BeyondApp() {
   const openAgent = useCallback(() => navigate('/agent'), [navigate]);
   const openObsah = useCallback(() => navigate('/obsah'), [navigate]);
   const openStudio = useCallback(() => navigate('/stories'), [navigate]);
+  const openKpi = useCallback(() => navigate('/kpi'), [navigate]);
   const openFiles = useCallback(
     (p?: string | null) => navigate(p ? `/soubory/${p.split('/').map(encodeURIComponent).join('/')}` : '/soubory'),
     [navigate],
@@ -377,6 +381,7 @@ export default function BeyondApp() {
       onOpenFiles={() => openFiles(null)}
       onOpenObsah={openObsah}
       onOpenStudio={openStudio}
+      onOpenKpi={openKpi}
       onOpenUniversalChat={handleOpenUniversalChat}
       onReturnToChat={handleReturnToChat}
       onSwitchUniversalSession={handleSwitchUniversalSession}
@@ -421,6 +426,8 @@ export default function BeyondApp() {
             <ObsahPage onOpenStudio={openStudio} onOpenClient={openClient} />
           ) : view.kind === 'studio' ? (
             <StudioPage />
+          ) : view.kind === 'kpi' ? (
+            <KpiPage />
           ) : (
             <BeyondWelcome
               onSubmit={(message) => handleWelcomePrompt(message)}

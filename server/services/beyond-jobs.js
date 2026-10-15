@@ -44,6 +44,7 @@ import { createTask as createUkol, findByPrepRef, listTasks as listUkoly } from 
 import { applyTaskPlan, notionConfigured as notionReady, readClientTaskState, tasksFromWriteup, upsertCallPage } from './beyond-notion.js';
 import { hasMomentsFor, listItems as listObsah, markChecked as markCallChecked } from './beyond-obsah.js';
 import { cutMissing } from './beyond-clip.js';
+import { addDays as kpiAddDays, invalidateKpiCache, weekOf as kpiWeekOf } from './beyond-kpi.js';
 
 /** Give a scheduled run room; these prompts read a lot of files. */
 const JOB_TIMEOUT_MS = 12 * 60 * 1000;
@@ -99,6 +100,7 @@ const JOB_MCP = {
   'zalozit-soubory': [],
   'pripomenout-hovor': [],
   'uceni-review': [],
+  'kpi-raw': ['beo', 'meta-ads'],
 };
 
 /**
@@ -119,6 +121,7 @@ const JOB_EFFORT = {
   'napsat-co-dluzime': 'medium',
   'pripravit-hovory': 'medium',
   'srovnat-profily': 'medium',
+  'kpi-raw': 'low',
 };
 
 function effortForJob(name) {
@@ -1676,6 +1679,79 @@ const contentStories = {
 };
 
 /* ------------------------------------------------------------------ */
+/* KPI: the week's numbers from Beo and Meta Ads                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The KPI screen reads one file per ISO week (`workspace/kpi/tydny/`). Beo and
+ * Meta Ads are only reachable through their MCP connectors, so an agent turn
+ * fetches and writes; Cal.com the server reads live itself. The schema lives
+ * in server/services/beyond-kpi.js and workspace/kpi/README.md.
+ */
+function kpiPrompt(today) {
+  const cur = kpiWeekOf(today);
+  const monday = new Date(`${today}T12:00:00Z`).getUTCDay() === 1;
+  const prev = kpiWeekOf(kpiAddDays(cur.from, -7));
+  const elapsed = Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${cur.from}T00:00:00Z`)) / 86_400_000) + 1;
+  const weeks = [`- ${cur.week} (${cur.from} až ${cur.to}), "final": false`];
+  if (monday) weeks.push(`- ${prev.week} (${prev.from} až ${prev.to}), "final": true. Uzavři ho: přepočítej jen čísla s datem (newLeads, leadsBySource, revenue, ads, content) přesně podle hranic týdne, "unread" a "pipeline" nech, jak v souboru jsou (byl to stav v daný den); když soubor neexistuje, dej je null.`);
+  return [
+    `Dnes je ${today}. Zapiš KPI čísla týdne do brainu.`,
+    '',
+    'Soubory (jeden na týden, celý ho přepiš):',
+    ...weeks.map((w) => w.replace(/^- (\S+)/, '- workspace/kpi/tydny/$1.json, týden $1')),
+    '',
+    'Schéma je v workspace/kpi/README.md, přečti ho a drž ho přesně (klíče anglicky, čísla jako čísla, ne text).',
+    `Týden začíná v pondělí 00:00 a končí v neděli 23:59 (Europe/Prague). Aktuální týden má zatím ${elapsed} dní.`,
+    '',
+    'Odkud co vzít (Beo = nástroje mcp__beo__*, Meta Ads = mcp__meta-ads__*):',
+    `- beo.newLeads: mcp__beo__list_leads(since_days dost na celý týden), spočítej leady s created_at uvnitř týdne. Kontrola: analytics_overview(since_days=${elapsed}).leads.new_in_window.`,
+    '- beo.leadsBySource: podle keyword workflow, které konverzaci založilo (první příchozí DM se slovem jako „Heaton"). Použij list_workflows a list_workflow_leads, název zdroje = název workflow nebo jeho klíčové slovo. Leady z týdne, které do žádného keyword workflow nevstoupily, dej do {"source": "bez workflow"}. Lead v několika workflow počítej jen u prvního. Součet má sedět s newLeads. read_lead_journey jen na pár sporných leadů, ne na všechny.',
+    '- beo.unread: analytics_overview → conversations.with_unread (stav teď).',
+    '- beo.pipeline: analytics_overview → pipeline[]: "Hovor nabídnutý" → callOffered, "Hovor domluvený" → callBooked, "Klient" → clients.',
+    '- beo.outreachSent a beo.replies: jen když je Beo dává (analytics_overview, campaign_results pro kampaně odeslané v týdnu). Jinak null.',
+    '- revenue: list_payments(days dost na celý týden), jen platby s paid_at uvnitř týdne. paidCZK = součet v CZK, payments = počet, byDay = {"YYYY-MM-DD": částka} podle dne zaplacení. Platby v jiné měně nepřepočítávej, zapiš je do errors.',
+    '- ads: Meta Ads insights za účet pro rozsah dat týdne (od pondělí do dneška, u uzavřeného týdne celý týden): spendCZK = spend, conversations = zahájené konverzace ve zprávách (messaging_conversation_started), costPerConversation = spend / conversations zaokrouhleno. Když účet není v CZK, dej spendCZK null a měnu do errors. Když Meta Ads konektor není dostupný, "ads": null.',
+    '- content.reels a content.youtube: publikované reels na Instagramu a videa na YouTube s datem v týdnu. Zkus Beo (content_outliers, list_youtube_channels). Když to nejde, spočítej z workspace/obsah/osa.json položky kind "reel" ve stavu "zverejneno" s datem v týdnu a do content.source napiš "osa" (osa nevidí všechno, tak to uveď v errors). Když nevíš, null. content.source = "beo" nebo "osa".',
+    '',
+    'Pravidla:',
+    '- Nikdy si číslo nevymýšlej a nedoplňuj nulu tam, kde nevíš. Neznámé = null. Nula jen když zdroj opravdu vrátil nulu.',
+    '- Když nástroj selže, celý jeho blok dej null a do "errors" napiš krátce co a proč (např. "ads: konektor Meta Ads nedostupný").',
+    '- Neposílej žádnou DM, nespouštěj workflow ani kampaň, neměň v Beu nic (žádné tagy, leady, sync). Jen čti. V Meta Ads taky nic neměň.',
+    '- Žádný jiný soubor nepiš. updatedAt = teď v ISO (UTC).',
+    '',
+    'Na konci odpověz jedním řádkem: týden, newLeads, unread, paidCZK, spendCZK, reels, youtube a co chybělo.',
+  ].join('\n');
+}
+
+const kpiRaw = {
+  name: 'kpi-raw',
+  model: 'sonnet',
+  title: 'KPI čísla týdne',
+  description:
+    'Ráno stáhne z Beo (leady podle workflow, nepřečtené, pipeline, platby) a z Meta Ads (spend, konverzace) ' +
+    'čísla aktuálního týdne do workspace/kpi/tydny/<týden>.json. V pondělí uzavře minulý týden. Jen čte, nic neposílá.',
+  dailyAt: { hour: 6, minute: 30 },
+  async run({ log }) {
+    const today = todayIso();
+    const cur = kpiWeekOf(today);
+    const result = await runAgent(kpiPrompt(today), { timeoutMs: 10 * 60 * 1000 });
+    invalidateKpiCache();
+    const abs = path.join(resolveBrainPath(), 'workspace', 'kpi', 'tydny', `${cur.week}.json`);
+    let parsed = null;
+    try {
+      parsed = JSON.parse(await fs.readFile(abs, 'utf8'));
+    } catch (err) {
+      throw new Error(`${cur.week}.json chybí nebo není platný JSON (${err?.message || err}). Agent: ${String(result.text || '').slice(0, 400)}`);
+    }
+    if (parsed?.week !== cur.week) throw new Error(`${cur.week}.json má week "${parsed?.week}"`);
+    const errs = Array.isArray(parsed.errors) && parsed.errors.length ? ` Chybělo: ${parsed.errors.join('; ')}` : '';
+    log(`${cur.week} zapsán${errs}`);
+    return { summary: `${String(result.text || '').trim().slice(0, 1500)}${errs ? `\n${errs}` : ''}` };
+  },
+};
+
+/* ------------------------------------------------------------------ */
 /* custom jobs from system/ulohy.json                                  */
 /* ------------------------------------------------------------------ */
 
@@ -1812,6 +1888,7 @@ export const JOBS = [
   tidyProfiles,
   contentMoments,
   contentStories,
+  kpiRaw,
   learningReview,
   modelWatch,
 ];
