@@ -21,19 +21,22 @@
  *     "updatedAt": "2026-10-15T04:30:00Z",
  *     "final": false,                // true once the week is closed (Monday run)
  *     "beo": {
- *       "newLeads": 14,              // leads created within the week
+ *       "newLeads": 14,              // first inbound DM ever within the week (Beo kpi_week)
  *       "leadsBySource": [           // by keyword workflow that started the conversation
  *         { "source": "Heaton", "count": 6 },
  *         { "source": "bez workflow", "count": 3 }
  *       ],
  *       "unread": 2,                 // conversations with unread, snapshot at updatedAt
  *       "pipeline": { "callOffered": 3, "callBooked": 1, "clients": 0 },
- *       "outreachSent": null,
- *       "replies": null
+ *       "outreachSent": 40,          // conversations we started within the week
+ *       "outreachMessages": { "total": 300, "human": 60, "automation": 240 },
+ *       "replies": 25,               // people who sent at least one DM within the week
+ *       "repliesToOutreach": 8,      // conversations we started that got a first reply within the week
+ *       "callsBooked": { "bookedInRange": 2, "startingInRange": 3 }
  *     },
  *     "revenue": { "paidCZK": 80000, "payments": 1, "byDay": { "2026-10-14": 80000 } },
  *     "ads": { "spendCZK": 4800, "conversations": 21, "costPerConversation": 229 },
- *     "content": { "reels": 6, "youtube": 1, "source": "beo" },
+ *     "content": { "reels": 6, "posts": 1, "stories": 20, "youtube": 1, "source": "beo" },
  *     "errors": ["ads: konektor Meta Ads nedostupný"]
  *   }
  */

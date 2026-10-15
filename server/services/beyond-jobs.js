@@ -1694,7 +1694,7 @@ function kpiPrompt(today) {
   const prev = kpiWeekOf(kpiAddDays(cur.from, -7));
   const elapsed = Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${cur.from}T00:00:00Z`)) / 86_400_000) + 1;
   const weeks = [`- ${cur.week} (${cur.from} až ${cur.to}), "final": false`];
-  if (monday) weeks.push(`- ${prev.week} (${prev.from} až ${prev.to}), "final": true. Uzavři ho: přepočítej jen čísla s datem (newLeads, leadsBySource, revenue, ads, content) přesně podle hranic týdne, "unread" a "pipeline" nech, jak v souboru jsou (byl to stav v daný den); když soubor neexistuje, dej je null.`);
+  if (monday) weeks.push(`- ${prev.week} (${prev.from} až ${prev.to}), "final": true. Uzavři ho: přepočítej jen čísla s datem (newLeads, leadsBySource, outreachSent, outreachMessages, replies, repliesToOutreach, callsBooked, revenue, ads, content) přesně podle hranic týdne, "unread" a "pipeline" nech, jak v souboru jsou (byl to stav v daný den); když soubor neexistuje, dej je null.`);
   return [
     `Dnes je ${today}. Zapiš KPI čísla týdne do brainu.`,
     '',
@@ -1705,14 +1705,14 @@ function kpiPrompt(today) {
     `Týden začíná v pondělí 00:00 a končí v neděli 23:59 (Europe/Prague). Aktuální týden má zatím ${elapsed} dní.`,
     '',
     'Odkud co vzít (Beo = nástroje mcp__beo__*, Meta Ads = mcp__meta-ads__*):',
-    `- beo.newLeads: mcp__beo__list_leads(since_days dost na celý týden), spočítej leady s created_at uvnitř týdne. Kontrola: analytics_overview(since_days=${elapsed}).leads.new_in_window.`,
-    '- beo.leadsBySource: podle keyword workflow, které konverzaci založilo (první příchozí DM se slovem jako „Heaton"). Použij list_workflows a list_workflow_leads, název zdroje = název workflow nebo jeho klíčové slovo. Leady z týdne, které do žádného keyword workflow nevstoupily, dej do {"source": "bez workflow"}. Lead v několika workflow počítej jen u prvního. Součet má sedět s newLeads. read_lead_journey jen na pár sporných leadů, ne na všechny.',
-    '- beo.unread: analytics_overview → conversations.with_unread (stav teď).',
-    '- beo.pipeline: analytics_overview → pipeline[]: "Hovor nabídnutý" → callOffered, "Hovor domluvený" → callBooked, "Klient" → clients.',
-    '- beo.outreachSent a beo.replies: jen když je Beo dává (analytics_overview, campaign_results pro kampaně odeslané v týdnu). Jinak null.',
-    '- revenue: list_payments(days dost na celý týden), jen platby s paid_at uvnitř týdne. paidCZK = součet v CZK, payments = počet, byDay = {"YYYY-MM-DD": částka} podle dne zaplacení. Platby v jiné měně nepřepočítávej, zapiš je do errors.',
-    '- ads: Meta Ads insights za účet pro rozsah dat týdne (od pondělí do dneška, u uzavřeného týdne celý týden): spendCZK = spend, conversations = zahájené konverzace ve zprávách (messaging_conversation_started), costPerConversation = spend / conversations zaokrouhleno. Když účet není v CZK, dej spendCZK null a měnu do errors. Když Meta Ads konektor není dostupný, "ads": null.',
-    '- content.reels a content.youtube: publikované reels na Instagramu a videa na YouTube s datem v týdnu. Zkus Beo (content_outliers, list_youtube_channels). Když to nejde, spočítej z workspace/obsah/osa.json položky kind "reel" ve stavu "zverejneno" s datem v týdnu a do content.source napiš "osa" (osa nevidí všechno, tak to uveď v errors). Když nevíš, null. content.source = "beo" nebo "osa".',
+    '- Bloky beo, revenue a content: jedno volání mcp__beo__kpi_week(from, to) na každý týden výš (from = pondělí, to = neděle; počítá v Europe/Prague). Jiné Beo nástroje na čísla nevolej (list_leads, analytics_overview ani list_workflows, počítají jinak). Přepis:',
+    '  - beo.newLeads = newLeads, beo.leadsBySource = leadsBySource (beze změny, včetně "bez workflow")',
+    '  - beo.unread = unread, beo.pipeline: z pipeline {název fáze: počet} vezmi "Hovor nabídnutý" → callOffered, "Hovor domluvený" → callBooked, "Klient" → clients (fáze, která chybí, je null)',
+    '  - beo.outreachSent = outreachSent.people, beo.outreachMessages = outreachSent.messages, beo.replies = replies.people, beo.repliesToOutreach = replies.toOutreach, beo.callsBooked = callsBooked',
+    '  - revenue = revenue (paidCZK, payments, byDay; otherCurrencies, když tam je, nepřepočítávej a zmiň v errors)',
+    '  - content = content (reels, posts, stories, youtube) a content.source = "beo"',
+    '  - Co je v odpovědi kpi_week null, je null i v souboru; jeho "errors" přepiš do errors s předponou (např. "beo.leadsBySource: …"). Když kpi_week celé selže, beo, revenue i content dej null a důvod do errors.',
+    '- ads: Meta Ads insights jen za reklamní účet „Creationwithtim" (jiný účet, např. Studio MK, nikdy). Rozsah dat týdne (od pondělí do dneška, u uzavřeného týdne celý týden): spendCZK = spend, conversations = zahájené konverzace ve zprávách (messaging_conversation_started), costPerConversation = spend / conversations zaokrouhleno. Když účet Creationwithtim nenajdeš nebo není v CZK, "ads": null a důvod do errors. Když Meta Ads konektor není dostupný, "ads": null.',
     '',
     'Pravidla:',
     '- Nikdy si číslo nevymýšlej a nedoplňuj nulu tam, kde nevíš. Neznámé = null. Nula jen když zdroj opravdu vrátil nulu.',
@@ -1729,7 +1729,7 @@ const kpiRaw = {
   model: 'sonnet',
   title: 'KPI čísla týdne',
   description:
-    'Ráno stáhne z Beo (leady podle workflow, nepřečtené, pipeline, platby) a z Meta Ads (spend, konverzace) ' +
+    'Ráno stáhne z Beo jedním voláním kpi_week (leady podle workflow, oslovení, nepřečtené, pipeline, platby, obsah) a z Meta Ads, účet Creationwithtim (spend, konverzace) ' +
     'čísla aktuálního týdne do workspace/kpi/tydny/<týden>.json. V pondělí uzavře minulý týden. Jen čte, nic neposílá.',
   dailyAt: { hour: 6, minute: 30 },
   async run({ log }) {
