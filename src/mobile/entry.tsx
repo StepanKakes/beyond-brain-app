@@ -16,7 +16,9 @@ const applyTheme = () => {
   }
   const dark = saved === 'dark' || (saved !== 'light' && media.matches);
   root.classList.toggle('dark', dark);
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#101216' : '#F6F6F4');
+  // Glisse má vlastní tmavé tokeny a bez tohohle by se řídil jen systémem, ne volbou v appce.
+  root.dataset.theme = dark ? 'dark' : 'light';
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#000000' : '#F6F6F4');
 };
 applyTheme();
 media.addEventListener('change', applyTheme);

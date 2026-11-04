@@ -3,12 +3,11 @@ import { SearchField } from 'glisse';
 
 import { api } from './api';
 import { CHATS_KEY } from './Chat';
-import { Icon } from './icons';
 import { UNIVERSAL, navigate } from './router';
 import { mutate, readCache, useResource } from './store';
 import { TASKS_KEY, TASKS_PATH } from './Today';
 import type { ChatSession, SessionIndex, TasksResponse } from './types';
-import { Empty, Section, SwipeRow, TabScreen, ago, deleteWithUndo } from './ui';
+import { BarButton, Empty, Section, SwipeRow, TabScreen, ago, deleteWithUndo } from './ui';
 
 function groupOf(ms: number): string {
   const date = new Date(ms);
@@ -96,9 +95,7 @@ export function ChatsScreen() {
     <TabScreen
       title="Chaty"
       action={
-        <button type="button" className="m-icon-btn" aria-label="Nový chat" onClick={() => navigate('/m/chat/new')}>
-          <Icon name="compose" />
-        </button>
+        <BarButton icon="compose" label="Nový chat" onClick={() => navigate('/m/chat/new')} />
       }
     >
       {chats.length ? (

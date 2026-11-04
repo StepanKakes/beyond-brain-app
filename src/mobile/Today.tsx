@@ -7,6 +7,7 @@ import { navigate } from './router';
 import { mutate, readCache, refresh, useResource, writeCache } from './store';
 import type { Call, CallsResponse, Task, TasksResponse, VelinResponse } from './types';
 import {
+  BarButton,
   Empty,
   Picker,
   Section,
@@ -411,9 +412,7 @@ export function TodayScreen() {
       subtitle={whoLabel ? `${subtitle} · ${whoLabel}` : subtitle}
       action={
         people.length > 1 ? (
-          <button type="button" className="m-icon-btn" aria-label="Čí úkoly" onClick={() => setChoosing(true)}>
-            <Icon name={person === 'tym' ? 'team' : 'person'} />
-          </button>
+          <BarButton icon={person === 'tym' ? 'team' : 'person'} label="Čí úkoly" onClick={() => setChoosing(true)} />
         ) : undefined
       }
     >

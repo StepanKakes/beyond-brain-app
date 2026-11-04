@@ -9,6 +9,7 @@ import {
   type ReactNode,
   type SyntheticEvent,
 } from 'react';
+import { Button } from 'glisse';
 import { createPortal } from 'react-dom';
 
 import { Icon, type IconName } from './icons';
@@ -61,13 +62,26 @@ export function TabScreen({
   );
 }
 
+/** Kulaté skleněné tlačítko v rohu lišty, přímo z glisse. */
+export function BarButton({
+  icon,
+  label,
+  onClick,
+  className,
+}: {
+  icon: IconName;
+  label: string;
+  onClick: () => void;
+  className?: string;
+}) {
+  return <Button className={className} icon={<Icon name={icon} />} aria-label={label} onClick={onClick} />;
+}
+
 /** Lišta vnořené obrazovky se šipkou zpět. */
 export function PushedBar({ title, sub, action }: { title: string; sub?: ReactNode; action?: ReactNode }) {
   return (
     <header className="m-bar m-bar-pushed">
-      <button type="button" className="m-icon-btn m-bar-back" aria-label="Zpět" onClick={() => back()}>
-        <Icon name="back" size={22} />
-      </button>
+      <BarButton className="m-bar-back" icon="back" label="Zpět" onClick={() => back()} />
       <div className="m-bar-title" title={title}>
         <span className="m-bar-title-text">{title}</span>
         {sub}

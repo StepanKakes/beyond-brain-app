@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { Button } from 'glisse';
+import { Button, Glass } from 'glisse';
 
 import { mergeHistory, rebuildHistory, statusLabel, uid } from '../components/beyond/chat/transcript';
 import { useSmoothText } from '../components/beyond/chat/useSmoothText';
@@ -802,7 +802,7 @@ export function ChatScreen({
           send();
         }}
       >
-        <div className="m-composer-card">
+        <Glass className="m-composer-card">
         {attachments.length ? (
           <div className="m-attachments">
             {attachments.map((attachment) => (
@@ -864,7 +864,7 @@ export function ChatScreen({
               </button>
             )}
           </div>
-        </div>
+        </Glass>
         <input
           ref={photoInput}
           type="file"
