@@ -26,6 +26,7 @@ import { runSdkOneShot } from '../claude-sdk.js';
 import { getBrainIndex, invalidateBrainIndex } from './brain-index.js';
 import { inbox, signalsForClient } from './brain-signals.js';
 import { getCalls } from './beyond-calls.js';
+import { pushToEveryone } from './notification-orchestrator.js';
 import { getPeople } from './beyond-people.js';
 import { resolveBrainPath } from '../utils/brain-path.js';
 import { getJobState, lastOkSummary, listRuns, markJobRan, ranToday } from './beyond-runs.js';
@@ -919,6 +920,7 @@ const morningBrief = {
     // text that should land.
     const text = String(result.text || '').trim();
     const delivery = await tgBroadcast(text);
+    void pushToEveryone({ title: 'Ranní brief', body: text.slice(0, 180), url: '/m', tag: 'ranni-brief' });
     const note = delivery.skipped
       ? `Telegram nenastavený (${delivery.skipped}), brief je jen v brainu.`
       : `Odesláno: ${delivery.sent.join(', ') || 'nikomu'}${delivery.failed?.length ? ` · selhalo: ${delivery.failed.join('; ')}` : ''}`;
@@ -1398,6 +1400,12 @@ const callReminder = {
       if (call.meetingUrl) lines.push(call.meetingUrl);
 
       const delivery = await tgBroadcast(lines.join('\n'));
+      void pushToEveryone({
+        title: `Za hodinu: ${call.clientName || call.title}`,
+        body: lines.slice(1).join(' ').slice(0, 180),
+        url: '/m/hovory',
+        tag: `hovor-${call.uid}`,
+      });
       if (delivery.skipped) return { skipped: delivery.skipped };
       announced.add(call.uid);
       sentFor.push(call.clientName || call.title);

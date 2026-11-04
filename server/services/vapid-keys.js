@@ -26,7 +26,7 @@ function getPublicKey() {
 function configureWebPush() {
   const keys = ensureVapidKeys();
   webPush.setVapidDetails(
-    'mailto:noreply@claudecodeui.local',
+    process.env.BEYOND_VAPID_SUBJECT || 'https://brain.growbeyond.cz',
     keys.publicKey,
     keys.privateKey
   );

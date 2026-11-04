@@ -676,3 +676,28 @@ otevře terminál s `claude /login` (událost `beyond:open-claude-login`, také 
 ## KPI (15.10.2026)
 
 Obrazovka `/kpi` (sidebar KPI) čte `GET /api/beyond/velin/kpi` (`server/services/beyond-kpi.js`, cache 60 s, `?force=1` obejde). Tři zdroje: cíle `workspace/kpi/cile.json` (ručně), týdenní soubory od úlohy `kpi-raw` (Beo a Meta Ads přes MCP `beo`, `meta-ads`) a Cal.com živě (ICP cally = typy událostí z `cile.json` → `cally.udalosti`, výchozí `strategicky-hovor`, `webinar-2030-hovor`; no show z `attendees[].absent`). Neznámé je `null`, v grafu mezera, na dlaždici „chybí data". Aktuální týden se barví podle tempa (cíl krát uplynulé dny), jinak by každé pondělí svítilo červeně.
+
+## Mobilní appka (4.11.2026)
+
+Zkušební PWA na `/m`, oddělený balík v `src/mobile/` (asi 85 kB gzip na start,
+desktop se nenačítá). `src/main.jsx` jen rozhoduje, který balík se stáhne; desktop
+začíná v `src/desktop-entry.jsx`. Appka přidaná na plochu telefonu míří na `/` a
+přesměruje se na `/m`, `/?desktop=1` to pro dané spuštění vypne.
+
+- **Komponenty:** tab bar, přepínače a tlačítka z knihovny `glisse`. Safari neumí
+  živě lámat světlo pozadí, lišty jsou proto rozmazané sklo z `mobile.css`.
+- **Rychlost:** kostra a písma ze service workeru, data hned z localStorage
+  (`store.ts`) a potichu dohnaná ze serveru, taby zůstávají v DOMu i se scrollem,
+  animace jen `transform` přes Web Animations, chat scrolluje `column-reverse`.
+- **Navigace:** `router.ts` + `Stack.tsx`, swipe zpět od levého okraje.
+- **Ukázka bez serveru:** `/m?ukazka`, data v `ukazka.ts`.
+
+**Push:** `pushToEveryone` / `pushToUser` v `notification-orchestrator.js` berou
+`{title, body, url}`, klepnutí otevře `url`. Posílá se ranní brief, připomínka
+hovoru, nový návrh zprávy (`/m/ukol/navrh:<id>`) a konec běhu chatu. Service
+worker cíl navíc uloží do cache, appka si ho vyzvedne i po studeném startu.
+Zapíná se v `/m/vice`, na iPhonu jen z appky na ploše. VAPID `subject` musí být
+platná adresa, Apple jinak push odmítne (`BEYOND_VAPID_SUBJECT`).
+
+**Zámek závislostí:** `npm install` na Macu přepíše `package-lock.json` tisíci
+změn a může rozbít `npm ci` na Windows. Novou závislost do něj dopisuj cíleně.

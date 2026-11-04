@@ -10,6 +10,7 @@
  * text could change after you read it, reading it was pointless.
  */
 import { getConnection } from '../modules/database/connection.js';
+import { pushToEveryone } from './notification-orchestrator.js';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS beyond_proposals (
@@ -119,7 +120,13 @@ export function createProposal({
       new Date().toISOString(),
       createdBy,
     );
-  return { id: Number(info.lastInsertRowid) };
+  const id = Number(info.lastInsertRowid);
+  void pushToEveryone({
+    title: clientName ? `Návrh pro ${clientName}` : title,
+    body: body.trim().slice(0, 160),
+    url: `/m/ukol/navrh:${id}`,
+  });
+  return { id };
 }
 
 export function listProposals({ status = 'pending', limit = 50 } = {}) {

@@ -1,7 +1,7 @@
 import express from 'express';
 import { apiKeysDb, credentialsDb, notificationPreferencesDb, pushSubscriptionsDb } from '../modules/database/index.js';
 import { getPublicKey } from '../services/vapid-keys.js';
-import { createNotificationEvent, notifyUserIfEnabled } from '../services/notification-orchestrator.js';
+import { createNotificationEvent, notifyUserIfEnabled, pushToUser } from '../services/notification-orchestrator.js';
 
 const router = express.Router();
 
@@ -239,7 +239,7 @@ router.post('/push/subscribe', async (req, res) => {
       provider: 'system',
       kind: 'info',
       code: 'push.enabled',
-      meta: { message: 'Push notifications are now enabled!' },
+      meta: { message: 'Notifikace jsou zapnuté' },
       severity: 'info'
     });
     notifyUserIfEnabled({ userId: req.user.id, event });
@@ -247,6 +247,17 @@ router.post('/push/subscribe', async (req, res) => {
     console.error('Error saving push subscription:', error);
     res.status(500).json({ error: 'Failed to save push subscription' });
   }
+});
+
+// Zkouška z mobilní appky: klepnutí má otevřít konkrétní obrazovku.
+router.post('/push/test', async (req, res) => {
+  await pushToUser(req.user.id, {
+    title: 'Zkušební notifikace',
+    body: 'Klepni a otevřou se Hovory',
+    url: '/m/hovory',
+    tag: 'push-test',
+  });
+  res.json({ success: true });
 });
 
 router.post('/push/unsubscribe', async (req, res) => {

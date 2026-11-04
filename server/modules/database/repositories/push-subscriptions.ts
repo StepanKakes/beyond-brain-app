@@ -41,6 +41,14 @@ export const pushSubscriptionsDb = {
       .all(userId) as PushSubscriptionLookupRow[];
   },
 
+  /** Every subscribed device, for notifications from brain jobs that have no user in scope. */
+  getAllSubscriptions(): PushSubscriptionLookupRow[] {
+    const db = getConnection();
+    return db
+      .prepare('SELECT endpoint, keys_p256dh, keys_auth FROM push_subscriptions')
+      .all() as PushSubscriptionLookupRow[];
+  },
+
   /** Deletes one subscription by endpoint. */
   deletePushSubscription(endpoint: string): void {
     const db = getConnection();

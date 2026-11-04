@@ -114,36 +114,35 @@ function resolveSessionName(event) {
 function buildPushBody(event) {
   const CODE_MAP = {
     'permission.required': event.meta?.toolName
-      ? `Action Required: Tool "${event.meta.toolName}" needs approval`
-      : 'Action Required: A tool needs your approval',
-    'run.stopped': event.meta?.stopReason || 'Run Stopped: The run has stopped',
-    'run.failed': event.meta?.error ? `Run Failed: ${event.meta.error}` : 'Run Failed: The run encountered an error',
-    'agent.notification': event.meta?.message ? String(event.meta.message) : 'You have a new notification',
-    'push.enabled': 'Push notifications are now enabled!'
+      ? `Čeká na povolení: ${event.meta.toolName}`
+      : 'Čeká na tvoje povolení',
+    'run.stopped': event.meta?.stopReason || 'Hotovo, můžeš se podívat',
+    'run.failed': event.meta?.error ? `Nepovedlo se: ${event.meta.error}` : 'Běh se nepovedl',
+    'agent.notification': event.meta?.message ? String(event.meta.message) : 'Máš novou zprávu',
+    'push.enabled': 'Notifikace jsou zapnuté'
   };
-  const providerLabel = PROVIDER_LABELS[event.provider] || 'Assistant';
   const sessionName = resolveSessionName(event);
-  const message = CODE_MAP[event.code] || 'You have a new notification';
+  const message = CODE_MAP[event.code] || 'Máš novou zprávu';
 
   return {
-    title: sessionName || 'CloudCLI',
-    body: `${providerLabel}: ${message}`,
+    title: sessionName || 'Beyond',
+    body: message,
     data: {
       sessionId: event.sessionId || null,
       code: event.code,
       provider: event.provider || null,
       sessionName,
+      // Klepnutí otevře chat, ze kterého notifikace přišla.
+      url: event.sessionId ? `/m/chat/${event.sessionId}` : '/m',
       tag: `${event.provider || 'assistant'}:${event.sessionId || 'none'}:${event.code}`
     }
   };
 }
 
-async function sendWebPush(userId, event) {
-  const subscriptions = pushSubscriptionsDb.getSubscriptions(userId);
-  if (!subscriptions.length) return;
+// TTL a urgency: bez nich může Apple doručení na uspaný telefon odkládat.
+const PUSH_OPTIONS = { TTL: 86400, urgency: 'high' };
 
-  const payload = JSON.stringify(buildPushBody(event));
-
+async function deliver(subscriptions, payload) {
   const results = await Promise.allSettled(
     subscriptions.map((sub) =>
       webPush.sendNotification(
@@ -154,7 +153,8 @@ async function sendWebPush(userId, event) {
             auth: sub.keys_auth
           }
         },
-        payload
+        payload,
+        PUSH_OPTIONS
       )
     )
   );
@@ -165,9 +165,37 @@ async function sendWebPush(userId, event) {
       const statusCode = result.reason?.statusCode;
       if (statusCode === 410 || statusCode === 404) {
         pushSubscriptionsDb.removeSubscription(subscriptions[index].endpoint);
+      } else {
+        console.warn('[push] doručení selhalo', statusCode, result.reason?.body || result.reason?.message);
       }
     }
   });
+}
+
+/**
+ * Notifikace z úloh brainu. Klepnutí otevře `url`, takže konkrétní zprávu nebo
+ * návrh. Nikdy nevyhazuje: výpadek pushe nesmí shodit úlohu, která ho posílá.
+ */
+async function pushMessage(getSubscriptions, { title, body, url = '/m', tag }) {
+  try {
+    const subscriptions = getSubscriptions();
+    if (!subscriptions.length) return;
+    await deliver(subscriptions, JSON.stringify({ title, body, data: { url, tag: tag || url } }));
+  } catch (error) {
+    console.warn('[push] selhalo', error?.message);
+  }
+}
+
+const pushToUser = (userId, message) =>
+  pushMessage(() => pushSubscriptionsDb.getSubscriptions(userId), message);
+
+const pushToEveryone = (message) =>
+  pushMessage(() => pushSubscriptionsDb.getAllSubscriptions(), message);
+
+async function sendWebPush(userId, event) {
+  const subscriptions = pushSubscriptionsDb.getSubscriptions(userId);
+  if (!subscriptions.length) return;
+  await deliver(subscriptions, JSON.stringify(buildPushBody(event)));
 }
 
 function notifyUserIfEnabled({ userId, event }) {
@@ -221,6 +249,8 @@ function notifyRunFailed({ userId, provider, sessionId = null, error, sessionNam
 }
 
 export {
+  pushToUser,
+  pushToEveryone,
   createNotificationEvent,
   notifyUserIfEnabled,
   notifyRunStopped,

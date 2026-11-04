@@ -1,0 +1,175 @@
+import { useEffect, useRef, useState } from 'react';
+import { Button, Input, TabBar } from 'glisse';
+
+import { UKAZKA, getToken, login } from './api';
+import { ChatScreen } from './Chat';
+import { Icon } from './icons';
+import { CallsScreen, ChatsScreen, MoreScreen } from './Lists';
+import { takePendingLink } from './push';
+import { navigate, selectTab, useRouter, type Entry, type Tab } from './router';
+import { startSocket, stopSocket } from './socket';
+import { Stack } from './Stack';
+import { TaskDetail } from './TaskDetail';
+import { TodayScreen } from './Today';
+import { ToastHost } from './ui';
+
+const TABS: { value: Tab; label: string; icon: Parameters<typeof Icon>[0]['name'] }[] = [
+  { value: 'dnes', label: 'Dnes', icon: 'tasks' },
+  { value: 'chaty', label: 'Chaty', icon: 'chat' },
+  { value: 'hovory', label: 'Hovory', icon: 'calendar' },
+  { value: 'vice', label: 'Více', icon: 'more' },
+];
+
+function Login() {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  return (
+    <form
+      className="m-login"
+      onSubmit={(event) => {
+        event.preventDefault();
+        setBusy(true);
+        setError(null);
+        login(username.trim(), password).catch((e: Error) => {
+          setError(e.message);
+          setBusy(false);
+        });
+      }}
+    >
+      <h1>Beyond Brain</h1>
+      <Input
+        value={username}
+        onValueChange={setUsername}
+        placeholder="Uživatel"
+        aria-label="Uživatel"
+        autoCapitalize="none"
+        autoCorrect="off"
+        autoComplete="username"
+      />
+      <Input
+        value={password}
+        onValueChange={setPassword}
+        placeholder="Heslo"
+        aria-label="Heslo"
+        type="password"
+        autoComplete="current-password"
+      />
+      {error ? <p className="m-login-error">{error}</p> : null}
+      <Button type="submit" variant="filled" disabled={busy || !username.trim() || !password}>
+        Přihlásit se
+      </Button>
+    </form>
+  );
+}
+
+function Shell() {
+  const { tab, stack } = useRouter();
+  const base = useRef<HTMLDivElement>(null);
+  // Taby zůstávají v paměti i se scrollem, přepnutí nic nepřekresluje.
+  const [visited, setVisited] = useState<Set<Tab>>(() => new Set([tab]));
+
+  useEffect(() => {
+    setVisited((current) => (current.has(tab) ? current : new Set(current).add(tab)));
+  }, [tab]);
+
+  useEffect(() => {
+    startSocket();
+    return stopSocket;
+  }, []);
+
+  // Cíl z notifikace, ať je appka zavřená, nebo jen na pozadí.
+  useEffect(() => {
+    const openPending = () => {
+      if (document.visibilityState !== 'visible') return;
+      void takePendingLink().then((url) => {
+        if (url) navigate(url);
+      });
+    };
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as { type?: string; urlPath?: string } | null;
+      if (data?.type === 'notification:navigate' && data.urlPath) {
+        void takePendingLink();
+        navigate(data.urlPath);
+      }
+    };
+    openPending();
+    document.addEventListener('visibilitychange', openPending);
+    navigator.serviceWorker?.addEventListener('message', onMessage);
+    return () => {
+      document.removeEventListener('visibilitychange', openPending);
+      navigator.serviceWorker?.removeEventListener('message', onMessage);
+    };
+  }, []);
+
+  const renderPushed = (entry: Entry, active: boolean) => {
+    if (entry.route.name === 'chat') {
+      return <ChatScreen uuid={entry.route.uuid} slug={entry.route.slug} active={active} />;
+    }
+    if (entry.route.name === 'ukol') return <TaskDetail id={entry.route.id} />;
+    return null;
+  };
+
+  return (
+    <>
+      <div className="m-base" ref={base}>
+        {TABS.map(({ value }) =>
+          visited.has(value) ? (
+            <div key={value} className={`m-tab${value === tab ? ' is-active' : ''}`} aria-hidden={value !== tab}>
+              {value === 'dnes' ? <TodayScreen /> : null}
+              {value === 'chaty' ? <ChatsScreen /> : null}
+              {value === 'hovory' ? <CallsScreen /> : null}
+              {value === 'vice' ? <MoreScreen /> : null}
+            </div>
+          ) : null,
+        )}
+        <nav className="m-tabbar">
+          <TabBar
+            aria-label="Hlavní navigace"
+            value={tab}
+            onValueChange={(value) => selectTab(value as Tab)}
+            items={TABS.map(({ value, label, icon }) => ({ value, label, icon: <Icon name={icon} size={24} /> }))}
+          />
+        </nav>
+      </div>
+      <Stack stack={stack} baseRef={base} render={renderPushed} />
+    </>
+  );
+}
+
+export default function MobileApp() {
+  const [authed, setAuthed] = useState(() => UKAZKA || Boolean(getToken()));
+  useEffect(() => {
+    const sync = () => setAuthed(UKAZKA || Boolean(getToken()));
+    window.addEventListener('m-auth', sync);
+    return () => window.removeEventListener('m-auth', sync);
+  }, []);
+
+  // Klávesnice: appka drží přesně výšku viditelné části obrazovky.
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return undefined;
+    const root = document.documentElement;
+    const apply = () => {
+      root.style.setProperty('--m-vh', `${viewport.height}px`);
+      root.style.setProperty('--m-vt', `${viewport.offsetTop}px`);
+      root.classList.toggle('m-keyboard', window.innerHeight - viewport.height > 120);
+      if (window.scrollY) window.scrollTo(0, 0);
+    };
+    apply();
+    viewport.addEventListener('resize', apply);
+    viewport.addEventListener('scroll', apply);
+    return () => {
+      viewport.removeEventListener('resize', apply);
+      viewport.removeEventListener('scroll', apply);
+    };
+  }, []);
+
+  return (
+    <div className="m-root">
+      {authed ? <Shell /> : <Login />}
+      <ToastHost />
+    </div>
+  );
+}
