@@ -48,6 +48,8 @@ export type Call = {
   attendees: { name: string; email: string }[];
   clientSlug: string | null;
   clientName: string | null;
+  /** Work time on the shared calendar, not a call. */
+  block?: boolean;
   live: boolean;
   startsInMin: number | null;
 };

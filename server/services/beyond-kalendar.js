@@ -30,15 +30,34 @@ export function icsUrlFor(personKey) {
   return v && v.trim() ? v.trim() : null;
 }
 
-/** Which people have a calendar wired, for the UI. */
+/**
+ * The team's shared calendar, owned by nobody in particular: every Beyond
+ * meeting lives here, whoever runs it. Stored as `BEYOND_ICS_BEYOND` next to
+ * the personal ones and read the same way.
+ */
+export const SHARED_CALENDAR = { key: 'beyond', displayName: 'Beyond kalendář', shared: true };
+
+/** Which calendars are wired, for the UI: each person plus the shared one. */
 export function calendarStatus() {
   const out = {};
   for (const p of getPeople()) out[p.key] = Boolean(icsUrlFor(p.key));
+  out[SHARED_CALENDAR.key] = Boolean(icsUrlFor(SHARED_CALENDAR.key));
   return out;
 }
 
 export function anyCalendar() {
-  return getPeople().some((p) => icsUrlFor(p.key));
+  return Boolean(icsUrlFor(SHARED_CALENDAR.key)) || getPeople().some((p) => icsUrlFor(p.key));
+}
+
+/**
+ * Who runs an event on the shared calendar. The calendar itself is the
+ * organizer there, so the only signal is which of us was added as an attendee.
+ */
+function sharedHosts(ev, people) {
+  const going = people.filter((p) =>
+    p.calcomEmail && ev.attendees.some((a) => a.status !== 'DECLINED' && a.email?.toLowerCase() === p.calcomEmail.toLowerCase()));
+  if (!going.length) return [{ email: null, name: SHARED_CALENDAR.displayName, username: null }];
+  return going.map((p) => ({ email: p.calcomEmail, name: p.displayName, username: null }));
 }
 
 export function invalidateCalendars() {
@@ -242,7 +261,7 @@ export async function testIcsUrl(url) {
  * bookings in the same shape Cal.com gives (start, end, title, attendees,
  * hosts, meetingUrl), so the calls module can treat both the same way.
  */
-export async function calendarBookings(person, { from, to, force = false, ownEmails = [] } = {}) {
+export async function calendarBookings(person, { from, to, force = false, ownEmails = [], people = [], includeBlocks = false } = {}) {
   const url = icsUrlFor(person.key);
   if (!url) return { events: [], error: null };
   const c = cache.get(person.key);
@@ -273,8 +292,11 @@ export async function calendarBookings(person, { from, to, force = false, ownEma
     const others = ev.attendees.filter((a) => a.email && !mine.has(a.email.toLowerCase()) && a.status !== 'DECLINED');
     const link = meetingLink(ev);
     // A call has someone else in it or a room to meet in; a reminder to
-    // buy milk has neither.
-    if (!others.length && !link) continue;
+    // buy milk has neither. On the shared calendar anything else is still
+    // work the other person should see, so the calls screen can ask for it
+    // as a block. Jobs never do: a block must not get a brief or a reminder.
+    const block = !others.length && !link;
+    if (block && !(person.shared && includeBlocks)) continue;
     const starts = ev.recurrenceId != null ? [ev.start] : expand(ev, from, to).filter((s) => !ev.exdates.includes(s) && !(moved.get(ev.uid)?.has(s)));
     for (const s of starts) {
       if (s + durationMs < from || s > to) continue;
@@ -289,9 +311,13 @@ export async function calendarBookings(person, { from, to, force = false, ownEma
         meetingUrl: link,
         location: ev.location || null,
         eventType: null,
-        hosts: [{ email: person.calcomEmail || null, name: person.displayName, username: null }],
+        hosts: person.shared
+          ? sharedHosts(ev, people)
+          : [{ email: person.calcomEmail || null, name: person.displayName, username: null }],
         attendees: others.map((a) => ({ name: a.name, email: a.email })),
         source: 'google',
+        icalUid: ev.uid || null,
+        block,
       });
     }
   }

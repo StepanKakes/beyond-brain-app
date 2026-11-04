@@ -613,6 +613,14 @@ meet, zoom a podobně. `beyond-calls.js` je sloučí s Cal.com; stejný hovor
 z obou zdrojů se ukáže jednou, Cal.com má přednost. Žádný Google projekt ani
 OAuth, adresa nevyprší; když ji člověk v Googlu resetuje, vloží novou.
 
+Společný Beyond kalendář se napojuje stejně, klíč je `BEYOND_ICS_BEYOND`
+(řádek Beyond kalendář ve Velíně, adresu vidí vlastník kalendáře). Kdo schůzku
+vede, se pozná podle toho, kdo z nás je pozvaný účastník. Událost bez dalšího
+účastníka a bez odkazu je blok: ukáže ji jen obrazovka Hovory, úlohám
+(briefy, připomínky) se nepředává. Stejná událost ve společném i osobním
+kalendáři se ukáže jednou. Celý systém kalendářů popisuje
+`system/kalendare.md` v brainu.
+
 
 ## Obsah pro Instagram
 

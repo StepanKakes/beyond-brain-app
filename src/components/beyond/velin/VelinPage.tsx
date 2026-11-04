@@ -956,7 +956,7 @@ export default function VelinPage({ onOpenClient, onOpenCalls, onOpenChat }: Pro
               )}
               {calls && (
                 <div className="bb-cal">
-                  {people.map((p) => (
+                  {[SHARED_CALENDAR, ...people].map((p) => (
                     <div key={p.key} className="bb-cal__row">
                       <span className="bb-cal__who">{p.displayName}</span>
                       {calls.calendars?.[p.key] && calls.calendarErrors?.[p.key] ? (
@@ -1023,7 +1023,7 @@ export default function VelinPage({ onOpenClient, onOpenCalls, onOpenChat }: Pro
       </div>
       {calFor && (
         <CalendarDialog
-          person={people.find((p) => p.key === calFor) || { key: calFor, displayName: calFor }}
+          person={[SHARED_CALENDAR, ...people].find((p) => p.key === calFor) || { key: calFor, displayName: calFor }}
           problem={calls?.calendarErrors?.[calFor] || null}
           onClose={() => setCalFor(null)}
           onSaved={() => { setCalFor(null); void velin.reload(); }}
@@ -1032,6 +1032,9 @@ export default function VelinPage({ onOpenClient, onOpenCalls, onOpenChat }: Pro
     </div>
   );
 }
+
+/** The team's shared calendar, wired the same way as a person's own. */
+const SHARED_CALENDAR = { key: 'beyond', displayName: 'Beyond kalendář' };
 
 /**
  * Wire a person's Google calendar: one secret iCal address, pasted once.
@@ -1061,9 +1064,11 @@ function CalendarDialog({ person, problem, onClose, onSaved }: { person: { key: 
         <div className="bb-dialog__head" id="bb-cal-title">Kalendář: {person.displayName}</div>
         <div className="bb-dialog__body">
           <ol className="bb-cal__steps">
-            <li>Otevři <a href="https://calendar.google.com/calendar/r/settings" target="_blank" rel="noreferrer">nastavení Google Kalendáře</a> a vlevo vyber kalendář, ve kterém máš hovory.</li>
+            <li>Otevři <a href="https://calendar.google.com/calendar/r/settings" target="_blank" rel="noreferrer">nastavení Google Kalendáře</a> a vlevo vyber {person.key === SHARED_CALENDAR.key ? 'Beyond kalendář' : 'kalendář, ve kterém máš hovory'}.</li>
             <li>Sjeď na „Integrace kalendáře" a zkopíruj <strong>Tajná adresa ve formátu iCal</strong>.</li>
-            <li>Vlož ji sem. Hovory se ukážou do pár minut vedle těch z Cal.com; jako hovor bereme schůzku s dalším účastníkem nebo s odkazem na meet.</li>
+            <li>{person.key === SHARED_CALENDAR.key
+              ? 'Vlož ji sem. Do pár minut uvidíte v Hovorech všechno, co v něm je, a podle pozvaného účastníka i kdo to vede.'
+              : 'Vlož ji sem. Hovory se ukážou do pár minut vedle těch z Cal.com; jako hovor bereme schůzku s dalším účastníkem nebo s odkazem na meet.'}</li>
           </ol>
           <input
             id="bb-cal-url"

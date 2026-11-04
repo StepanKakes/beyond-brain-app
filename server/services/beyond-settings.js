@@ -13,7 +13,7 @@
  */
 import { getConnection } from '../modules/database/connection.js';
 import { getPeople } from './beyond-people.js';
-import { icsKeyFor } from './beyond-kalendar.js';
+import { SHARED_CALENDAR, icsKeyFor } from './beyond-kalendar.js';
 import { wahaConfig } from './beyond-waha.js';
 
 const SCHEMA = `
@@ -44,6 +44,13 @@ export const CATALOG = [
   { group: 'WhatsApp', key: 'BEYOND_WAHA_API_KEY', label: 'WAHA API klíč', secret: true },
 
   { group: 'Kalendář', key: 'BEYOND_CALCOM_API_KEY', label: 'Cal.com API klíč', secret: true },
+  {
+    group: 'Kalendář',
+    key: icsKeyFor(SHARED_CALENDAR.key),
+    label: `Společný: ${SHARED_CALENDAR.displayName}`,
+    hint: 'Tajná adresa společného kalendáře ve formátu iCal. Vidí ji jeho vlastník: Google Kalendář → Nastavení → Beyond kalendář → Tajná adresa ve formátu iCal.',
+    secret: true,
+  },
   // One Google calendar per person, by its secret iCal address.
   ...getPeople().map((p) => ({
     group: 'Kalendář',

@@ -226,7 +226,7 @@ router.get('/calls', async (req, res) => {
   try {
     const { index, people, calls } = await load({ force: req.query.force === '1' });
     const days = Math.min(60, Math.max(1, Number(req.query.days) || 14));
-    const full = await getCalls({ clients: index.clients, people, days });
+    const full = await getCalls({ clients: index.clients, people, days, includeBlocks: true });
 
     const byDay = new Map();
     for (const c of full.calls) {

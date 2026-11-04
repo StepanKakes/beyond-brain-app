@@ -11,7 +11,7 @@
  * any calls booked, which is a far more dangerous kind of empty.
  */
 
-import { anyCalendar, calendarBookings } from './beyond-kalendar.js';
+import { SHARED_CALENDAR, anyCalendar, calendarBookings } from './beyond-kalendar.js';
 
 const API_BASE = 'https://api.cal.com/v2';
 /** Cal.com dates the API surface; this is the version these shapes come from. */
@@ -129,8 +129,10 @@ function shape(booking, clients, people, now) {
     clientSlug: client?.slug ?? null,
     clientName: client?.name ?? null,
     source: booking.source || 'calcom',
+    /** Work time on the shared calendar, not a call. */
+    block: Boolean(booking.block),
     /** Running right now, which is what makes the velín light up. */
-    live: Number.isFinite(start) && Number.isFinite(end) && now >= start && now < end,
+    live: !booking.block && Number.isFinite(start) && Number.isFinite(end) && now >= start && now < end,
     startsInMin: Number.isFinite(start) ? Math.round((start - now) / 60_000) : null,
   };
 }
@@ -143,7 +145,7 @@ function shape(booking, clients, people, now) {
  * Upcoming calls plus anything running right now. Cached for a minute: the
  * velín polls this and Cal.com rate-limits.
  */
-export async function getCalls({ clients = [], people = [], days = 14, force = false } = {}) {
+export async function getCalls({ clients = [], people = [], days = 14, force = false, includeBlocks = false } = {}) {
   if (!isConfigured()) {
     return { configured: false, error: null, calendarErrors: {}, calls: [], live: [], fetchedAt: null };
   }
@@ -176,20 +178,26 @@ export async function getCalls({ clients = [], people = [], days = 14, force = f
     }
   }
 
-  // Each person's own calendar; the module caches the feed itself.
+  // The shared calendar first, then each person's own; the module caches the
+  // feed itself. An event someone was invited to sits in both with one UID,
+  // and the shared copy is the one that knows who runs it.
   const google = [];
   const ownEmails = people.map((p) => p.calcomEmail).filter(Boolean);
-  for (const person of people) {
-    const r = await calendarBookings(person, { from, to, force, ownEmails });
-    if (r.error) calendarErrors[person.key] = r.error;
+  for (const source of [SHARED_CALENDAR, ...people]) {
+    const r = await calendarBookings(source, { from, to, force, ownEmails, people, includeBlocks });
+    if (r.error) calendarErrors[source.key] = r.error;
     google.push(...r.events);
   }
 
   // The same call booked through Cal.com and sitting in the calendar shows
   // once: Cal.com wins, a calendar event within ten minutes of it is dropped.
   const bookings = [...calcom];
+  const seenEvents = new Set();
   for (const g of google) {
     const gs = Date.parse(g.start);
+    const eventKey = g.icalUid ? `${g.icalUid}:${gs}` : null;
+    if (eventKey && seenEvents.has(eventKey)) continue;
+    if (eventKey) seenEvents.add(eventKey);
     const twin = calcom.some((b) => Math.abs(Date.parse(b.start) - gs) < 10 * 60 * 1000 && sameParty(b, g));
     if (!twin) bookings.push(g);
   }
