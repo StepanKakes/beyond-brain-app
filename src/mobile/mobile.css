@@ -1,29 +1,7 @@
-/* Mobilní appka. Tokeny drží hodnoty z beyond-glass.css, desktopové styly se sem
+/* Mobilní appka. Barvy jsou ve styles/tokens.css, desktopové styly se sem
    záměrně nenačítají, je jich přes 90 kB. */
 
 :root {
-  --bb-bg: #f6f6f4;
-  --bb-raise: #ffffff;
-  --bb-bubble: #efefec;
-  --bb-ink: #14161a;
-  --bb-ink2: #61656e;
-  --bb-ink3: #a2a6af;
-  --bb-line: rgba(20, 22, 26, 0.1);
-  --bb-line2: rgba(20, 22, 26, 0.06);
-  --bb-accent: #111111;
-  --bb-on-accent: #ffffff;
-  --bb-danger: #c4443b;
-  --bb-work: #1e9e6a;
-  --bb-p1: #d1453b;
-  --bb-p2: #eb8909;
-  --bb-p3: #246fe0;
-  --bb-p4: #8e939c;
-  --bb-glass: rgba(246, 246, 244, 0.72);
-  --bb-toast: #14161a;
-  --bb-on-toast: #ffffff;
-  --bb-tint: rgba(20, 22, 26, 0.05);
-  --bb-font: 'Figtree', system-ui, -apple-system, 'Helvetica Neue', sans-serif;
-  --bb-mono: 'JetBrains Mono', ui-monospace, monospace;
   /* V průsvitné stavové liště iOS 26 a novější rozmazává ještě asi 40 bodů pod ní
      a stránka to nevypne. S neprůsvitnou lištou je inset 0 a odsazení zmizí. */
   --m-top: env(safe-area-inset-top, 0px);
@@ -33,26 +11,6 @@
 }
 
 html.dark {
-  --bb-bg: #000;
-  --bb-raise: #1c1c1e;
-  --bb-bubble: #2c2c2e;
-  --bb-ink: #f5f5f7;
-  --bb-ink2: #aeaeb2;
-  --bb-ink3: #8e8e93;
-  --bb-line: rgba(255, 255, 255, 0.1);
-  --bb-line2: rgba(255, 255, 255, 0.06);
-  --bb-accent: #f5f5f7;
-  --bb-on-accent: #000;
-  --bb-danger: #f0655b;
-  --bb-work: #4cc994;
-  --bb-p1: #f0655b;
-  --bb-p2: #f2a33a;
-  --bb-p3: #6a9bf0;
-  --bb-p4: #7f858f;
-  --bb-glass: rgba(16, 18, 22, 0.66);
-  --bb-toast: #f1f2f5;
-  --bb-on-toast: #14161a;
-  --bb-tint: rgba(255, 255, 255, 0.07);
   color-scheme: dark;
 }
 
@@ -99,14 +57,6 @@ a {
 }
 
 /* Chrome appky se nevybírá jako text na webu, čtený obsah ano. */
-.m-root {
-  position: fixed;
-  inset: 0;
-  overflow: hidden;
-  -webkit-user-select: none;
-  user-select: none;
-  -webkit-touch-callout: none;
-}
 
 .m-md,
 .m-msg-user,
@@ -170,10 +120,6 @@ a {
   -webkit-overflow-scrolling: touch;
 }
 
-.m-tabscreen {
-  padding-bottom: calc(92px + var(--m-bottom));
-}
-
 .m-status-cover {
   position: fixed;
   top: 0;
@@ -205,25 +151,6 @@ a {
   bottom: -10px;
   background: linear-gradient(to bottom, var(--bb-bg) calc(var(--m-top) + 10px), transparent);
   pointer-events: none;
-}
-
-.m-bar-title {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  font-weight: 600;
-  font-size: 17px;
-  text-align: center;
-}
-
-.m-bar-action {
-  display: flex;
-  justify-content: flex-end;
-  flex: 0 0 44px;
-  min-height: 44px;
-  align-items: center;
 }
 
 .m-bar-collapsing {
@@ -451,15 +378,6 @@ a {
   background: var(--bb-accent);
 }
 
-.m-next {
-  display: block;
-  width: calc(100% - 2 * var(--m-gutter));
-  margin: 0 var(--m-gutter) 22px;
-  padding: 12px 14px;
-  border-radius: 16px;
-  background: var(--bb-raise);
-}
-
 .m-disclosure {
   display: block;
   min-height: 44px;
@@ -629,12 +547,6 @@ a {
 }
 
 /* Chat */
-.m-chat {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-}
 
 .m-chat-scroll {
   flex: 1;
@@ -644,13 +556,6 @@ a {
   overflow-y: auto;
   overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
-}
-
-.m-chat-log {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 14px var(--m-gutter);
 }
 
 .m-chat-row {
@@ -795,15 +700,6 @@ a {
 
 .m-steps li.is-error {
   color: var(--bb-danger);
-}
-
-
-.m-composer {
-  flex: none;
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  padding: 8px var(--m-gutter) max(10px, calc(var(--m-bottom) - 10px));
 }
 
 .m-composer textarea {
@@ -1042,18 +938,10 @@ a {
 }
 
 /* Glisse má výchozí modrou iOS, Beyond je černobílý. */
-.m-root {
-  --lg-fill: #14161a;
-}
-
-html.dark .m-root {
-  --lg-fill: #3a3a3c;
-}
 
 .m-tabbar {
   --lg-fill: var(--bb-ink);
 }
-
 
 /* Přestavba: hierarchie, ovládání a nové obrazovky */
 .m-tabscreen {
@@ -1061,6 +949,14 @@ html.dark .m-root {
 }
 
 .m-bar-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 600;
+  font-size: 17px;
+  text-align: center;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1272,6 +1168,11 @@ html.dark .m-root {
 
 /* Další hovor */
 .m-next {
+  width: calc(100% - 2 * var(--m-gutter));
+  margin: 0 var(--m-gutter) 22px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: var(--bb-raise);
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1860,16 +1761,6 @@ textarea.m-detail-title {
 }
 
 /* Chat */
-.m-composer {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
-}
-
-
-
-
-
 
 .m-attachments {
   display: flex;
@@ -2019,11 +1910,19 @@ textarea.m-detail-title {
 
 /* Liquid glass: pole a kulaté ikony v lištách */
 .m-root {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  --lg-fill: #14161a;
   background: var(--bb-bg);
   --m-glass-fill: rgb(0 0 0 / 0.05);
 }
 
 html.dark .m-root {
+  --lg-fill: #3a3a3c;
   --m-glass-fill: rgb(255 255 255 / 0.09);
 }
 
@@ -2032,10 +1931,20 @@ html.dark .m-root {
 }
 
 .m-bar-action {
+  display: flex;
+  justify-content: flex-end;
+  flex: 0 0 44px;
+  min-height: 44px;
+  align-items: center;
   flex-basis: 40px;
 }
 
 .m-composer {
+  flex: none;
+  padding: 8px var(--m-gutter) max(10px, calc(var(--m-bottom) - 10px));
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
   position: absolute;
   left: 0;
   right: 0;
@@ -2125,10 +2034,18 @@ html.dark .m-root {
 }
 
 .m-chat {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
   position: relative;
 }
 
 .m-chat-log {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px var(--m-gutter);
   padding-bottom: calc(var(--m-composer-h, 110px) + 14px);
 }
 

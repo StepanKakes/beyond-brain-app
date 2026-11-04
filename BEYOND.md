@@ -14,7 +14,7 @@ push do `main` (viz [Deploy](#deploy)).
 
 ## Design: v3 Liquid Glass
 
-Zdroj pravdy je [`src/styles/beyond-glass.css`](src/styles/beyond-glass.css).
+Barvy a základní hodnoty jsou v [`src/styles/tokens.css`](src/styles/tokens.css), společné pro počítač i mobil (mobil jen přepisuje tmavý režim na čistě černý). Zdroj pravdy pro styly počítače je [`src/styles/beyond-glass.css`](src/styles/beyond-glass.css).
 Reprodukuje `tokens.css` + `chat.css` z design handoffu 1:1 (světlé téma) a
 přidává dark variantu, můstek na Tailwind a styly pro plochy, které handoff
 neobsahoval (permission a ask panely, konektory, náhled souborů, nastavení).

@@ -2,6 +2,7 @@ import { Component, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import MobileApp from './MobileApp';
+import '../styles/tokens.css';
 import './mobile.css';
 
 // Motiv stejně jako na desktopu: uložená volba, jinak podle systému.
