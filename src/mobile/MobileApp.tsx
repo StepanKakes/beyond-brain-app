@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, Input, TabBar } from 'glisse';
 
-import { UKAZKA, getToken, login } from './api';
+import { UKAZKA, api, getToken, login } from './api';
 import { ChatScreen } from './Chat';
 import { Icon } from './icons';
 import { CallsScreen } from './Calls';
@@ -95,6 +95,24 @@ function Shell() {
     const inset = probe.getBoundingClientRect().height;
     probe.remove();
     if (inset > 0) toast('Stará instalace, kvůli ní je nahoře rozmazání. Smaž appku z plochy a přidej ji znovu', undefined, 9000);
+  }, []);
+
+  // Rutiny běží podle času na telefonu. Pásmo hlásíme při otevření a po návratu,
+  // server jiné pásmo než telefon nemá jak zjistit.
+  useEffect(() => {
+    let reported: string | null = null;
+    const report = () => {
+      if (document.visibilityState !== 'visible') return;
+      const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (!zone || zone === reported) return;
+      reported = zone;
+      api('/api/beyond/velin/rutiny/pasmo', { method: 'POST', body: { zone } }).catch(() => {
+        reported = null;
+      });
+    };
+    report();
+    document.addEventListener('visibilitychange', report);
+    return () => document.removeEventListener('visibilitychange', report);
   }, []);
 
   // Cíl z notifikace, ať je appka zavřená, nebo jen na pozadí.

@@ -16,7 +16,8 @@
  * All times are wall-clock time in the app's zone (`BEYOND_TZ`, see
  * beyond-time.js), which is where the people are, not where the box is. The
  * arithmetic runs on "wall" Dates (UTC fields = wall clock) so DST cannot
- * shift a 06:20 job to 05:20.
+ * shift a 06:20 job to 05:20. A routine runs on the clock of the phone of
+ * whoever set it up, so `nextRunAt` and `isDueAt` take an optional `zone`.
  */
 import { fromWall, toWall } from './beyond-time.js';
 
@@ -182,13 +183,13 @@ export function normalizeSchedule(input) {
  * When should this run next, given when it last ran. `null` means never on
  * its own (manual, or a one-shot that already fired).
  */
-export function nextRunAt(schedule, { lastRunAt = null, now = new Date() } = {}) {
-  const wall = nextRunWall(schedule, { lastW: lastRunAt ? toWall(new Date(lastRunAt)) : null, nowW: toWall(now) });
-  return wall ? fromWall(wall) : null;
+export function nextRunAt(schedule, { lastRunAt = null, now = new Date(), zone } = {}) {
+  const wall = nextRunWall(schedule, { lastW: lastRunAt ? toWall(new Date(lastRunAt), zone) : null, nowW: toWall(now, zone), zone });
+  return wall ? fromWall(wall, zone) : null;
 }
 
 /** Same, but everything in wall-clock Dates (UTC fields = local wall clock). */
-function nextRunWall(schedule, { lastW, nowW }) {
+function nextRunWall(schedule, { lastW, nowW, zone }) {
   const last = lastW;
   const now = nowW;
   switch (schedule.kind) {
@@ -222,7 +223,7 @@ function nextRunWall(schedule, { lastW, nowW }) {
       return cronNext(parsed, last || new Date(now.getTime() - 60_000));
     }
     case 'at': {
-      const atW = toWall(new Date(schedule.at));
+      const atW = toWall(new Date(schedule.at), zone);
       if (last && last.getTime() >= atW.getTime()) return null;
       return atW;
     }
@@ -232,9 +233,9 @@ function nextRunWall(schedule, { lastW, nowW }) {
 }
 
 /** Is the job due at `now`? A schedule with a fixed time fires once per period. */
-export function isDueAt(schedule, { lastRunAt = null, now = new Date() } = {}) {
-  const nowW = toWall(now);
-  const next = nextRunWall(schedule, { lastW: lastRunAt ? toWall(new Date(lastRunAt)) : null, nowW });
+export function isDueAt(schedule, { lastRunAt = null, now = new Date(), zone } = {}) {
+  const nowW = toWall(now, zone);
+  const next = nextRunWall(schedule, { lastW: lastRunAt ? toWall(new Date(lastRunAt), zone) : null, nowW, zone });
   if (!next) return false;
   return next.getTime() <= nowW.getTime();
 }

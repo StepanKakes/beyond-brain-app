@@ -15,6 +15,7 @@
  *
  *   {
  *     "rozvrh": { "<vestavěná úloha>": <schedule> },   // přepsaný rozvrh vestavěných
+ *     "pasma": { "<uživatel>": "Asia/Bangkok" },        // pásmo z jeho telefonu, řídí jeho rutiny
  *     "ulohy": [ { id, name, title, prompt, skill, schedule, deliver, repeat,
  *                  enabled, continuity, noAgent, createdBy, createdAt, origin } ]
  *   }
@@ -105,6 +106,38 @@ export async function setScheduleOverride(jobName, schedule, { by = 'app' } = {}
   else data.rozvrh[jobName] = normalizeSchedule(schedule);
   await writeTasksFile(data, `Agent: rozvrh úlohy ${jobName} (${by})`);
   return data.rozvrh[jobName] || null;
+}
+
+/* ------------------------------------------------------------------ */
+/* the phone's timezone, per person                                    */
+/* ------------------------------------------------------------------ */
+
+/** The zone this person's phone reported, or null: then the app's zone applies. */
+export function routineZone(username) {
+  if (!username) return null;
+  const pasma = readTasksFile().pasma;
+  const zone = pasma && typeof pasma === 'object' ? pasma[username] : null;
+  return typeof zone === 'string' && isValidZone(zone) ? zone : null;
+}
+
+function isValidZone(zone) {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: zone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Returns whether it changed, so an unchanged phone never touches git. */
+export async function setRoutineZone(username, zone) {
+  const value = String(zone || '').trim();
+  if (!value || value.length > 64 || !isValidZone(value)) throw new Error('neplatné časové pásmo');
+  if (routineZone(username) === value) return false;
+  const data = structuredClone(readTasksFile());
+  data.pasma = { ...(data.pasma || {}), [username]: value };
+  await writeTasksFile(data, `Agent: pásmo rutin ${value} (${username})`);
+  return true;
 }
 
 /* ------------------------------------------------------------------ */

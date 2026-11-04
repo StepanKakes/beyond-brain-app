@@ -18,12 +18,12 @@ import { usageReport, subscriptionLimits, brainShare } from '../services/beyond-
 import { getPeople, personForUser } from '../services/beyond-people.js';
 import { STAGES, stageFor, setStage } from '../services/beyond-pipeline.js';
 import { pushSubscriptionsDb, userDb } from '../modules/database/index.js';
-import { ROUTINE_TEMPLATES, listRoutines, routineDetail, routineView, skipMissedSlot } from '../services/beyond-rutiny.js';
+import { ROUTINE_TEMPLATES, listRoutines, reportRoutineZone, routineDetail, routineView, skipMissedSlot } from '../services/beyond-rutiny.js';
 import { listRuns, setJobEnabled } from '../services/beyond-runs.js';
 import { describeJobs, runJob, schedulerStatus, setPaused } from '../services/beyond-scheduler.js';
 import { enqueueInternal, listEvents, listRoutes } from '../services/beyond-events.js';
 import * as mozek from '../services/beyond-mozek.js';
-import { createTask, getTask, removeTask, setScheduleOverride, updateTask } from '../services/beyond-tasks.js';
+import { createTask, getTask, removeTask, routineZone, setScheduleOverride, updateTask } from '../services/beyond-tasks.js';
 import { snapshot as memorySnapshot } from '../services/beyond-memory.js';
 import * as ukoly from '../services/beyond-ukoly.js';
 import * as obsah from '../services/beyond-obsah.js';
@@ -801,7 +801,16 @@ router.get('/rutiny', (req, res) => {
     rutiny: listRoutines(req.user.username),
     sablony: ROUTINE_TEMPLATES,
     notifikace: pushSubscriptionsDb.getSubscriptions(req.user.id).length > 0,
+    pasmo: routineZone(req.user.username),
   });
+});
+
+router.post('/rutiny/pasmo', async (req, res) => {
+  try {
+    res.json({ ok: true, zmeneno: await reportRoutineZone(req.user.username, req.body?.zone) });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'pásmo nešlo uložit' });
+  }
 });
 
 router.get('/rutiny/:name', (req, res) => {

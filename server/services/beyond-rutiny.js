@@ -8,7 +8,7 @@
  */
 import { describeSchedule, isDueAt } from './beyond-schedule.js';
 import { RUN_LOG_MARK, getJobState, listRuns, markJobRan } from './beyond-runs.js';
-import { listTasks } from './beyond-tasks.js';
+import { listTasks, routineZone, setRoutineZone } from './beyond-tasks.js';
 
 export const ROUTINE_TEMPLATES = [
   {
@@ -97,5 +97,20 @@ export function routineDetail(task) {
 export function skipMissedSlot(task) {
   if (task.enabled === false) return;
   const { lastRunAt } = getJobState(task.name) || {};
-  if (isDueAt(task.schedule, { lastRunAt: lastRunAt || null })) markJobRan(task.name);
+  const zone = routineZone(task.createdBy) || undefined;
+  if (isDueAt(task.schedule, { lastRunAt: lastRunAt || null, zone })) markJobRan(task.name);
+}
+
+/**
+ * The phone says which zone it is in. Landing somewhere a slot is already gone
+ * must not fire it on arrival, for the same reason as above.
+ */
+export async function reportRoutineZone(username, zone) {
+  const changed = await setRoutineZone(username, zone);
+  if (changed) {
+    for (const task of listTasks()) {
+      if (task.createdBy === username) skipMissedSlot(task);
+    }
+  }
+  return changed;
 }

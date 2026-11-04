@@ -233,6 +233,7 @@ export default function RutinyPage() {
         {data && !data.notifikace ? (
           <p className="bb-rut__hint">Notifikace chodí jen do appky na telefonu. Zapneš je v ní ve Více</p>
         ) : null}
+        {data?.pasmo ? <p className="bb-rut__hint">Časy se řídí telefonem, teď {data.pasmo}</p> : null}
         {error && !data ? <Empty>Rutiny se nenačetly</Empty> : null}
         {data && !routines.length ? <Empty>Zatím žádná rutina. Začni ranním souhrnem hovorů</Empty> : null}
         {routines.length ? (

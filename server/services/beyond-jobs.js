@@ -37,12 +37,12 @@ import { usesAlt } from './beyond-alt-model.js';
 import { diffModels } from './beyond-model-watch.js';
 import { broadcast as tgBroadcast, sendTo as tgSendTo, unconfiguredReason as tgReason } from './beyond-telegram.js';
 import { isDueAt, scheduleFromLegacy } from './beyond-schedule.js';
-import { listTasks, scheduleOverride } from './beyond-tasks.js';
+import { listTasks, routineZone, scheduleOverride } from './beyond-tasks.js';
 import { render as renderTemplate } from './beyond-events.js';
 import { countPending as mozekPending } from './beyond-mozek.js';
 import { notionConfigured, pullNotion, pullRegistry, pullWhatsApp, readRegistry } from './beyond-raw.js';
 import { isConfigured as wahaConfigured } from './beyond-waha.js';
-import { todayIso, timeLocal } from './beyond-time.js';
+import { formatLocal, todayIso, timeLocal } from './beyond-time.js';
 import { createTask as createUkol, findByPrepRef, isDebtHandled, listTasks as listUkoly, markDebtHandled } from './beyond-ukoly.js';
 import { applyTaskPlan, notionConfigured as notionReady, readClientTaskState, tasksFromWriteup, upsertCallPage } from './beyond-notion.js';
 import { hasMomentsFor, listItems as listObsah, markChecked as markCallChecked } from './beyond-obsah.js';
@@ -1821,7 +1821,10 @@ function runnableFromTask(task) {
         text = renderTemplate(task.prompt, context || {});
       } else {
         const previous = task.continuity ? lastOkSummary(task.name) : null;
+        const zone = routineZone(task.createdBy);
         const prompt = [
+          zone ? `U člověka, pro kterého to je, je teď ${formatLocal(new Date(), zone)} (${zone}). Dnes a včera ber podle toho.` : null,
+          zone ? '' : null,
           task.skill ? `Použij skill ${task.skill}.` : null,
           task.skill ? '' : null,
           task.prompt,
@@ -1979,7 +1982,8 @@ export function isDue(job, now = new Date()) {
   if (job.custom && job.task?.enabled === false) return false;
   const schedule = effectiveSchedule(job);
   const state = getJobState(job.name);
-  return isDueAt(schedule, { lastRunAt: state.lastRunAt, now });
+  const zone = job.custom ? routineZone(job.task?.createdBy) || undefined : undefined;
+  return isDueAt(schedule, { lastRunAt: state.lastRunAt, now, zone });
 }
 
 export { markJobRan, ranToday, resolveBrainPath, fs, path };

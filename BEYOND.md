@@ -726,6 +726,7 @@ Rutina je vlastní úloha v `system/ulohy.json` (`deliver.kind: push`), kterou s
 - Notifikace jde tvůrci (`pushToUser`), první řádek výstupu je její text, klepnutí otevře `/m/rutina/<name>` s výstupy z `beyond_runs`.
 - Rozvrh `po_hovoru` hodiny nikdy nespustí. Spouští ho `queueAfterCallRoutines` na konci `zpracuj-call`, protože po konci hovoru ještě není co shrnout, přepis přichází později přes Fathom a n8n. Hovor starší 3 dnů rutiny nebudí. Pozor: hovor bez nahrávky se do brainu nezapíše a rutinu nespustí.
 - Plánovač dohání zmeškané termíny, proto `skipMissedSlot`: ranní rutina založená večer neběží hned, ale zítra.
+- Čas rutin je čas na telefonu tvůrce, ne `BEYOND_TZ`. Mobilní appka hlásí pásmo při otevření a po návratu (`POST /rutiny/pasmo`), ukládá se v `system/ulohy.json` pod `pasma`, a to pro všechny vlastní úlohy toho člověka. Dokud telefon nic nenahlásil, platí `BEYOND_TZ`. Po přeletu se pásmo změní až s prvním otevřením appky. Vestavěné úlohy zůstávají na `BEYOND_TZ`.
 - Výstup se od deníku běhu odděluje značkou `RUN_LOG_MARK` v `summary`.
 
 ## Běh chatu (4.11.2026)

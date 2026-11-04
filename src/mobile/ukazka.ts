@@ -325,7 +325,7 @@ const UKAZKA_SABLONY = [
 
 function mockRoutines(path: string, options: { method?: string }): unknown {
   if (options.method && options.method !== 'GET') return { ok: true, rutina: UKAZKA_RUTINA };
-  if (path.endsWith('/rutiny')) return { rutiny: [UKAZKA_RUTINA], sablony: UKAZKA_SABLONY, notifikace: true };
+  if (path.endsWith('/rutiny')) return { rutiny: [UKAZKA_RUTINA], sablony: UKAZKA_SABLONY, notifikace: true, pasmo: 'Europe/Prague' };
   return {
     rutina: UKAZKA_RUTINA,
     behy: [

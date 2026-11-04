@@ -35,7 +35,7 @@ export type RutinaSablona = {
   schedule: RutinaSchedule;
 };
 
-export type RutinyList = { rutiny: Rutina[]; sablony: RutinaSablona[]; notifikace: boolean };
+export type RutinyList = { rutiny: Rutina[]; sablony: RutinaSablona[]; notifikace: boolean; pasmo: string | null };
 export type RutinaDetail = { rutina: Rutina; behy: RutinaBeh[] };
 export type RutinaDraft = { title: string; prompt: string; schedule: RutinaSchedule; notion: boolean };
 
