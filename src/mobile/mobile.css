@@ -164,7 +164,6 @@ a {
 
 .m-tabscreen {
   padding-bottom: calc(92px + var(--m-bottom));
-  scroll-timeline: --m-scroll block;
 }
 
 /* Lišta */
@@ -184,9 +183,7 @@ a {
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: var(--bb-glass);
-  -webkit-backdrop-filter: blur(22px) saturate(1.8);
-  backdrop-filter: blur(22px) saturate(1.8);
+  background: var(--bb-bg);
   border-bottom: 0.5px solid var(--bb-line);
 }
 
@@ -237,23 +234,16 @@ a {
   transition: none;
 }
 
-/* Lišta se objeví až po odjetí velkého nadpisu. Běží na scroll timeline, bez JavaScriptu. */
-@supports (animation-timeline: scroll()) {
-  .m-bar-collapsing::before,
-  .m-bar-collapsing .m-bar-title {
-    animation: m-bar-in linear both;
-    animation-timeline: --m-scroll;
-    animation-range: 28px 62px;
-  }
+/* Lišta se objeví až po odjetí velkého nadpisu, i na obrazovce, která se nescrolluje. */
+.m-bar-collapsing::before,
+.m-bar-collapsing .m-bar-title {
+  opacity: 0;
+  transition: opacity 0.16s ease-out;
+}
 
-  @keyframes m-bar-in {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
-  }
+.m-bar-collapsing.is-scrolled::before,
+.m-bar-collapsing.is-scrolled .m-bar-title {
+  opacity: 1;
 }
 
 .m-large {

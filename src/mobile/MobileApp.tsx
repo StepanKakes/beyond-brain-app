@@ -151,18 +151,37 @@ export default function MobileApp() {
     const viewport = window.visualViewport;
     if (!viewport) return undefined;
     const root = document.documentElement;
+    // Plná výška se bere z viewportu samotného, window.innerHeight se s klávesnicí může zmenšit taky.
+    let full = 0;
     const apply = () => {
+      full = Math.max(full, viewport.height);
       root.style.setProperty('--m-vh', `${viewport.height}px`);
       root.style.setProperty('--m-vt', `${viewport.offsetTop}px`);
-      root.classList.toggle('m-keyboard', window.innerHeight - viewport.height > 120);
+      root.classList.toggle('m-keyboard', full - viewport.height > 120);
       if (window.scrollY) window.scrollTo(0, 0);
+    };
+    const rotate = () => {
+      full = 0;
+    };
+    // Událost o změně výšky občas nepřijde, proto se po změně fokusu měří ještě jednou.
+    let settle = 0;
+    const onFocusChange = () => {
+      window.clearTimeout(settle);
+      settle = window.setTimeout(apply, 350);
     };
     apply();
     viewport.addEventListener('resize', apply);
     viewport.addEventListener('scroll', apply);
+    window.addEventListener('orientationchange', rotate);
+    document.addEventListener('focusin', onFocusChange);
+    document.addEventListener('focusout', onFocusChange);
     return () => {
+      window.clearTimeout(settle);
       viewport.removeEventListener('resize', apply);
       viewport.removeEventListener('scroll', apply);
+      window.removeEventListener('orientationchange', rotate);
+      document.removeEventListener('focusin', onFocusChange);
+      document.removeEventListener('focusout', onFocusChange);
     };
   }, []);
 

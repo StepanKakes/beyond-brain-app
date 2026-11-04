@@ -24,6 +24,9 @@ export function Markdown({ text }: { text: string }) {
 }
 
 /** Obrazovka tabu: velký nadpis, který při scrollu přejde do malého ve skleněné liště. */
+/** Kolik bodů odjede velký nadpis, než ho nahradí titulek v liště. */
+const COLLAPSE_AT = 40;
+
 export function TabScreen({
   title,
   subtitle,
@@ -35,9 +38,13 @@ export function TabScreen({
   action?: ReactNode;
   children: ReactNode;
 }) {
+  const [scrolled, setScrolled] = useState(false);
   return (
-    <div className="m-scroll m-tabscreen">
-      <header className="m-bar m-bar-collapsing">
+    <div
+      className="m-scroll m-tabscreen"
+      onScroll={(event) => setScrolled(event.currentTarget.scrollTop > COLLAPSE_AT)}
+    >
+      <header className={`m-bar m-bar-collapsing${scrolled ? ' is-scrolled' : ''}`}>
         <div className="m-bar-title" title={title}>
           {title}
         </div>
