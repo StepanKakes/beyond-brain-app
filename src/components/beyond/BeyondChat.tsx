@@ -988,7 +988,10 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
     }
 
     if (kind === 'complete') {
-      setThinking(false);
+      const background = Number(m.backgroundTasks || 0) > 0;
+      setThinking(background);
+      thinkingRef.current = background;
+      setLiveTool(background ? { name: 'background' } : null);
       setThinkingNote(null);
       // Turn done — finalize the streaming bubble to formatted Markdown.
       streamBubbleIdRef.current = null;
@@ -1057,6 +1060,11 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
         // What was written while we were away: this message is the exact state
         // at this moment in the stream, later deltas continue from it.
         const partial = typeof m.partial === 'string' ? m.partial : '';
+        if (!partial && streamBubbleIdRef.current) {
+          // The message finished meanwhile and its end never reached us.
+          streamBubbleIdRef.current = null;
+          setStreamingId(null);
+        }
         if (partial) {
           const id = streamBubbleIdRef.current || uid();
           streamBubbleIdRef.current = id;

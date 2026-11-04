@@ -102,6 +102,7 @@ function withoutReplays(messages: ChatMessage[]): ChatMessage[] {
 
 /** What the status line says while a tool runs, in words, not tool names. */
 export function statusLabel(tool: string): string {
+  if (tool === 'background') return 'Dokončuju analýzu';
   if (tool === 'Read') return 'Čtu podklady';
   if (tool === 'Grep' || tool === 'Glob') return 'Hledám v brainu';
   if (tool === 'Write' || tool === 'Edit' || tool === 'MultiEdit') return 'Zapisuju';

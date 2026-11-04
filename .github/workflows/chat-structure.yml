@@ -1,0 +1,29 @@
+name: Chat structure
+
+# Read-only. Prints the shape of one chat's transcript, no message text, because
+# this repo's logs are public. Finds the chat by a hash of a message's start.
+
+on:
+  workflow_dispatch:
+    inputs:
+      hash:
+        description: First 16 hex of sha1 of the message's first 30 characters
+        required: true
+      hours:
+        description: How many hours back to look
+        default: '24'
+
+jobs:
+  look:
+    runs-on: [self-hosted, windows, beyond-brain]
+    timeout-minutes: 5
+    steps:
+      - name: Look
+        shell: powershell
+        env:
+          WANTED: ${{ github.event.inputs.hash }}
+          HOURS: ${{ github.event.inputs.hours }}
+        run: |
+          $app = if ($env:BEYOND_APP_DIR) { $env:BEYOND_APP_DIR } else { 'C:\Users\Vlast\beyond\beyond-brain-app' }
+          Set-Location $app
+          node scripts\chat-structure.cjs $env:WANTED $env:HOURS

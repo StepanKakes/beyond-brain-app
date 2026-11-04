@@ -464,6 +464,12 @@ export function ChatScreen({
       return;
     }
 
+    // Cokoli živého znamená, že se pracuje: i po hlášeném konci kola, když agenti
+    // na pozadí model znovu probudí.
+    if (kind === 'stream_delta' || kind === 'tool_use' || kind === 'tool_result' || kind === 'thinking') {
+      setBusy(true);
+    }
+
     if (kind === 'stream_delta') {
       setActivity(null);
       if (!bubble.current) {
@@ -553,11 +559,12 @@ export function ChatScreen({
     }
 
     if (kind === 'complete') {
-      setActivity(null);
+      const background = Number(m.backgroundTasks || 0) > 0;
+      setActivity(background ? 'background' : null);
       flush();
       bubble.current = null;
       setStreamingId(null);
-      setBusy(false);
+      setBusy(background);
       if (uuidRef.current && !UKAZKA) void reload(uuidRef.current);
       return;
     }
@@ -593,6 +600,11 @@ export function ChatScreen({
             // Co se mezitím napsalo: tahle zpráva je přesný stav k tomuhle okamžiku.
             flush();
             const partial = String(m.partial || '');
+            if (!partial && bubble.current) {
+              // Zpráva se mezitím dopsala a její konec se k nám nedostal.
+              bubble.current = null;
+              setStreamingId(null);
+            }
             if (partial) {
               const id = bubble.current || uid();
               bubble.current = id;

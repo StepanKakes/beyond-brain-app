@@ -916,7 +916,7 @@ function scheduleBeyondGraceEnd(entry) {
     entry.graceTimer = null;
     if (!entry.wsAlive && !entry.ended) {
       // Nobody is watching, but the answer must still get finished and saved.
-      if (entry.pendingTurnResolves.length > 0) {
+      if (isBeyondEntryBusy(entry)) {
         scheduleBeyondGraceEnd(entry);
         return;
       }
@@ -950,21 +950,35 @@ function attachWsToBeyondEntry(entry, ws) {
   }
 }
 
+// A background task that never reported back stops counting after this long.
+const BEYOND_TASK_STALE_MS = 30 * 60 * 1000;
+
+/** Is the agent still working here? A turn can report its result while its
+ *  background agents run on, and they then wake the model with no pending turn
+ *  on our side, so waiting for a `result` alone would call it finished too early. */
+function isBeyondEntryBusy(entry) {
+  if (!entry || entry.ended) return false;
+  if (entry.pendingTurnResolves.length > 0) return true;
+  const silent = Date.now() - (entry.lastMessageAt || 0);
+  if (entry.midTurn && silent < BEYOND_TURN_STALL_MS) return true;
+  return Boolean(entry.runningTasks?.size) && silent < BEYOND_TASK_STALE_MS;
+}
+
 /** Is a Beyond streaming turn still in-flight for this (user, session)? Lets a
  *  reconnecting browser tell "answer still generating" from "already finished
  *  while I was away" so it clears its spinner correctly. */
 function isBeyondTurnActive(sessionId, userId = null) {
   if (!sessionId) return false;
-  const entry = beyondStreamSessions.get(beyondChatKey(userId, sessionId));
-  return Boolean(entry && !entry.ended && entry.pendingTurnResolves.length > 0);
+  return isBeyondEntryBusy(beyondStreamSessions.get(beyondChatKey(userId, sessionId)));
 }
 
 /** What a browser coming back mid-turn has missed: the message being written
  *  right now (finished ones are on disk) and the tool at work. */
 function getBeyondTurnLive(sessionId, userId = null) {
   const entry = sessionId ? beyondStreamSessions.get(beyondChatKey(userId, sessionId)) : null;
-  if (!entry || entry.ended || entry.pendingTurnResolves.length === 0) return { partial: '', activity: null };
-  return { partial: entry.partialText || '', activity: entry.activityTool || null };
+  if (!isBeyondEntryBusy(entry)) return { partial: '', activity: null };
+  const activity = entry.activityTool || (entry.runningTasks?.size ? { name: 'background' } : null);
+  return { partial: entry.partialText || '', activity };
 }
 
 // A browser that lost its socket before `session_created` has no session id to
@@ -1001,7 +1015,7 @@ function describeBeyondStreams() {
 function countActiveBeyondTurns() {
   let n = 0;
   for (const entry of beyondStreamSessions.values()) {
-    if (!entry.ended && entry.pendingTurnResolves.length > 0) n += 1;
+    if (isBeyondEntryBusy(entry)) n += 1;
   }
   return n;
 }
@@ -1537,6 +1551,12 @@ async function handleBeyondStreamMessage(entry, message) {
   if (message.type === 'assistant') recordSdkMessage(entry.sdkSessionId, message);
 
   entry.lastMessageAt = Date.now();
+  if (message.type === 'system' && message.subtype === 'task_started') {
+    (entry.runningTasks ||= new Set()).add(message.task_id);
+  } else if (message.type === 'system' && message.subtype === 'task_notification') {
+    entry.runningTasks?.delete(message.task_id);
+  }
+  if (message.type === 'assistant' || message.type === 'stream_event') entry.midTurn = true;
 
   // Normalize + forward to client.
   for (const msg of [...normalizeForBrowser(message, entry.sdkSessionId), ...explainSdkTrouble(message, entry.sdkSessionId)]) {
@@ -1557,6 +1577,7 @@ async function handleBeyondStreamMessage(entry, message) {
 
   // On turn end: live context usage + resolve the oldest pending turn.
   if (message.type === 'result') {
+    entry.midTurn = false;
     entry.partialText = '';
     entry.activityTool = null;
     recordUsage(message, { source: 'chat', label: entry.sessionSummary || null, actor: entry.historyUser || null, sessionId: entry.sdkSessionId });
@@ -1595,6 +1616,8 @@ async function handleBeyondStreamMessage(entry, message) {
       kind: 'complete',
       exitCode: 0,
       isNewSession: false,
+      // Still working in the background: the answer is not over for the person.
+      backgroundTasks: entry.runningTasks?.size || 0,
       sessionId: entry.sdkSessionId,
       provider: 'claude',
     }));
