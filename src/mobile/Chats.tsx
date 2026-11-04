@@ -7,7 +7,7 @@ import { UNIVERSAL, navigate } from './router';
 import { mutate, readCache, useResource } from './store';
 import { TASKS_KEY, TASKS_PATH } from './Today';
 import type { ChatSession, SessionIndex, TasksResponse } from './types';
-import { BarButton, Empty, Section, SwipeRow, TabScreen, ago, deleteWithUndo } from './ui';
+import { BarButton, Empty, LinkRow, Section, SwipeRow, TabScreen, ago, deleteWithUndo } from './ui';
 
 function groupOf(ms: number): string {
   const date = new Date(ms);
@@ -107,6 +107,11 @@ export function ChatsScreen() {
             onValueChange={setQuery}
           />
         </div>
+      ) : null}
+      {!query.trim() ? (
+        <Section>
+          <LinkRow icon="clock" title="Rutiny" onClick={() => navigate('/m/rutiny')} />
+        </Section>
       ) : null}
       {!chats.length ? <Empty title="Zatím žádný chat">Začni tlačítkem vpravo nahoře</Empty> : null}
       {chats.length && !groups.length ? <Empty title="Nic nenalezeno">Zkus jiné slovo</Empty> : null}
