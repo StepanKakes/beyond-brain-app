@@ -20,6 +20,7 @@ import Toaster from './ui/Toaster';
 import ObsahPage from './velin/ObsahPage';
 import StudioPage from './velin/StudioPage';
 import KpiPage from './velin/KpiPage';
+import RutinyPage from './velin/RutinyPage';
 import { useBeyondClients, type BeyondClient } from './useBeyondClients';
 import { UNIVERSAL_SLUG } from './beyondSessionsApi';
 
@@ -63,6 +64,7 @@ type View =
   | { kind: 'obsah' }
   | { kind: 'studio' }
   | { kind: 'kpi' }
+  | { kind: 'rutiny' }
   | { kind: 'chat' };
 
 function parseView(pathname: string): View {
@@ -74,6 +76,7 @@ function parseView(pathname: string): View {
   if (parts[0] === 'obsah') return { kind: 'obsah' };
   if (parts[0] === 'stories') return { kind: 'studio' };
   if (parts[0] === 'kpi') return { kind: 'kpi' };
+  if (parts[0] === 'rutiny') return { kind: 'rutiny' };
   if (parts[0] === 'soubory') {
     const rest = parts.slice(1).map((p) => decodeURIComponent(p)).join('/');
     return { kind: 'files', path: rest || null };
@@ -366,6 +369,7 @@ export default function BeyondApp() {
   const openObsah = useCallback(() => navigate('/obsah'), [navigate]);
   const openStudio = useCallback(() => navigate('/stories'), [navigate]);
   const openKpi = useCallback(() => navigate('/kpi'), [navigate]);
+  const openRutiny = useCallback(() => navigate('/rutiny'), [navigate]);
   const openFiles = useCallback(
     (p?: string | null) => navigate(p ? `/soubory/${p.split('/').map(encodeURIComponent).join('/')}` : '/soubory'),
     [navigate],
@@ -382,6 +386,7 @@ export default function BeyondApp() {
       onOpenObsah={openObsah}
       onOpenStudio={openStudio}
       onOpenKpi={openKpi}
+      onOpenRutiny={openRutiny}
       onOpenUniversalChat={handleOpenUniversalChat}
       onReturnToChat={handleReturnToChat}
       onSwitchUniversalSession={handleSwitchUniversalSession}
@@ -428,6 +433,8 @@ export default function BeyondApp() {
             <StudioPage />
           ) : view.kind === 'kpi' ? (
             <KpiPage />
+          ) : view.kind === 'rutiny' ? (
+            <RutinyPage />
           ) : (
             <BeyondWelcome
               onSubmit={(message) => handleWelcomePrompt(message)}

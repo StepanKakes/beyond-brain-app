@@ -82,6 +82,7 @@ export function MoreScreen() {
         <LinkRow icon="letter" title="Návrhy ke schválení" value={badge(counts.data?.navrhy)} onClick={() => navigate('/m/navrhy')} />
         <LinkRow icon="film" title="Obsah" value={badge(counts.data?.obsah)} onClick={() => navigate('/m/obsah')} />
         <LinkRow icon="chart" title="KPI" onClick={() => navigate('/m/kpi')} />
+        <LinkRow icon="clock" title="Rutiny" onClick={() => navigate('/m/rutiny')} />
         <LinkRow icon="folder" title="Soubory" onClick={() => navigate('/m/soubory')} />
       </Section>
       <Section title="Nastavení">

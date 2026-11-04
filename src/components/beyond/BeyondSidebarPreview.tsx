@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import {
   Search, Plus, Trash2, Plug,
   PanelLeftClose, Settings, Sun, Moon,
-  Gauge, Users, CalendarDays, MessageSquare, Bot, FolderTree, Clapperboard, Images, ChevronsUpDown, TrendingUp,
+  Gauge, Users, CalendarDays, MessageSquare, Bot, FolderTree, Clapperboard, Images, ChevronsUpDown, TrendingUp, CalendarClock,
 } from './icons';
 import BeyondBrainMark from './BeyondBrainMark';
 import { useBeyondClients } from './useBeyondClients';
@@ -38,6 +38,7 @@ type Props = {
   onOpenObsah?: () => void;
   onOpenStudio?: () => void;
   onOpenKpi?: () => void;
+  onOpenRutiny?: () => void;
   onOpenUniversalChat?: () => void;
   /** Back to the chat that is open; the Chat item does not start a new one. */
   onReturnToChat?: () => void;
@@ -59,6 +60,7 @@ export default function BeyondSidebarPreview({
   onOpenObsah,
   onOpenStudio,
   onOpenKpi,
+  onOpenRutiny,
   onOpenUniversalChat,
   onReturnToChat,
   onSwitchUniversalSession,
@@ -132,6 +134,7 @@ export default function BeyondSidebarPreview({
         {onOpenBoard && <NavRow icon={Users} label="Klienti" on={section === 'board' || section === 'client'} count={counts?.klienti} onClick={onOpenBoard} />}
         {onOpenCalls && <NavRow icon={CalendarDays} label="Hovory" on={section === 'calls'} onClick={onOpenCalls} />}
         {onOpenKpi && <NavRow icon={TrendingUp} label="KPI" on={section === 'kpi'} onClick={onOpenKpi} />}
+        {onOpenRutiny && <NavRow icon={CalendarClock} label="Rutiny" on={section === 'rutiny'} onClick={onOpenRutiny} />}
         {onOpenObsah && <NavRow icon={Clapperboard} label="Obsah" on={section === 'obsah'} count={counts?.obsah} onClick={onOpenObsah} />}
         {onOpenStudio && <NavRow icon={Images} label="Stories" on={section === 'studio'} onClick={onOpenStudio} />}
         {onOpenAgent && <NavRow icon={Bot} label="Agent" on={section === 'agent'} onClick={onOpenAgent} />}

@@ -26,7 +26,9 @@ import { runSdkOneShot } from '../claude-sdk.js';
 import { getBrainIndex, invalidateBrainIndex } from './brain-index.js';
 import { inbox, signalsForClient } from './brain-signals.js';
 import { getCalls } from './beyond-calls.js';
-import { pushToEveryone } from './notification-orchestrator.js';
+import { pushToEveryone, pushToUser } from './notification-orchestrator.js';
+import { enqueueInternal } from './beyond-events.js';
+import { userDb } from '../modules/database/index.js';
 import { getPeople } from './beyond-people.js';
 import { resolveBrainPath } from '../utils/brain-path.js';
 import { getJobState, lastOkSummary, listRuns, markJobRan, ranToday } from './beyond-runs.js';
@@ -389,6 +391,32 @@ function autoBlocksWithoutWriteup(slug) {
   return out;
 }
 
+/**
+ * Routines set to run after every call. They start from here and not from the
+ * calendar because a call that just ended has nothing to summarise yet: the
+ * transcript comes later, through Fathom and n8n. An old call found by a
+ * backfill wakes nobody.
+ */
+function queueAfterCallRoutines(call, log) {
+  const age = Date.now() - Date.parse(call.dateIso);
+  if (!(age < 3 * 24 * 60 * 60 * 1000)) return;
+  for (const task of listTasks()) {
+    if (task.enabled === false || task.schedule?.kind !== 'po_hovoru') continue;
+    enqueueInternal({
+      job: task.name,
+      event: 'po-hovoru',
+      context: {
+        klient: call.name,
+        slug: call.slug,
+        datum: call.dateIso,
+        zapis: `clients/aktivni/${call.slug}/cally.md`,
+        ukoly: `clients/aktivni/${call.slug}/_action-items.md`,
+      },
+    });
+    log(`rutina ${task.name} čeká na hovor s ${call.name}`);
+  }
+}
+
 const processCall = {
   name: 'zpracuj-call',
   model: 'opus',
@@ -463,6 +491,8 @@ const processCall = {
         log(`${call.name}: zápis do Notionu selhal (${err?.message || err})`);
         done.push(`${call.name}: zápis do Notionu selhal (${err?.message || err})`);
       }
+
+      queueAfterCallRoutines(call, log);
 
       // The record is written, but the client has heard nothing. A recap sent
       // the same day is what makes the next week start from an agreement
@@ -1805,6 +1835,7 @@ function runnableFromTask(task) {
           previous?.summary ? previous.summary.slice(0, 2000) : null,
           '',
           'Odpověz jen výsledkem, doručí se beze změny. Prostý text bez markdownu.',
+          task.deliver?.kind === 'push' ? 'První řádek je jedna věta do notifikace, nejvýš 120 znaků. Pak prázdný řádek a celý výstup.' : null,
           'Když není co hlásit, odpověz přesně: [TICHO]',
         ]
           .filter((l) => l !== null)
@@ -1843,6 +1874,21 @@ function runnableFromTask(task) {
         await fs.mkdir(path.dirname(abs), { recursive: true });
         await fs.writeFile(abs, `# ${task.title}\n\n${text}\n`, 'utf8');
         note = `uloženo: ${rel}`;
+      } else if (d.kind === 'push') {
+        // Goes to whoever set it up. Tasks the agent made for no particular
+        // login go to everyone, a notification nobody gets helps no one.
+        const owner = userDb.getUserByUsername(task.createdBy);
+        const [first, ...rest] = text.split('\n');
+        const message = {
+          title: task.title,
+          body: first.trim().slice(0, 170) || task.title,
+          url: `/m/rutina/${encodeURIComponent(task.name)}`,
+          tag: `rutina-${task.name}`,
+        };
+        void (owner ? pushToUser(owner.id, message) : pushToEveryone(message));
+        // The screen behind the notification shows the output, not the plumbing.
+        const output = rest.join('\n').trim() || first.trim();
+        return { summary: output.slice(0, 8000) };
       }
       log(note);
       return { summary: `${note}\n\n${text.slice(0, 3500)}` };

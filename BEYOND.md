@@ -719,6 +719,15 @@ platná adresa, Apple jinak push odmítne (`BEYOND_VAPID_SUBJECT`).
 **Zámek závislostí:** `npm install` na Macu přepíše `package-lock.json` tisíci
 změn a může rozbít `npm ci` na Windows. Novou závislost do něj dopisuj cíleně.
 
+## Rutiny
+
+Rutina je vlastní úloha v `system/ulohy.json` (`deliver.kind: push`), kterou si člověk nastaví sám. Běží ji stejný plánovač a stejný `runnableFromTask` jako ostatní vlastní úlohy, `server/services/beyond-rutiny.js` je jen pohled pro appku a šablony. Obrazovky: mobil `src/mobile/Routines.tsx` (Více > Rutiny), počítač `src/components/beyond/velin/RutinyPage.tsx`, společné tvary a převod rozvrhu `src/rutiny.ts`. API je `/api/beyond/velin/rutiny`, každý vidí a mění jen své (`createdBy`).
+
+- Notifikace jde tvůrci (`pushToUser`), první řádek výstupu je její text, klepnutí otevře `/m/rutina/<name>` s výstupy z `beyond_runs`.
+- Rozvrh `po_hovoru` hodiny nikdy nespustí. Spouští ho `queueAfterCallRoutines` na konci `zpracuj-call`, protože po konci hovoru ještě není co shrnout, přepis přichází později přes Fathom a n8n. Hovor starší 3 dnů rutiny nebudí. Pozor: hovor bez nahrávky se do brainu nezapíše a rutinu nespustí.
+- Plánovač dohání zmeškané termíny, proto `skipMissedSlot`: ranní rutina založená večer neběží hned, ale zítra.
+- Výstup se od deníku běhu odděluje značkou `RUN_LOG_MARK` v `summary`.
+
 ## Běh chatu (4.11.2026)
 
 Odpověď podle Siri, na mobilu i na počítači (`chat/useRevealPhase.ts`, `BeyondLoader.tsx`, `chat/answer-motion.css`): během práce se text neukazuje, jen prstenec a dýchající popisek. Po konci kola stav zmizí za 0,25 s, 0,3 s klid, bloky naběhnou po 70 ms (fade a posun 25 bodů za 0,23 s, odhalení shora). Dotaz stojí nahoře, `fitTurn` dopočítává místo pod ním, proto se při příchodu odpovědi nehne.

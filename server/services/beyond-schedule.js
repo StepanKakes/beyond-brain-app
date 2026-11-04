@@ -170,8 +170,11 @@ export function normalizeSchedule(input) {
     }
     case 'manual':
       return { kind: 'manual' };
+    // Never due by the clock: `zpracuj-call` queues these when a call is written.
+    case 'po_hovoru':
+      return { kind: 'po_hovoru' };
     default:
-      throw new Error(`neznámý druh rozvrhu „${input.kind}", umím every, daily, weekly, cron, at, manual`);
+      throw new Error(`neznámý druh rozvrhu „${input.kind}", umím every, daily, weekly, cron, at, manual, po_hovoru`);
   }
 }
 
@@ -252,8 +255,13 @@ export function describeSchedule(schedule) {
       return `denně ${schedule.time}`;
     case 'weekly':
       return `týdně, ${WEEKDAYS[schedule.weekday]} ${schedule.time}`;
-    case 'cron':
+    case 'cron': {
+      const workdays = /^(\d{1,2}) (\d{1,2}) \* \* 1-5$/.exec(schedule.expr);
+      if (workdays) return `v pracovní dny ${workdays[2].padStart(2, '0')}:${workdays[1].padStart(2, '0')}`;
       return `cron ${schedule.expr}`;
+    }
+    case 'po_hovoru':
+      return 'po každém hovoru';
     case 'at': {
       const w = toWall(new Date(schedule.at));
       return `jednou, ${w.getUTCDate()}. ${w.getUTCMonth() + 1}. ${String(w.getUTCHours()).padStart(2, '0')}:${String(w.getUTCMinutes()).padStart(2, '0')}`;

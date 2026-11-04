@@ -68,6 +68,7 @@ export function buildBeyondToolsServer(ctx = {}) {
       prompt: z.string().optional(),
       skill: z.string().optional().describe('název skillu z .claude/skills, který má úloha použít'),
       schedule: z.record(z.string(), z.any()).optional(),
+      // {kind: "push"} sends a phone notification that opens the output in the app.
       deliver: z.record(z.string(), z.any()).optional(),
       repeatTimes: z.number().int().positive().optional().describe('kolikrát celkem proběhnout, pak se vypne'),
       continuity: z.boolean().optional(),

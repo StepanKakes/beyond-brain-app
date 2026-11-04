@@ -111,7 +111,7 @@ export async function setScheduleOverride(jobName, schedule, { by = 'app' } = {}
 /* custom tasks                                                        */
 /* ------------------------------------------------------------------ */
 
-const DELIVER_KINDS = new Set(['telegram', 'soubor', 'nic']);
+const DELIVER_KINDS = new Set(['push', 'telegram', 'soubor', 'nic']);
 
 function slugify(text) {
   return String(text || '')
@@ -130,7 +130,7 @@ function normalizeDeliver(input) {
     return normalizeDeliver({ kind, chatId });
   }
   const kind = String(input.kind || 'nic').toLowerCase();
-  if (!DELIVER_KINDS.has(kind)) throw new Error(`deliver umí telegram, soubor nebo nic, ne „${input.kind}"`);
+  if (!DELIVER_KINDS.has(kind)) throw new Error(`deliver umí push, telegram, soubor nebo nic, ne „${input.kind}"`);
   const out = { kind };
   if (kind === 'telegram' && input.chatId) out.chatId = String(input.chatId);
   return out;
@@ -213,6 +213,7 @@ export async function updateTask(idOrName, patch, { by = 'app' } = {}) {
   if (patch.enabled != null) task.enabled = Boolean(patch.enabled);
   if (patch.continuity != null) task.continuity = Boolean(patch.continuity);
   if (patch.noAgent != null) task.noAgent = Boolean(patch.noAgent);
+  if (Array.isArray(patch.mcp)) task.mcp = patch.mcp.map((m) => String(m));
   if (patch.repeat !== undefined) {
     task.repeat = patch.repeat?.times ? { times: Number(patch.repeat.times), completed: task.repeat?.completed || 0 } : null;
   }

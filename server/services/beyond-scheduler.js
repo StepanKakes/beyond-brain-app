@@ -37,6 +37,7 @@ import { noteTaskRan } from './beyond-tasks.js';
 import { brainIsDirty, commitBrain, pullBrain } from './beyond-git.js';
 import { describeSchedule } from './beyond-schedule.js';
 import { broadcast as tgBroadcast, sendTo as tgSendTo } from './beyond-telegram.js';
+import { RUN_LOG_MARK } from './beyond-runs.js';
 import { pruneHistory } from './beyond-history.js';
 import { invalidateBrainIndex } from './brain-index.js';
 import { pruneOsa } from './beyond-obsah.js';
@@ -111,7 +112,10 @@ export async function runJob(name, { triggerKind = 'manual', triggerDetail = nul
       recordOutcome(name, { status: 'skipped' });
       outcome = await run.skip(result.skipped);
     } else {
-      const summary = [result?.summary, lines.length ? lines.join('\n') : null].filter(Boolean).join('\n\n');
+      // Routines show their summary to the person, so the log stays apart from it.
+      const summary = [result?.summary, lines.length ? `${job.custom ? `${RUN_LOG_MARK}\n` : ''}${lines.join('\n')}` : null]
+        .filter(Boolean)
+        .join('\n\n');
       log(`${name} hotovo`);
       recordOutcome(name, { status: 'ok' });
       outcome = await run.finish({ summary: summary || null });

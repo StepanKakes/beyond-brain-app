@@ -1131,3 +1131,39 @@ details.bb-set__group .bb-set__row:focus-within .bb-set__h { display: block; }
 .bb-step__name { flex: none; }
 .bb-step__detail { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--bb-ink3); }
 
+
+/* Routines */
+.bb-rut .bb-vel__head { align-items: center; justify-content: space-between; }
+.bb-rut__btn { flex: none; padding: 7px 14px; border-radius: 999px; font-size: 13px; font-weight: 500; cursor: pointer; }
+.bb-rut__hint { margin: 0 0 16px; font-size: 13px; color: var(--bb-ink2); }
+.bb-rut__grid { display: grid; grid-template-columns: minmax(240px, 320px) minmax(0, 1fr); gap: 32px; align-items: start; }
+.bb-rut__list { display: flex; flex-direction: column; gap: 2px; }
+.bb-rut__item { display: flex; align-items: center; gap: 10px; padding: 4px 10px 4px 4px; border-radius: 12px; transition: background var(--bb-t-fast) ease; }
+.bb-rut__item:hover { background: var(--bb-panel2); }
+.bb-rut__item[aria-current="true"] { background: var(--bb-panel2); }
+.bb-rut__item > button { flex: 1; min-width: 0; padding: 8px; text-align: left; background: none; border: 0; color: var(--bb-ink); cursor: pointer; }
+.bb-rut__item strong, .bb-rut__item small { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.bb-rut__item strong { font-size: 14px; font-weight: 500; }
+.bb-rut__item small { margin-top: 2px; font-size: 12.5px; color: var(--bb-ink2); }
+.bb-rut__detail { min-width: 0; }
+.bb-rut__detailhead { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+.bb-rut__detailhead h2 { flex: 1; min-width: 0; margin: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 16px; font-weight: 600; letter-spacing: -.01em; color: var(--bb-ink); }
+.bb-rut__run { padding: 14px 0; border-top: 1px solid var(--bb-line2); }
+.bb-rut__run time { display: block; margin-bottom: 6px; font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--bb-ink2); }
+.bb-rut__run p { margin: 0; max-width: 68ch; font-size: 14px; line-height: 1.5; color: var(--bb-ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+.bb-rut__run p[data-quiet="true"] { color: var(--bb-ink2); }
+.bb-rut__form { gap: 18px; }
+.bb-rut__form label { display: block; min-width: 0; flex: 1; }
+.bb-rut__form .bb-section__label { display: block; margin-bottom: 6px; }
+.bb-rut__form .bb-field { width: 100%; padding: 9px 12px; border-radius: 10px; font-size: 14px; font: inherit; }
+.bb-rut__form textarea.bb-field { resize: vertical; line-height: 1.45; }
+.bb-rut__when { display: flex; gap: 12px; }
+.bb-rut__switch { display: flex; align-items: center; justify-content: space-between; font-size: 14px; color: var(--bb-ink); }
+.bb-rut__error { margin: 0; font-size: 13px; color: var(--bb-danger); }
+.bb-rut__actions { display: flex; align-items: center; gap: 8px; }
+.bb-rut__actions > span { flex: 1; }
+.bb-rut__choices { gap: 8px; }
+.bb-rut__choices .bb-option { width: 100%; text-align: left; }
+.bb-rut__choices strong, .bb-rut__choices small { display: block; }
+.bb-rut__choices strong { font-size: 14px; font-weight: 500; }
+.bb-rut__choices small { margin-top: 2px; font-size: 12.5px; color: var(--bb-ink2); }

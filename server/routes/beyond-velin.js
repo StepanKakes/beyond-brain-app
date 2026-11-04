@@ -17,12 +17,13 @@ import { beginAuthorization, disconnectGoogle, googleStatus, invalidateGoogle } 
 import { usageReport, subscriptionLimits, brainShare } from '../services/beyond-usage.js';
 import { getPeople, personForUser } from '../services/beyond-people.js';
 import { STAGES, stageFor, setStage } from '../services/beyond-pipeline.js';
-import { userDb } from '../modules/database/index.js';
+import { pushSubscriptionsDb, userDb } from '../modules/database/index.js';
+import { ROUTINE_TEMPLATES, listRoutines, routineDetail, routineView, skipMissedSlot } from '../services/beyond-rutiny.js';
 import { listRuns, setJobEnabled } from '../services/beyond-runs.js';
 import { describeJobs, runJob, schedulerStatus, setPaused } from '../services/beyond-scheduler.js';
-import { listEvents, listRoutes } from '../services/beyond-events.js';
+import { enqueueInternal, listEvents, listRoutes } from '../services/beyond-events.js';
 import * as mozek from '../services/beyond-mozek.js';
-import { createTask, removeTask, setScheduleOverride, updateTask } from '../services/beyond-tasks.js';
+import { createTask, getTask, removeTask, setScheduleOverride, updateTask } from '../services/beyond-tasks.js';
 import { snapshot as memorySnapshot } from '../services/beyond-memory.js';
 import * as ukoly from '../services/beyond-ukoly.js';
 import * as obsah from '../services/beyond-obsah.js';
@@ -781,6 +782,90 @@ router.get('/agent', (_req, res) => {
   } catch (err) {
     console.error('[velin] /agent failed', err);
     res.status(500).json({ error: err?.message || 'agent selhal' });
+  }
+});
+
+/* ---- routines: the person's own view of custom tasks -------------- */
+
+const ROUTINE_ERROR = 'Tuhle rutinu nastavil někdo jiný';
+
+const routineOf = (req) => {
+  const task = getTask(req.params.name);
+  if (!task) throw new Error('Rutina neexistuje');
+  if (task.createdBy !== req.user?.username) throw new Error(ROUTINE_ERROR);
+  return task;
+};
+
+router.get('/rutiny', (req, res) => {
+  res.json({
+    rutiny: listRoutines(req.user.username),
+    sablony: ROUTINE_TEMPLATES,
+    notifikace: pushSubscriptionsDb.getSubscriptions(req.user.id).length > 0,
+  });
+});
+
+router.get('/rutiny/:name', (req, res) => {
+  try {
+    res.json(routineDetail(routineOf(req)));
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'rutina se nenačetla' });
+  }
+});
+
+router.post('/rutiny', async (req, res) => {
+  try {
+    const { title, prompt, schedule, notion } = req.body || {};
+    const task = await createTask({
+      title,
+      prompt,
+      schedule,
+      deliver: { kind: 'push' },
+      mcp: notion ? ['notion'] : [],
+      createdBy: req.user.username,
+    });
+    skipMissedSlot(task);
+    res.json({ ok: true, rutina: routineView(task) });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'rutina nešla založit' });
+  }
+});
+
+router.patch('/rutiny/:name', async (req, res) => {
+  try {
+    const current = routineOf(req);
+    const { title, prompt, schedule, enabled, notion } = req.body || {};
+    const task = await updateTask(
+      current.name,
+      { title, prompt, schedule, enabled, ...(notion == null ? {} : { mcp: notion ? ['notion'] : [] }) },
+      { by: req.user.username },
+    );
+    // Moving a morning routine or switching it back on in the evening must not
+    // fire this morning's slot right now.
+    if (schedule || enabled === true) skipMissedSlot(task);
+    res.json({ ok: true, rutina: routineView(task) });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'rutina nešla upravit' });
+  }
+});
+
+router.delete('/rutiny/:name', async (req, res) => {
+  try {
+    const current = routineOf(req);
+    await removeTask(current.name, { by: req.user.username });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'rutina nešla smazat' });
+  }
+});
+
+/** Through the queue: something else may be running, and the tick waits for it. */
+router.post('/rutiny/:name/spustit', (req, res) => {
+  try {
+    const current = routineOf(req);
+    enqueueInternal({ job: current.name, event: 'rucne', context: {} });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'rutina nešla spustit' });
   }
 });
 

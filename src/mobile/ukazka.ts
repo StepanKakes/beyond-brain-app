@@ -154,6 +154,7 @@ export function mockApi(path: string, options: Options): unknown {
   if (path === '/api/beyond/velin/') {
     return { me: { key: 'stepan', displayName: 'Štěpán' }, needsUs: pavelSignals, risks: board[1].signals };
   }
+  if (path.startsWith('/api/beyond/velin/rutiny')) return mockRoutines(path, options);
   if (path.startsWith('/api/beyond/velin/pocty')) return { navrhy: 1, obsah: 2, klienti: 2, velin: 3 };
   if (path.startsWith('/api/beyond/velin/board')) return { clients: board };
   if (path.startsWith('/api/beyond/velin/client/')) {
@@ -304,4 +305,32 @@ export function mockSocket(message: Record<string, unknown>, emit: (m: Record<st
     emit({ kind: 'text', role: 'assistant', sessionId, content: REPLY });
     emit({ kind: 'complete', sessionId });
   }, pause + 300 + words.length * 45);
+}
+
+const UKAZKA_VYSTUP = 'Tim, Honza Novák: řešili nízký počet hovorů z DM. Shodli se na dvou nových hácích do pátku\n\nŠtěpán, Eva Malá: check-in, tržby rostou. Eva pošle čísla za říjen, na nás je úprava nabídky';
+const UKAZKA_RUTINA = {
+  name: 'ranni-souhrn-hovoru',
+  title: 'Ranní souhrn hovorů',
+  prompt: 'Projdi hovory od minulého pracovního dne a napiš, kdo s kým co řešil.',
+  schedule: { kind: 'cron', expr: '0 8 * * 1-5' },
+  kdy: 'v pracovní dny 08:00',
+  enabled: true,
+  notion: false,
+  posledni: { id: 2, status: 'ok', at: new Date(Date.now() - 3 * 3600e3).toISOString(), vystup: UKAZKA_VYSTUP, chyba: null },
+};
+const UKAZKA_SABLONY = [
+  { id: 'rano', title: 'Ranní souhrn hovorů', sub: 'V pracovní dny v 8:00 přehled, co se včera na callech řešilo', schedule: { kind: 'cron', expr: '0 8 * * 1-5' }, prompt: 'Projdi hovory od minulého pracovního dne a napiš, kdo s kým co řešil.' },
+  { id: 'hovor', title: 'Souhrn po hovoru', sub: 'Hned jak je hovor zapsaný, co se na něm řešilo', schedule: { kind: 'po_hovoru' }, prompt: 'Napiš do šesti řádků, co se na hovoru řešilo.' },
+];
+
+function mockRoutines(path: string, options: { method?: string }): unknown {
+  if (options.method && options.method !== 'GET') return { ok: true, rutina: UKAZKA_RUTINA };
+  if (path.endsWith('/rutiny')) return { rutiny: [UKAZKA_RUTINA], sablony: UKAZKA_SABLONY, notifikace: true };
+  return {
+    rutina: UKAZKA_RUTINA,
+    behy: [
+      UKAZKA_RUTINA.posledni,
+      { id: 1, status: 'skipped', at: new Date(Date.now() - 27 * 3600e3).toISOString(), vystup: null, chyba: null },
+    ],
+  };
 }

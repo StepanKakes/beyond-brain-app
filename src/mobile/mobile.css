@@ -2127,3 +2127,83 @@ html.dark .m-root {
   --bb-status-size: 17px;
   padding: 6px var(--m-gutter);
 }
+
+/* Rutiny */
+.m-rutina-kdy {
+  display: block;
+  margin-top: 2px;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--bb-ink2);
+}
+
+.m-rutina-beh {
+  padding: 14px var(--m-gutter);
+}
+
+.m-rutina-beh + .m-rutina-beh {
+  border-top: 0.5px solid var(--bb-line);
+}
+
+.m-rutina-beh time {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--bb-ink2);
+}
+
+.m-rutina-beh p {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.m-rutina-beh p.is-quiet,
+.m-rutina-prazdno {
+  color: var(--bb-ink2);
+}
+
+.m-rutina-prazdno {
+  margin: 0;
+  padding: 14px var(--m-gutter);
+}
+
+.m-rutina-form > label {
+  display: block;
+  margin: 0 var(--m-gutter) 16px;
+}
+
+.m-rutina-form > label > span {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+  color: var(--bb-ink2);
+}
+
+.m-rutina-form .m-textarea {
+  display: block;
+  min-height: 160px;
+}
+
+.m-rutina-cas {
+  border: 0;
+  background: none;
+  color: var(--bb-ink);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  outline: none;
+}
+
+.m-rutina-form > .m-sheet-actions {
+  margin: 0 var(--m-gutter) 24px;
+}
+
+.m-rutina-form > .m-sheet-actions > * {
+  flex: 1;
+}

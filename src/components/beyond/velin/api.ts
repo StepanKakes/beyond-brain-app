@@ -8,6 +8,8 @@ import { authenticatedFetch } from '../../../utils/api';
  * empty list. An empty list and "we could not look" are different facts.
  */
 
+import type { Rutina, RutinaDetail, RutinaDraft, RutinyList } from '../../../rutiny';
+
 export type Severity = 'critical' | 'watch';
 
 export type Signal = {
@@ -308,6 +310,9 @@ export type Kpi = {
 
 export const fetchKpi = (force = false) => get<Kpi>(`/kpi${force ? '?force=1' : ''}`);
 
+export const fetchRutiny = () => get<RutinyList>('/rutiny');
+export const fetchRutina = (name: string) => get<RutinaDetail>(`/rutiny/${encodeURIComponent(name)}`);
+
 async function send<T>(pathname: string, method: string, body?: unknown): Promise<T> {
   const res = await authenticatedFetch(`/api/beyond/velin${pathname}`, {
     method,
@@ -326,6 +331,11 @@ export const createQuick = (quick: string, owner?: string) => send<{ ok: boolean
 export const patchTask = (id: string, patch: Partial<Pick<Task, 'state' | 'priority' | 'text' | 'owner' | 'due'>> & { client?: string | null }) =>
   send<{ ok: boolean }>(`/ukoly/${encodeURIComponent(id)}`, 'PATCH', patch);
 export const deleteTask = (id: string) => send<{ ok: boolean }>(`/ukoly/${encodeURIComponent(id)}`, 'DELETE');
+export const createRutina = (draft: RutinaDraft) => send<{ ok: boolean; rutina: Rutina }>('/rutiny', 'POST', draft);
+export const patchRutina = (name: string, patch: Partial<RutinaDraft> & { enabled?: boolean }) =>
+  send<{ ok: boolean; rutina: Rutina }>(`/rutiny/${encodeURIComponent(name)}`, 'PATCH', patch);
+export const deleteRutina = (name: string) => send<{ ok: boolean }>(`/rutiny/${encodeURIComponent(name)}`, 'DELETE');
+export const runRutina = (name: string) => send<{ ok: boolean }>(`/rutiny/${encodeURIComponent(name)}/spustit`, 'POST');
 export const prepAct = (path: string, body?: unknown) => send<{ ok: boolean; error?: string }>(path, 'POST', body);
 export const editProposal = (id: number, body: string) => send<{ ok: boolean }>(`/navrhy/${id}`, 'PATCH', { body });
 export const fetchObsah = () => get<{ items: ObsahItem[] }>('/obsah');

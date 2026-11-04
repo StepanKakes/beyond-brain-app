@@ -159,6 +159,9 @@ export async function startRun({ job, triggerKind, triggerDetail = null, context
   };
 }
 
+/** Divides what a routine said from what the scheduler logged around it. */
+export const RUN_LOG_MARK = '[deník běhu]';
+
 export function listRuns({ limit = 40, job = null } = {}) {
   const rows = job
     ? db()
