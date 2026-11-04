@@ -333,6 +333,9 @@ export const patchObsah = (id: string, patch: Partial<ObsahItem>) => send<{ ok: 
 export const cutObsah = (id: string) => send<{ ok: boolean }>(`/obsah/${encodeURIComponent(id)}/strih`, 'POST');
 export const deleteObsah = (id: string) => send<{ ok: boolean }>(`/obsah/${encodeURIComponent(id)}`, 'DELETE');
 export const saveSettings = (values: Record<string, string>) => send<{ ok: boolean; changed: string[] }>('/nastaveni', 'PUT', { values });
+export type GoogleStatus = { configured: boolean; connected: boolean; account: string | null; redirectUri: string };
+export const fetchGoogleStatus = () => get<GoogleStatus>('/google');
+export const startGoogle = () => send<{ ok: boolean; url: string }>('/google/povolit', 'POST', {});
 export const fetchMozekItem = async (id: number) => {
   const r = await get<{ items: { id: number; before: string | null; after: string }[] }>('/agent/mozek');
   return r.items.find((m) => m.id === id) || null;

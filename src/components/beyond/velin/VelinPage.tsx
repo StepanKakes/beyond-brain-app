@@ -23,6 +23,9 @@ import {
   type QuickParse,
   type QuickToken,
   saveSettings,
+  fetchGoogleStatus,
+  startGoogle,
+  type GoogleStatus,
   type Task,
   type Ukoly,
   type Velin,
@@ -956,6 +959,7 @@ export default function VelinPage({ onOpenClient, onOpenCalls, onOpenChat }: Pro
               )}
               {calls && (
                 <div className="bb-cal">
+                  <GoogleRow />
                   {[SHARED_CALENDAR, ...people].map((p) => (
                     <div key={p.key} className="bb-cal__row">
                       <span className="bb-cal__who">{p.displayName}</span>
@@ -1029,6 +1033,44 @@ export default function VelinPage({ onOpenClient, onOpenCalls, onOpenChat }: Pro
           onSaved={() => { setCalFor(null); void velin.reload(); }}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * The Google account the brain plans meetings through. The consent happens in
+ * another tab, so the state is read again when the person comes back.
+ */
+function GoogleRow() {
+  const [status, setStatus] = useState<GoogleStatus | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    const read = () => { fetchGoogleStatus().then(setStatus).catch(() => setStatus(null)); };
+    read();
+    window.addEventListener('focus', read);
+    return () => window.removeEventListener('focus', read);
+  }, []);
+  if (!status) return null;
+  const connect = async () => {
+    setErr(null);
+    try {
+      const { url } = await startGoogle();
+      window.open(url, '_blank', 'noopener');
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Nešlo začít');
+    }
+  };
+  return (
+    <div className="bb-cal__row">
+      <span className="bb-cal__who">Plánování</span>
+      {status.connected ? (
+        <span className="bb-cal__ok" title={status.account || undefined}>Google připojený</span>
+      ) : status.configured ? (
+        <button type="button" className="bb-pill bb-pill--sm" onClick={() => void connect()}>Povolit</button>
+      ) : (
+        <span className="bb-cal__bad">v Nastavení chybí Google Client ID a Secret</span>
+      )}
+      {err && <span className="bb-cal__bad" title={err}>{err}</span>}
     </div>
   );
 }

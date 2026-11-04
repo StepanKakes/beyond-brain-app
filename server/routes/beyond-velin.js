@@ -13,6 +13,7 @@ import { inbox, signalsForClient } from '../services/brain-signals.js';
 import { getCalls, isConfigured as callsConfigured, invalidateCallsCache } from '../services/beyond-calls.js';
 import { getKpi } from '../services/beyond-kpi.js';
 import { calendarStatus, invalidateCalendars, testIcsUrl } from '../services/beyond-kalendar.js';
+import { beginAuthorization, disconnectGoogle, googleStatus, invalidateGoogle } from '../services/beyond-google.js';
 import { usageReport, subscriptionLimits, brainShare } from '../services/beyond-usage.js';
 import { getPeople, personForUser } from '../services/beyond-people.js';
 import { STAGES, stageFor, setStage } from '../services/beyond-pipeline.js';
@@ -895,6 +896,7 @@ router.put('/nastaveni', async (req, res) => {
     invalidatePeopleCache();
     invalidateCalendars();
     invalidateCallsCache();
+    invalidateGoogle();
     if (changed.includes('BEYOND_TG_POLLING') && process.env.BEYOND_TG_POLLING === '1') {
       startTelegramBot().catch((err) => console.error('[tg-bot] start po uložení selhal', err?.message || err));
     }
@@ -903,6 +905,27 @@ router.put('/nastaveni', async (req, res) => {
   } catch (err) {
     res.status(400).json({ ok: false, error: err?.message || 'uložení selhalo' });
   }
+});
+
+/* ---- the Google account that plans meetings ------------------------ */
+
+router.get('/google', (_req, res) => {
+  res.json(googleStatus());
+});
+
+router.post('/google/povolit', (req, res) => {
+  try {
+    console.log(`[velin] ${req.user?.username} připojuje Google účet`);
+    res.json({ ok: true, url: beginAuthorization() });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'nešlo začít' });
+  }
+});
+
+router.post('/google/odpojit', (req, res) => {
+  disconnectGoogle();
+  console.log(`[velin] ${req.user?.username} odpojil Google účet`);
+  res.json({ ok: true });
 });
 
 /** Whether the calendar is wired up at all, for the settings surface. */

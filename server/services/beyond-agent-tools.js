@@ -28,6 +28,7 @@ import * as obsah from './beyond-obsah.js';
 import { getPeople } from './beyond-people.js';
 import { createProposal, listProposals, rejectProposal } from './beyond-proposals.js';
 import { getBrainIndex } from './brain-index.js';
+import { availability, cancelMeeting, createMeeting, listMeetings, updateMeeting } from './beyond-google.js';
 
 function text(payload) {
   return { content: [{ type: 'text', text: typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2) }] };
@@ -429,6 +430,49 @@ export function buildBeyondToolsServer(ctx = {}) {
     },
   );
 
+  const calendar = tool(
+    'kalendar',
+    [
+      'Plánování schůzek v Google kalendáři Beyond kalendář, přes Timův Workspace účet, takže Meet vzniká pod placenou licencí.',
+      'Akce: volno (od, do, mentor), seznam (od, do), vytvor (nazev, zacatek, konec, mentor, ucastnici), uprav (id a co se mění), zrus (id).',
+      'Časy vždy s pásmem, např. 2026-11-10T09:00:00+01:00. Před použitím si přečti system/kalendare.md.',
+      'vytvor a uprav samy kontrolují kolize a při kolizi nebo neznámé dostupnosti nic neudělají a vrátí důvod; pres_kolizi použij, jen když to člověk výslovně řekl.',
+      'poslat_pozvanky jde klientům: nastav true, jen když to člověk v tomhle rozhovoru výslovně schválil. Bez toho účastníci nic nedostanou a musíš to říct.',
+      '"Připraveno" tvrď jen při pripraveno: true. co_host s "ruční krok" předej jako ruční krok, nikdy netvrď, že je nastaven.',
+    ].join(' '),
+    {
+      action: z.enum(['volno', 'seznam', 'vytvor', 'uprav', 'zrus']),
+      od: z.string().optional(),
+      do: z.string().optional(),
+      id: z.string().optional().describe('id události ze seznam nebo vytvor'),
+      nazev: z.string().optional(),
+      zacatek: z.string().optional(),
+      konec: z.string().optional(),
+      mentor: z.enum(['tim', 'stepan', 'oba']).optional().describe('kdo schůzku vede'),
+      ucastnici: z.array(z.string()).optional().describe('e-maily klientů a dalších lidí; mentor se přidá sám'),
+      popis: z.string().optional(),
+      poslat_pozvanky: z.boolean().optional(),
+      pres_kolizi: z.boolean().optional(),
+    },
+    async (args) => {
+      try {
+        if (args.action === 'volno') return text(await availability({ kdo: args.mentor || 'oba', od: args.od, do: args.do }));
+        if (args.action === 'seznam') return text(await listMeetings({ od: args.od, do: args.do }));
+        // Nobody is in the room for a scheduled run to have approved anything.
+        if (ctx.source === 'job') return fail('naplánovaný běh schůzky nezakládá ani nemění, navrhni to člověku');
+        const common = { poslatPozvanky: args.poslat_pozvanky === true, presKolizi: args.pres_kolizi === true };
+        if (args.action === 'vytvor') {
+          if (!args.mentor) return fail('řekni, kdo schůzku vede (mentor); když to není jasné, zeptej se');
+          return text(await createMeeting({ ...args, ...common }));
+        }
+        if (args.action === 'uprav') return text(await updateMeeting({ ...args, ...common }));
+        return text(await cancelMeeting({ id: args.id, poslatPozvanky: common.poslatPozvanky }));
+      } catch (err) {
+        return fail(err?.message || String(err));
+      }
+    },
+  );
+
   /**
    * The connectors, on demand.
    *
@@ -466,8 +510,8 @@ export function buildBeyondToolsServer(ctx = {}) {
     },
   );
 
-  return createSdkMcpServer({ name: 'beyond', version: '1.0.0', tools: [schedule, history, pamet, skillManage, tasks, content, message, connectors] });
+  return createSdkMcpServer({ name: 'beyond', version: '1.0.0', tools: [schedule, history, pamet, skillManage, tasks, content, message, calendar, connectors] });
 }
 
 /** Tool names as the SDK exposes them, for allow lists. */
-export const BEYOND_TOOL_NAMES = ['mcp__beyond__beyond_schedule', 'mcp__beyond__hledej_historii', 'mcp__beyond__pamet', 'mcp__beyond__skill_manage', 'mcp__beyond__ukoly', 'mcp__beyond__obsah', 'mcp__beyond__zprava', 'mcp__beyond__konektory'];
+export const BEYOND_TOOL_NAMES = ['mcp__beyond__beyond_schedule', 'mcp__beyond__hledej_historii', 'mcp__beyond__pamet', 'mcp__beyond__skill_manage', 'mcp__beyond__ukoly', 'mcp__beyond__obsah', 'mcp__beyond__zprava', 'mcp__beyond__kalendar', 'mcp__beyond__konektory'];

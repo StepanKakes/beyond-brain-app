@@ -73,6 +73,7 @@ import providerRoutes from './modules/providers/provider.routes.js';
 // Beyond Brain — client-focused endpoints (reads ~/Documents/GitHub/beyond-brain)
 import beyondRoutes from './routes/beyond.js';
 import beyondVelinRoutes from './routes/beyond-velin.js';
+import beyondGoogleRoutes from './routes/beyond-google.js';
 import { startScheduler, schedulerStatus } from './services/beyond-scheduler.js';
 import beyondEventsRoutes from './routes/beyond-events.js';
 import { startTelegramBot } from './services/beyond-telegram-bot.js';
@@ -233,6 +234,8 @@ app.use('/api/beyond/velin', authenticateToken, beyondVelinRoutes);
 // OAuth redirect target for MCP connectors — NO JWT (the provider redirects the
 // user's browser here). Secured by the single-use opaque `state`.
 app.use('/api/beyond-mcp-oauth', beyondMcpOauthCallbackRouter);
+// Same for the Google account that plans meetings.
+app.use('/api/beyond-google', beyondGoogleRoutes);
 
 // Beyond Brain client-focused endpoints (read-only). Auth required.
 app.use('/api/beyond', authenticateToken, beyondRoutes);

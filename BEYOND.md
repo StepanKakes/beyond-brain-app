@@ -621,6 +621,22 @@ vede, se pozná podle toho, kdo z nás je pozvaný účastník. Událost bez dal
 kalendáři se ukáže jednou. Celý systém kalendářů popisuje
 `system/kalendare.md` v brainu.
 
+## Plánování schůzek přes Google
+
+Čtení zůstává přes iCal, zápis jde přes jeden Google účet, Timův, protože Meet
+platí ten, kdo ho vytvoří, a licence je jedna. `server/services/beyond-google.js`
+drží refresh token v nastavení (`BEYOND_GOOGLE_*`), jiný účet při povolení odmítne.
+Klient je v Google Cloud projektu Beyond Brain typu Internal, redirect je
+`<BEYOND_PUBLIC_URL>/api/beyond-google/callback`, bez `BEYOND_PUBLIC_URL`
+`https://brain.growbeyond.cz`. Povoluje se na Velíně v řádku Plánování.
+
+Agent na to má nástroj `kalendar` (volno, seznam, vytvor, uprav, zrus). Kalendář
+se hledá podle názvu. Kolize a neznámá dostupnost zápis zastaví, pozvánky jdou jen
+s `poslat_pozvanky`, naplánované běhy smí jen číst. U schůzky, kterou vede Štěpán,
+vzniká místnost přes Meet API (otevřená, Štěpán co-host), protože role přidá jen
+aplikace, která místnost vytvořila; když to nejde, Meet udělá kalendář a co-host se
+vrátí jako ruční krok.
+
 
 ## Obsah pro Instagram
 

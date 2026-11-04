@@ -51,6 +51,10 @@ export const CATALOG = [
     hint: 'Tajná adresa společného kalendáře ve formátu iCal. Vidí ji jeho vlastník: Google Kalendář → Nastavení → Beyond kalendář → Tajná adresa ve formátu iCal.',
     secret: true,
   },
+  { group: 'Kalendář', key: 'BEYOND_GOOGLE_CLIENT_ID', label: 'Google Client ID', hint: 'Z projektu Beyond Brain v Google Cloudu. Slouží k plánování schůzek přes brain.' },
+  { group: 'Kalendář', key: 'BEYOND_GOOGLE_CLIENT_SECRET', label: 'Google Client Secret', secret: true },
+  { group: 'Kalendář', key: 'BEYOND_GOOGLE_REFRESH_TOKEN', label: 'Google přístup', hint: 'Doplní se samo po kliknutí na Povolit na Velíně.', secret: true },
+  { group: 'Kalendář', key: 'BEYOND_GOOGLE_ACCOUNT', label: 'Připojený Google účet', hint: 'Doplní se samo po kliknutí na Povolit na Velíně.' },
   // One Google calendar per person, by its secret iCal address.
   ...getPeople().map((p) => ({
     group: 'Kalendář',
