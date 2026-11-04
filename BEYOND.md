@@ -721,6 +721,10 @@ změn a může rozbít `npm ci` na Windows. Novou závislost do něj dopisuj cí
 
 ## Běh chatu (4.11.2026)
 
+Odpověď na mobilu podle Siri (`src/mobile/Chat.tsx`): během práce se text neukazuje, jen prstenec a dýchající popisek. Po konci kola stav zmizí za 0,25 s, 0,3 s klid, bloky naběhnou po 70 ms (fade a posun 25 bodů za 0,23 s, odhalení shora). Dotaz stojí nahoře, `fitTurn` dopočítává místo pod ním, proto se při příchodu odpovědi nehne. Počítač zatím streamuje dál.
+
+Horní blur iOS 26+: nestačí status-bar-style, pomáhá prvek `position: fixed` s pozadím úplně nahoře (`.m-status-cover`, přímo v body), aspoň 6 px vysoký, přes 80 % šířky, do 4 px od okraje.
+
 Kopie požadavků v transkriptu: Claude Code zapisuje do JSONL i řádky `api-request-blob` s `message.role`, bez `uuid` a času, s kopií odeslaných zpráv. Konverzace jsou jen řádky `user` a `assistant`, jinak se dotazy a odpovědi zobrazí dvakrát a objeví se kontext, který nikdo nepsal (`isRequestCopy`).
 
 Práce na pozadí: kolo může skončit `result`, zatímco agenti běží dál, a model je probudí až za několik minut bez čekajícího kola. Server počítá běžící úlohy (`runningTasks`) a práci po výsledku (`midTurn`), `isBeyondEntryBusy` je základ pro `turnActive`, ochranu při nasazení i odpojení, `complete` nese `backgroundTasks`. Workflow Chat structure ukáže tvar transkriptu podle hashe začátku zprávy a nevypisuje text, protože logy repozitáře jsou veřejné.

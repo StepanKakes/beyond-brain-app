@@ -1,8 +1,7 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { Button, Glass } from 'glisse';
 
 import { mergeHistory, rebuildHistory, statusLabel, uid } from '../components/beyond/chat/transcript';
-import { useSmoothText } from '../components/beyond/chat/useSmoothText';
 import type { ChatMessage, ToolStep } from '../components/beyond/chat/types';
 import { UKAZKA, api } from './api';
 import { Icon } from './icons';
@@ -88,36 +87,104 @@ type PermissionRequest = { requestId: string; toolName: string; input: unknown }
 // Markdown se chce mít hned, jinak první věty blikají jako prostý text.
 void import('./Markdown');
 
-function Answer({ text, live }: { text: string; live: boolean }) {
-  const smooth = useSmoothText(text, live);
+/**
+ * Odpověď se během práce neukazuje, přijde najednou jako u Siri: stav zmizí za
+ * 0,25 s, 0,3 s je klid a pak po blocích naběhne text (časy změřené z videa).
+ */
+type RevealPhase = 'idle' | 'leaving' | 'gap' | 'reveal';
+const STATUS_OUT_MS = 250;
+const REVEAL_GAP_MS = 300;
+const REVEAL_MS = 1500;
+
+function Answer({ text }: { text: string }) {
   return (
-    <div className={`m-answer${smooth.revealing ? ' is-live' : ''}`}>
-      <Markdown text={smooth.text} />
+    <div className="m-answer">
+      <Markdown text={text} />
     </div>
   );
 }
 
-/** Stav běhu jako u Siri: točící se tečky a jedna řádka, která dýchá. */
-function Status({ label }: { label: string }) {
+// Osm kuliček od hlavy po ocas, sousední se slévají jako u Siri.
+const LOADER_DOTS = [3.6, 3.2, 2.8, 2.4, 2, 1.7, 1.4, 1.1];
+
+/** Rychlé nástroje by popisek jen rozblikaly, každý proto chvíli vydrží. */
+const LABEL_HOLD_MS = 1200;
+
+/** Stav běhu podle Siri: prstenec, který se točí, a popisek, který dýchá. */
+function Status({ label, leaving }: { label: string; leaving: boolean }) {
+  const [shown, setShown] = useState(label);
+  const [old, setOld] = useState<string | null>(null);
+  const shownAt = useRef(Date.now());
+
+  useEffect(() => {
+    if (label === shown) return undefined;
+    const swap = setTimeout(
+      () => {
+        shownAt.current = Date.now();
+        setOld(shown);
+        setShown(label);
+      },
+      Math.max(0, LABEL_HOLD_MS - (Date.now() - shownAt.current)),
+    );
+    return () => clearTimeout(swap);
+  }, [label, shown]);
+
+  useEffect(() => {
+    if (!old) return undefined;
+    const clear = setTimeout(() => setOld(null), 200);
+    return () => clearTimeout(clear);
+  }, [old]);
+
   return (
-    <div className="m-status" role="status">
-      <span className="m-orbit" aria-hidden="true" />
-      <span key={label} className="m-status-label">
-        {label}
+    <div className={`m-status${leaving ? ' is-leaving' : ''}`} role="status">
+      <svg className="m-loader" viewBox="0 0 32 32" aria-hidden="true">
+        <defs>
+          <filter id="m-loader-goo">
+            <feGaussianBlur stdDeviation="0.9" />
+            <feColorMatrix values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 14 -6" />
+          </filter>
+        </defs>
+        <g filter="url(#m-loader-goo)">
+          <g className="m-loader-breath">
+            <g className="m-loader-spin">
+              {LOADER_DOTS.map((radius, index) => {
+                const angle = (-index * Math.PI * 2) / LOADER_DOTS.length;
+                return (
+                  <circle
+                    key={radius}
+                    cx={16 + Math.sin(angle) * 10}
+                    cy={16 - Math.cos(angle) * 10}
+                    r={radius}
+                    fill="currentColor"
+                  />
+                );
+              })}
+            </g>
+          </g>
+        </g>
+      </svg>
+      <span className="m-status-text">
+        {old ? (
+          <span key={old} className="m-status-old">
+            {old}
+          </span>
+        ) : null}
+        <span key={shown} className="m-status-label">
+          {shown}
+        </span>
       </span>
     </div>
   );
 }
 
-const Row = memo(function Row({ message, streaming }: { message: ChatMessage; streaming: boolean }) {
+const Row = memo(function Row({ message }: { message: ChatMessage }) {
   if (message.kind === 'steps') return <Steps steps={message.steps} />;
   if (message.role === 'user') {
     return <div className="m-msg-user">{message.text}</div>;
   }
   return (
     <div className="m-msg-ai">
-      <Answer text={message.text} live={streaming} />
-      {streaming ? null : (
+      <Answer text={message.text} />
       <button
         type="button"
         className="m-msg-copy"
@@ -131,7 +198,6 @@ const Row = memo(function Row({ message, streaming }: { message: ChatMessage; st
       >
         <Icon name="copy" size={17} />
       </button>
-      )}
     </div>
   );
 });
@@ -345,6 +411,13 @@ export function ChatScreen({
   const runningRef = useRef(false);
   const scroller = useRef<HTMLDivElement>(null);
   const composer = useRef<HTMLFormElement>(null);
+  const log = useRef<HTMLDivElement>(null);
+  const spacer = useRef<HTMLDivElement>(null);
+  // Kolo začalo tady na obrazovce: dotaz pak drží nahoře a odpověď roste pod ním.
+  const pinned = useRef(false);
+  const seenUsers = useRef<number | null>(null);
+  const wasRunning = useRef(false);
+  const [phase, setPhase] = useState<RevealPhase>('idle');
 
   const setBusy = (value: boolean) => {
     runningRef.current = value;
@@ -394,6 +467,79 @@ export function ChatScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const lastUser = messages.reduce((found, message, index) => (message.role === 'user' ? index : found), -1);
+  const usersCount = messages.reduce((count, message) => (message.role === 'user' ? count + 1 : count), 0);
+  const holding = running || phase === 'leaving' || phase === 'gap';
+
+  useLayoutEffect(() => {
+    const was = wasRunning.current;
+    wasRunning.current = running;
+    if (running) {
+      pinned.current = true;
+      setPhase('idle');
+      return undefined;
+    }
+    if (!was) return undefined;
+    setPhase('leaving');
+    const gap = setTimeout(() => setPhase('gap'), STATUS_OUT_MS);
+    const reveal = setTimeout(() => setPhase('reveal'), STATUS_OUT_MS + REVEAL_GAP_MS);
+    const done = setTimeout(() => setPhase('idle'), STATUS_OUT_MS + REVEAL_GAP_MS + REVEAL_MS);
+    return () => {
+      clearTimeout(gap);
+      clearTimeout(reveal);
+      clearTimeout(done);
+    };
+  }, [running]);
+
+  /** Místo pod dotazem, aby dotaz stál nahoře a při příchodu odpovědi se nehnul. */
+  const fitTurn = useCallback(() => {
+    const scroll = scroller.current;
+    const space = spacer.current;
+    const form = composer.current;
+    const user = log.current?.querySelector('[data-last-user]');
+    if (!scroll || !space || !form || !user || !pinned.current) {
+      if (space) space.style.height = '0px';
+      return;
+    }
+    const bar = scroll.parentElement?.querySelector('.m-bar')?.getBoundingClientRect().height ?? 0;
+    const room = scroll.clientHeight - bar - form.offsetHeight - 22;
+    const below = space.getBoundingClientRect().top - user.getBoundingClientRect().top;
+    space.style.height = `${Math.max(0, room - below)}px`;
+  }, []);
+
+  useLayoutEffect(fitTurn, [fitTurn, messages, running, phase, lastUser]);
+
+  // Nový dotaz vyjede od pole nahoru. Delší odpověď se otevře od začátku, ne od konce.
+  useLayoutEffect(() => {
+    const seen = seenUsers.current;
+    seenUsers.current = usersCount;
+    if (seen === null || usersCount <= seen || !pinned.current) return;
+    const user = log.current?.querySelector('[data-last-user]');
+    const form = composer.current;
+    if (!user || !form || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const box = user.getBoundingClientRect();
+    const distance = form.getBoundingClientRect().top - box.bottom;
+    if (distance <= 0) return;
+    log.current?.animate(
+      [
+        { transform: `translateY(${distance}px)` },
+        { transform: 'translateY(-3px)', offset: 0.7 },
+        { transform: 'none' },
+      ],
+      { duration: 450, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+    );
+  }, [usersCount]);
+
+  useLayoutEffect(() => {
+    if (phase !== 'reveal') return;
+    const scroll = scroller.current;
+    const user = log.current?.querySelector('[data-last-user]');
+    if (!scroll || !user) return;
+    const bar = scroll.parentElement?.querySelector('.m-bar')?.getBoundingClientRect().height ?? 0;
+    const above = user.getBoundingClientRect().top - scroll.getBoundingClientRect().top - bar - 8;
+    if (above < 0) scroll.scrollTop += above;
+  }, [phase]);
+
   // Pole plave nad přepisem, poslední zpráva pod ním nesmí zůstat schovaná.
   useEffect(() => {
     const form = composer.current;
@@ -401,10 +547,12 @@ export function ChatScreen({
     if (!form || !scroll) return undefined;
     const observer = new ResizeObserver(() => {
       scroll.style.setProperty('--m-composer-h', `${form.offsetHeight}px`);
+      fitTurn();
     });
     observer.observe(form);
+    observer.observe(scroll);
     return () => observer.disconnect();
-  }, []);
+  }, [fitTurn]);
 
   // Uspané spojení může události ztratit a nic o tom neví. Dokud kolo běží,
   // appka se sama ptá na stav, takže se nikdy nezasekne na staré obrazovce.
@@ -765,7 +913,7 @@ export function ChatScreen({
       <PushedBar title={title} />
       {/* column-reverse: scroll drží spodek sám a bez JavaScriptu, i při klávesnici */}
       <div className="m-chat-scroll" ref={scroller}>
-        <div className="m-chat-log">
+        <div className="m-chat-log" ref={log}>
           {fresh ? (
             <div className="m-chat-empty">
               <h2>Co pro tebe můžu udělat</h2>
@@ -783,15 +931,25 @@ export function ChatScreen({
               </div>
             </div>
           ) : null}
-          {messages.map((message, index) =>
-            // Kroky běžícího kola shrnuje stavová řádka, seznam přijde až potom.
-            running && message.kind === 'steps' && index === messages.length - 1 ? null : (
-              <div className="m-chat-row" key={message.id}>
-                <Row message={message} streaming={message.id === streamingId} />
+          {messages.map((message, index) => {
+            // Co model během práce píše, přijde až celé.
+            if (holding && index > lastUser) return null;
+            const arriving = phase === 'reveal' && index > lastUser;
+            return (
+              <div
+                className={`m-chat-row${arriving ? ' is-reveal' : ''}`}
+                key={message.id}
+                data-last-user={index === lastUser ? '' : undefined}
+                style={arriving ? ({ '--m-row': index - lastUser - 1 } as CSSProperties) : undefined}
+              >
+                <Row message={message} />
               </div>
-            ),
-          )}
-          {running && !streamingId ? <Status label={activity ? statusLabel(activity) : 'Přemýšlím'} /> : null}
+            );
+          })}
+          {running || phase === 'leaving' ? (
+            <Status label={activity ? statusLabel(activity) : 'Přemýšlím'} leaving={!running} />
+          ) : null}
+          <div ref={spacer} aria-hidden="true" />
         </div>
       </div>
       <form
