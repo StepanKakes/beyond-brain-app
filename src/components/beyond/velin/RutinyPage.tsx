@@ -231,7 +231,12 @@ export default function RutinyPage() {
           </button>
         </header>
         {data && !data.notifikace ? (
-          <p className="bb-rut__hint">Notifikace chodí jen do appky na telefonu. Zapneš je v ní ve Více</p>
+          <p className="bb-rut__hint">
+            Notifikace chodí jen do appky na telefonu. Zapneš je v ní ve Více,{' '}
+            <a href="/instalace" target="_blank" rel="noreferrer">
+              jak ji nainstalovat
+            </a>
+          </p>
         ) : null}
         {data?.pasmo ? <p className="bb-rut__hint">Časy se řídí telefonem, teď {data.pasmo}</p> : null}
         {error && !data ? <Empty>Rutiny se nenačetly</Empty> : null}

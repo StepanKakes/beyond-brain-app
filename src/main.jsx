@@ -28,8 +28,11 @@ const isPhone = Math.min(window.screen.width, window.screen.height) < 600;
 // k mobilu přednačte i desktopový balík.
 const loadMobile = () => import('./mobile/entry.tsx');
 const loadDesktop = () => import('./desktop-entry.jsx');
+const loadInstall = () => import('./install/entry.tsx');
 
-if (!isMobilePath && pathname === '/' && isInstalled && isPhone && !wantsDesktop) {
+if (pathname === '/instalace' || pathname === '/instalace/') {
+  loadInstall();
+} else if (!isMobilePath && pathname === '/' && isInstalled && isPhone && !wantsDesktop) {
   window.location.replace('/m');
 } else {
   (isMobilePath ? loadMobile : loadDesktop)();

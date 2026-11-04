@@ -729,6 +729,10 @@ Rutina je vlastní úloha v `system/ulohy.json` (`deliver.kind: push`), kterou s
 - Čas rutin je čas na telefonu tvůrce, ne `BEYOND_TZ`. Mobilní appka hlásí pásmo při otevření a po návratu (`POST /rutiny/pasmo`), ukládá se v `system/ulohy.json` pod `pasma`, a to pro všechny vlastní úlohy toho člověka. Dokud telefon nic nenahlásil, platí `BEYOND_TZ`. Po přeletu se pásmo změní až s prvním otevřením appky. Vestavěné úlohy zůstávají na `BEYOND_TZ`. Stejné pásmo (`phoneZone`) určuje i „dnes“ u úkolů, hovorů a rychlého zadání toho člověka, jinak by telefon a server ukazovaly jiný den.
 - Výstup se od deníku běhu odděluje značkou `RUN_LOG_MARK` v `summary`.
 
+## Instalace do telefonu
+
+`/instalace` je veřejná stránka bez přihlášení, vlastní balík `src/install`, rozhoduje o něm `src/main.jsx`. Rozlišuje iOS Safari (podle verze jinak ukazuje cestu ke Sdílet), jiný prohlížeč na iPhonu, vestavěný prohlížeč Instagramu a spol., Android a počítač, kde ukáže QR kód `public/brain-qr.svg`. Automaticky to na iOS nejde. Appka na ploše startuje na `/` a `main.jsx` ji pošle na `/m`. Karta na Dnes nabídne instalaci nebo zapnutí notifikací a jde zavřít natrvalo, odkaz je i ve Více a na počítači na obrazovce Rutiny. Předloha je `src/app/instalace` v beo-saas.
+
 ## Běh chatu (4.11.2026)
 
 Odpověď podle Siri, na mobilu i na počítači (`chat/useRevealPhase.ts`, `BeyondLoader.tsx`, `chat/answer-motion.css`): během práce se text neukazuje, jen prstenec a dýchající popisek. Po konci kola stav zmizí za 0,25 s, 0,3 s klid, bloky naběhnou po 70 ms (fade a posun 25 bodů za 0,23 s, odhalení shora). Dotaz stojí nahoře, `fitTurn` dopočítává místo pod ním, proto se při příchodu odpovědi nehne.

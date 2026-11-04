@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { SegmentedControl } from 'glisse';
+import { Button, SegmentedControl } from 'glisse';
 
 import { api } from './api';
 import { Icon } from './icons';
+import { enablePush, pushStatus, type PushStatus } from './push';
 import { navigate } from './router';
 import { mutate, readCache, refresh, useResource, writeCache } from './store';
 import type { Call, CallsResponse, Task, TasksResponse, VelinResponse } from './types';
@@ -337,6 +338,62 @@ function dayLabel(iso: string, today: string): string {
 
 const byPriority = (list: Task[]) => list.slice().sort((a, b) => a.priority - b.priority);
 
+const PUSH_CARD_KEY = 'm-karta-push';
+
+/** Nainstalovat, nebo zapnout notifikace. Jde zavřít natrvalo. */
+function PushCard() {
+  const [status, setStatus] = useState<PushStatus | null>(null);
+  const [hidden, setHidden] = useState(() => {
+    try {
+      return localStorage.getItem(PUSH_CARD_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    void pushStatus().then(setStatus).catch(() => setStatus('unsupported'));
+  }, []);
+  if (hidden || (status !== 'needs-install' && status !== 'off')) return null;
+
+  const install = status === 'needs-install';
+  const close = () => {
+    setHidden(true);
+    try {
+      localStorage.setItem(PUSH_CARD_KEY, '1');
+    } catch {
+      /* ukáže se příště znovu */
+    }
+  };
+  const act = () => {
+    if (install) {
+      window.location.assign('/instalace');
+      return;
+    }
+    enablePush()
+      .catch((error: Error) => toast(error.message))
+      .finally(() => void pushStatus().then(setStatus));
+  };
+
+  return (
+    <Section>
+      <div className="m-karta">
+        <strong>{install ? 'Přidej si Brain na plochu' : 'Zapni si notifikace'}</strong>
+        <p>
+          {install
+            ? 'Poběží přes celou obrazovku a bude ti posílat notifikace'
+            : 'Dám ti vědět, až doběhne rutina nebo na tebe něco čeká'}
+        </p>
+        <div className="m-karta-akce">
+          <Button variant="glass" onClick={close}>
+            Teď ne
+          </Button>
+          <Button variant="filled" onClick={act}>{install ? 'Jak na to' : 'Zapnout'}</Button>
+        </div>
+      </div>
+    </Section>
+  );
+}
+
 export function TodayScreen() {
   const tasks = useResource<TasksResponse>(TASKS_KEY, TASKS_PATH);
   const calls = useResource<CallsResponse>(CALLS_KEY, CALLS_PATH);
@@ -416,6 +473,7 @@ export function TodayScreen() {
         ) : undefined
       }
     >
+      <PushCard />
       <div className="m-scope">
         <SegmentedControl
           aria-label="Které úkoly"

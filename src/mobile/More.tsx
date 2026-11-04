@@ -14,7 +14,6 @@ import { Empty, LinkRow, Markdown, Picker, PushedBar, Section, Sheet, Skeleton, 
 const VELIN = '/api/beyond/velin';
 
 const PUSH_HINT: Partial<Record<PushStatus, string>> = {
-  'needs-install': 'V Safari klepni na Sdílet a Přidat na plochu. Notifikace fungují jen z appky na ploše',
   unsupported: 'Tenhle prohlížeč notifikace neumí',
   denied: 'Notifikace jsou zakázané. Povol je v Nastavení iPhonu u téhle appky',
 };
@@ -99,6 +98,13 @@ export function MoreScreen() {
           />
         </div>
         {PUSH_HINT[status] ? <p className="m-hint">{PUSH_HINT[status]}</p> : null}
+        {status === 'needs-install' ? (
+          <LinkRow
+            title="Přidat appku na plochu"
+            sub="Notifikace fungují jen z appky na ploše"
+            onClick={() => window.location.assign('/instalace')}
+          />
+        ) : null}
         {status === 'on' ? (
           <LinkRow
             title="Poslat zkušební notifikaci"

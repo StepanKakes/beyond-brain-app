@@ -2133,3 +2133,27 @@ html.dark .m-root {
 .m-rutina-form > .m-sheet-actions > * {
   flex: 1;
 }
+
+.m-karta {
+  padding: 14px;
+}
+
+.m-karta strong {
+  display: block;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.m-karta p {
+  margin: 4px 0 0;
+  color: var(--bb-ink2);
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.m-karta-akce {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
