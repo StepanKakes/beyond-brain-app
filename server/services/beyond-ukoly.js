@@ -252,6 +252,27 @@ export async function pruneDone() {
   return { removed: before - data.ukoly.length, virtualKeys: stale.length };
 }
 
+const debtKey = (client, text) => `dluh:${client}:${String(text).trim()}`;
+
+/**
+ * Has this promise of ours ever had a drafted task? One task per promise, not
+ * per day: done or deleted counts too, so a closed task does not come back.
+ * The text match covers tasks from before the marker existed.
+ */
+export function isDebtHandled(client, text) {
+  const data = readFile();
+  if (data.stavy?.[debtKey(client, text)]) return true;
+  const wanted = String(text).trim();
+  return data.ukoly.some(
+    (t) => t.client === client && t.prep?.kind === 'podklad'
+      && t.text.replace(/^(Sehnat podklad|Projít a poslat): /, '').trim() === wanted,
+  );
+}
+
+export async function markDebtHandled(client, text, { by = 'agent' } = {}) {
+  return setVirtualState(debtKey(client, text), 'done', { by });
+}
+
 /** Does an open task with this prep reference already exist? */
 export function findByPrepRef(kind, ref) {
   return readFile().ukoly.find((t) => t.state !== 'done' && t.prep?.kind === kind && t.prep?.ref === ref) || null;

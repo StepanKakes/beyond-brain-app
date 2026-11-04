@@ -41,7 +41,7 @@ import { countPending as mozekPending } from './beyond-mozek.js';
 import { notionConfigured, pullNotion, pullRegistry, pullWhatsApp, readRegistry } from './beyond-raw.js';
 import { isConfigured as wahaConfigured } from './beyond-waha.js';
 import { todayIso, timeLocal } from './beyond-time.js';
-import { createTask as createUkol, findByPrepRef, listTasks as listUkoly } from './beyond-ukoly.js';
+import { createTask as createUkol, findByPrepRef, isDebtHandled, listTasks as listUkoly, markDebtHandled } from './beyond-ukoly.js';
 import { applyTaskPlan, notionConfigured as notionReady, readClientTaskState, tasksFromWriteup, upsertCallPage } from './beyond-notion.js';
 import { hasMomentsFor, listItems as listObsah, markChecked as markCallChecked } from './beyond-obsah.js';
 import { cutMissing } from './beyond-clip.js';
@@ -1287,6 +1287,7 @@ const draftOurWork = {
               actions: [{ label: 'Otevřít', action: 'open-file', path: rel, primary: true }],
             },
           });
+          await markDebtHandled(d.client.slug, d.text);
           log(`${d.client.name}: úkol s draftem založen`);
         }
       } catch (err) {
@@ -1310,6 +1311,7 @@ function ourOpenDebts(index, calls) {
     const debt = row.signals.find((s) => s.type === 'our-debt');
     if (!debt?.items?.length) continue;
     for (const item of debt.items) {
+      if (isDebtHandled(row.client.slug, item.text)) continue;
       out.push({
         client: row.client,
         text: item.text,
@@ -1538,9 +1540,13 @@ const learningReview = {
       [`### ${p.clientName || p.clientSlug || '?'} · ${p.kind} · ${p.title}`, 'NAVRHL AGENT:', p.originalBody, '', 'ODESLAL TIM:', p.body].join('\n'),
     );
     // Content Tim threw away, with his reason when he gave one.
-    const discarded = listObsah().filter((i) => i.state === 'zahozeno' && i.updatedAt >= since).map((i) =>
-      `- ${i.kind} „${i.title || i.hook}"${i.zdroj ? ` (${i.zdroj})` : ''}: ${i.note ? i.note.replace(/^zahozeno:\s*/, '') : 'bez důvodu'}`,
-    );
+    const discardedItems = listObsah().filter((i) => i.state === 'zahozeno' && i.updatedAt >= since);
+    // A mass discard is a clean-up, not a verdict on each piece, so it teaches nothing.
+    const discarded = discardedItems.length > 15
+      ? [`- ${discardedItems.length} položek zahozeno hromadně při úklidu. Není to hodnocení obsahu, nic z toho nevyvozuj.`]
+      : discardedItems.map((i) =>
+        `- ${i.kind} „${i.title || i.hook}"${i.zdroj ? ` (${i.zdroj})` : ''}: ${i.note ? i.note.replace(/^zahozeno:\s*/, '') : 'bez důvodu'}`,
+      );
     const approved = listObsah().filter((i) => i.state !== 'navrh' && i.state !== 'zahozeno' && i.updatedAt >= since).map((i) => `- ${i.kind} „${i.title || i.hook}"`);
     const runNotes = runs.map((r) =>
       `- ${r.job} (${r.status}${r.error ? `: ${r.error.slice(0, 200)}` : ''}): ${String(r.summary || '').replace(/\s+/g, ' ').slice(0, 300)}`,
