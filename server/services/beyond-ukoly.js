@@ -91,10 +91,10 @@ function isoDay(w) {
 }
 
 /** Day words resolve on the wall clock of the app's zone, not the box's. */
-function resolveDay(word, now = new Date()) {
+function resolveDay(word, now = new Date(), zone) {
   const v = DAY_WORDS[word];
   if (v === undefined) return null;
-  const d = toWall(now);
+  const d = toWall(now, zone);
   d.setUTCHours(12, 0, 0, 0);
   if (typeof v === 'number') {
     d.setUTCDate(d.getUTCDate() + v);
@@ -111,7 +111,7 @@ function resolveDay(word, now = new Date()) {
  * Parse "p1 dnes zavolat Pavlovi @štěpán". Returns the fields plus the text
  * with the tokens removed. `clients` is [{slug, name, first}] to match names.
  */
-export function parseQuick(text, { me = 'tim', clients = [], now = new Date() } = {}) {
+export function parseQuick(text, { me = 'tim', clients = [], now = new Date(), zone } = {}) {
   const people = getPeople();
   // `tokens` says which words were read as what, by their index among the
   // whitespace-separated words, so the input can colour them as they are typed.
@@ -131,14 +131,14 @@ export function parseQuick(text, { me = 'tim', clients = [], now = new Date() } 
     const f = fold(w).replace(/[.,!?]+$/, '');
     const pm = /^(?:p|!)([1-4])$/.exec(f);
     if (pm) { out.priority = Number(pm[1]); out.tokens.push({ i: wi, word: w, kind: 'priority' }); continue; }
-    const day = resolveDay(f, now);
+    const day = resolveDay(f, now, zone);
     if (day) { out.due = day; out.tokens.push({ i: wi, word: w, kind: 'due' }); continue; }
     const dm = /^(\d{1,2})\.(\d{1,2})\.?$/.exec(f);
     if (dm) {
-      const d = toWall(now);
+      const d = toWall(now, zone);
       d.setUTCHours(12, 0, 0, 0);
       d.setUTCMonth(Number(dm[2]) - 1, Number(dm[1]));
-      if (d.getTime() < toWall(now).getTime() - 12 * 3600_000) d.setUTCFullYear(d.getUTCFullYear() + 1);
+      if (d.getTime() < toWall(now, zone).getTime() - 12 * 3600_000) d.setUTCFullYear(d.getUTCFullYear() + 1);
       out.due = isoDay(d);
       out.tokens.push({ i: wi, word: w, kind: 'due' });
       continue;

@@ -37,7 +37,7 @@ import { usesAlt } from './beyond-alt-model.js';
 import { diffModels } from './beyond-model-watch.js';
 import { broadcast as tgBroadcast, sendTo as tgSendTo, unconfiguredReason as tgReason } from './beyond-telegram.js';
 import { isDueAt, scheduleFromLegacy } from './beyond-schedule.js';
-import { listTasks, routineZone, scheduleOverride } from './beyond-tasks.js';
+import { listTasks, phoneZone, scheduleOverride } from './beyond-tasks.js';
 import { render as renderTemplate } from './beyond-events.js';
 import { countPending as mozekPending } from './beyond-mozek.js';
 import { notionConfigured, pullNotion, pullRegistry, pullWhatsApp, readRegistry } from './beyond-raw.js';
@@ -1821,7 +1821,7 @@ function runnableFromTask(task) {
         text = renderTemplate(task.prompt, context || {});
       } else {
         const previous = task.continuity ? lastOkSummary(task.name) : null;
-        const zone = routineZone(task.createdBy);
+        const zone = phoneZone(task.createdBy);
         const prompt = [
           zone ? `U člověka, pro kterého to je, je teď ${formatLocal(new Date(), zone)} (${zone}). Dnes a včera ber podle toho.` : null,
           zone ? '' : null,
@@ -1982,7 +1982,7 @@ export function isDue(job, now = new Date()) {
   if (job.custom && job.task?.enabled === false) return false;
   const schedule = effectiveSchedule(job);
   const state = getJobState(job.name);
-  const zone = job.custom ? routineZone(job.task?.createdBy) || undefined : undefined;
+  const zone = job.custom ? phoneZone(job.task?.createdBy) || undefined : undefined;
   return isDueAt(schedule, { lastRunAt: state.lastRunAt, now, zone });
 }
 

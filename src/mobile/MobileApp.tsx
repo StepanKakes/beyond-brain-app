@@ -14,7 +14,8 @@ import { navigate, selectTab, useRouter, type Entry, type Tab } from './router';
 import { startSocket, stopSocket } from './socket';
 import { Stack } from './Stack';
 import { TaskDetail } from './TaskDetail';
-import { TodayScreen } from './Today';
+import { TASKS_KEY, TASKS_PATH, TodayScreen } from './Today';
+import { refresh } from './store';
 import { ToastHost, toast } from './ui';
 
 const TABS: { value: Tab; label: string; icon: Parameters<typeof Icon>[0]['name'] }[] = [
@@ -97,8 +98,8 @@ function Shell() {
     if (inset > 0) toast('Stará instalace, kvůli ní je nahoře rozmazání. Smaž appku z plochy a přidej ji znovu', undefined, 9000);
   }, []);
 
-  // Rutiny běží podle času na telefonu. Pásmo hlásíme při otevření a po návratu,
-  // server jiné pásmo než telefon nemá jak zjistit.
+  // Rutiny i „dnes“ u úkolů se řídí časem na telefonu. Pásmo hlásíme při otevření
+  // a po návratu, server jiné pásmo než telefon nemá jak zjistit.
   useEffect(() => {
     let reported: string | null = null;
     const report = () => {
@@ -106,9 +107,16 @@ function Shell() {
       const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       if (!zone || zone === reported) return;
       reported = zone;
-      api('/api/beyond/velin/rutiny/pasmo', { method: 'POST', body: { zone } }).catch(() => {
-        reported = null;
-      });
+      api<{ zmeneno?: boolean }>('/api/beyond/velin/rutiny/pasmo', { method: 'POST', body: { zone } })
+        .then(async (result) => {
+          if (!result?.zmeneno) return;
+          // První refresh může jen vrátit dotaz, který vyšel ještě ve starém pásmu.
+          await refresh(TASKS_KEY, TASKS_PATH);
+          await refresh(TASKS_KEY, TASKS_PATH);
+        })
+        .catch(() => {
+          reported = null;
+        });
     };
     report();
     document.addEventListener('visibilitychange', report);

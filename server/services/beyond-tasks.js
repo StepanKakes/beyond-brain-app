@@ -113,7 +113,7 @@ export async function setScheduleOverride(jobName, schedule, { by = 'app' } = {}
 /* ------------------------------------------------------------------ */
 
 /** The zone this person's phone reported, or null: then the app's zone applies. */
-export function routineZone(username) {
+export function phoneZone(username) {
   if (!username) return null;
   const pasma = readTasksFile().pasma;
   const zone = pasma && typeof pasma === 'object' ? pasma[username] : null;
@@ -130,10 +130,10 @@ function isValidZone(zone) {
 }
 
 /** Returns whether it changed, so an unchanged phone never touches git. */
-export async function setRoutineZone(username, zone) {
+export async function setPhoneZone(username, zone) {
   const value = String(zone || '').trim();
   if (!value || value.length > 64 || !isValidZone(value)) throw new Error('neplatné časové pásmo');
-  if (routineZone(username) === value) return false;
+  if (phoneZone(username) === value) return false;
   const data = structuredClone(readTasksFile());
   data.pasma = { ...(data.pasma || {}), [username]: value };
   await writeTasksFile(data, `Agent: pásmo rutin ${value} (${username})`);

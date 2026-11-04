@@ -8,7 +8,7 @@
  */
 import { describeSchedule, isDueAt } from './beyond-schedule.js';
 import { RUN_LOG_MARK, getJobState, listRuns, markJobRan } from './beyond-runs.js';
-import { listTasks, routineZone, setRoutineZone } from './beyond-tasks.js';
+import { listTasks, phoneZone, setPhoneZone } from './beyond-tasks.js';
 
 export const ROUTINE_TEMPLATES = [
   {
@@ -97,7 +97,7 @@ export function routineDetail(task) {
 export function skipMissedSlot(task) {
   if (task.enabled === false) return;
   const { lastRunAt } = getJobState(task.name) || {};
-  const zone = routineZone(task.createdBy) || undefined;
+  const zone = phoneZone(task.createdBy) || undefined;
   if (isDueAt(task.schedule, { lastRunAt: lastRunAt || null, zone })) markJobRan(task.name);
 }
 
@@ -106,7 +106,7 @@ export function skipMissedSlot(task) {
  * must not fire it on arrival, for the same reason as above.
  */
 export async function reportRoutineZone(username, zone) {
-  const changed = await setRoutineZone(username, zone);
+  const changed = await setPhoneZone(username, zone);
   if (changed) {
     for (const task of listTasks()) {
       if (task.createdBy === username) skipMissedSlot(task);

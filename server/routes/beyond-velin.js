@@ -23,7 +23,7 @@ import { listRuns, setJobEnabled } from '../services/beyond-runs.js';
 import { describeJobs, runJob, schedulerStatus, setPaused } from '../services/beyond-scheduler.js';
 import { enqueueInternal, listEvents, listRoutes } from '../services/beyond-events.js';
 import * as mozek from '../services/beyond-mozek.js';
-import { createTask, getTask, removeTask, routineZone, setScheduleOverride, updateTask } from '../services/beyond-tasks.js';
+import { createTask, getTask, removeTask, phoneZone, setScheduleOverride, updateTask } from '../services/beyond-tasks.js';
 import { snapshot as memorySnapshot } from '../services/beyond-memory.js';
 import * as ukoly from '../services/beyond-ukoly.js';
 import * as obsah from '../services/beyond-obsah.js';
@@ -110,8 +110,9 @@ router.get('/', async (req, res) => {
       upcomingCalls: calls.calls,
     });
 
-    const today = todayIso();
-    const todaysCalls = calls.calls.filter((c) => todayIso(new Date(c.startIso)) === today);
+    const today = todayFor(req);
+    const zone = phoneZone(req.user?.username) || undefined;
+    const todaysCalls = calls.calls.filter((c) => todayIso(new Date(c.startIso), zone) === today);
 
     res.json({
       builtAt: index.builtAt,
@@ -283,6 +284,9 @@ router.post('/refresh', async (_req, res) => {
 /* tasks: one list for the morning                                      */
 /* ------------------------------------------------------------------ */
 
+/** "Dnes" of this person: their phone's day, or the app's until it reports. */
+const todayFor = (req) => todayIso(new Date(), phoneZone(req.user?.username) || undefined);
+
 const DEFAULT_OWNER = () => process.env.BEYOND_DEFAULT_OWNER || getPeople()[0]?.key || 'tim';
 
 function dueKind(due, today) {
@@ -309,8 +313,7 @@ function dueLabel(due, today) {
  * message and every proposed brain change folded in as a task with a prep.
  * Nothing is duplicated into the file; a sent message simply stops appearing.
  */
-function composeTasks(index) {
-  const today = todayIso();
+function composeTasks(index, today) {
   const nameOf = (slug) => index.clients.find((c) => c.slug === slug)?.name || null;
   const shapeClient = (slug) => (slug ? { slug, name: nameOf(slug) || slug } : null);
 
@@ -534,9 +537,9 @@ router.get('/tabule', async (req, res) => {
     const { rows } = inbox(index.clients, { upcomingCalls: calls.calls });
     res.json({
       me: me ? me.key : DEFAULT_OWNER(),
-      today: todayIso(),
+      today: todayFor(req),
       people,
-      tasks: composeTasks(index),
+      tasks: composeTasks(index, todayFor(req)),
       stages: STAGES,
       clients: rows.map((row) => {
         const card = clientCard(row.client, row, calls);
@@ -557,7 +560,7 @@ router.get('/pocty', async (req, res) => {
   try {
     const index = await getBrainIndex();
     const me = personForUser(req.user)?.key || DEFAULT_OWNER();
-    const today = todayIso();
+    const today = todayFor(req);
     const tasks = ukoly.listTasks().filter((t) => t.state !== 'done');
     res.json({
       velin: tasks.filter((t) => (t.owner === me || t.owner === 'all') && t.due && t.due <= today).length,
@@ -587,10 +590,10 @@ router.get('/ukoly', async (req, res) => {
     res.json({
       me: me ? me.key : DEFAULT_OWNER(),
       tz: tz(),
-      today: todayIso(),
+      today: todayFor(req),
       people: getPeople().map((p) => ({ key: p.key, displayName: p.displayName, avatar: `/avatars/${p.key}.jpg` })),
       clients: index.clients.filter((c) => c.isActive !== false).map((c) => ({ slug: c.slug, name: c.name })),
-      tasks: composeTasks(index),
+      tasks: composeTasks(index, todayFor(req)),
     });
   } catch (err) {
     console.error('[velin] /ukoly failed', err);
@@ -610,6 +613,7 @@ router.post('/ukoly', async (req, res) => {
       // theirs unless the text says otherwise.
       const known = getPeople().some((p) => p.key === body.owner);
       fields = ukoly.parseQuick(body.quick, {
+        zone: phoneZone(req.user?.username) || undefined,
         me: known ? body.owner : me,
         clients: index.clients.filter((c) => c.isActive !== false).map((c) => ({ slug: c.slug, name: c.name, first: c.name.split(' ')[0] })),
       });
@@ -628,6 +632,7 @@ router.post('/ukoly/parse', async (req, res) => {
     const me = personForUser(req.user)?.key || DEFAULT_OWNER();
     const known = getPeople().some((p) => p.key === req.body?.owner);
     const parsed = ukoly.parseQuick(String(req.body?.quick || ''), {
+      zone: phoneZone(req.user?.username) || undefined,
       me: known ? req.body.owner : me,
       clients: index.clients.filter((c) => c.isActive !== false).map((c) => ({ slug: c.slug, name: c.name, first: c.name.split(' ')[0] })),
     });
@@ -801,7 +806,7 @@ router.get('/rutiny', (req, res) => {
     rutiny: listRoutines(req.user.username),
     sablony: ROUTINE_TEMPLATES,
     notifikace: pushSubscriptionsDb.getSubscriptions(req.user.id).length > 0,
-    pasmo: routineZone(req.user.username),
+    pasmo: phoneZone(req.user.username),
   });
 });
 
