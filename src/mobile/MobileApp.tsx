@@ -14,7 +14,7 @@ import { startSocket, stopSocket } from './socket';
 import { Stack } from './Stack';
 import { TaskDetail } from './TaskDetail';
 import { TodayScreen } from './Today';
-import { ToastHost } from './ui';
+import { ToastHost, toast } from './ui';
 
 const TABS: { value: Tab; label: string; icon: Parameters<typeof Icon>[0]['name'] }[] = [
   { value: 'dnes', label: 'Dnes', icon: 'tasks' },
@@ -81,6 +81,19 @@ function Shell() {
   useEffect(() => {
     startSocket();
     return stopSocket;
+  }, []);
+
+  // iOS si styl stavového řádku uloží při přidání na plochu. Starší instalace běží
+  // pod průsvitným řádkem (nenulový horní inset) a tam iOS 27 rozmazává horní lištu.
+  useEffect(() => {
+    if (!(navigator as Navigator & { standalone?: boolean }).standalone) return;
+    if (matchMedia('(orientation: landscape)').matches) return;
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;visibility:hidden;height:env(safe-area-inset-top,0px)';
+    document.body.append(probe);
+    const inset = probe.getBoundingClientRect().height;
+    probe.remove();
+    if (inset > 0) toast('Stará instalace, kvůli ní je nahoře rozmazání. Smaž appku z plochy a přidej ji znovu', undefined, 9000);
   }, []);
 
   // Cíl z notifikace, ať je appka zavřená, nebo jen na pozadí.

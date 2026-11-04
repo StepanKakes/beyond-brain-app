@@ -364,6 +364,33 @@ router.put(
   }),
 );
 
+/**
+ * The chat screens show tool steps by name, yet a transcript carries whole file
+ * reads and agent logs. The server sits on a home connection, so sending all of
+ * that on every return to a chat took many seconds.
+ */
+const SLIM_TEXT_LIMIT = 2000;
+const slimText = (value: unknown): unknown =>
+  typeof value === 'string' && value.length > SLIM_TEXT_LIMIT ? `${value.slice(0, SLIM_TEXT_LIMIT)}…` : value;
+
+function slimMessage<T extends object>(message: T): T {
+  const row = { ...message } as Record<string, any>;
+  delete row.subagentTools;
+  if (row.toolResult) {
+    row.toolResult = { content: slimText(row.toolResult.content), isError: row.toolResult.isError };
+  }
+  if (row.kind === 'tool_result') row.content = slimText(row.content);
+  if (row.toolInput && typeof row.toolInput === 'object') {
+    row.toolInput = Object.fromEntries(
+      Object.entries(row.toolInput).map(([key, value]) => [
+        key,
+        typeof value === 'object' && value !== null ? slimText(JSON.stringify(value)) : slimText(value),
+      ]),
+    );
+  }
+  return row as T;
+}
+
 router.get(
   '/sessions/:sessionId/messages',
   asyncHandler(async (req: Request, res: Response) => {
@@ -399,7 +426,7 @@ router.get(
       limit,
       offset,
     });
-    res.json(result);
+    res.json(req.query.slim ? { ...result, messages: result.messages.map(slimMessage) } : result);
   }),
 );
 

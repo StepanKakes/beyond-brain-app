@@ -168,9 +168,26 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       try { socket.send(JSON.stringify({ type: 'ping', t: Date.now() })); } catch { /* close will follow */ }
     };
     heartbeatRef.current = setInterval(beat, 25_000);
+    let hiddenAt = 0;
     const wake = () => {
-      if (document.visibilityState === 'hidden') return;
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now();
+        return;
+      }
       const socket = wsRef.current;
+      const away = hiddenAt ? Date.now() - hiddenAt : 0;
+      hiddenAt = 0;
+      if (socket && socket.readyState === WebSocket.OPEN && away > 5000) {
+        // Back after a while: a sleeping socket can look open and swallow messages.
+        // A fresh one costs nothing, the server re-attaches the running turn.
+        socket.onclose = null;
+        socket.close();
+        wsRef.current = null;
+        setIsConnected(false);
+        if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+        connect();
+        return;
+      }
       if (socket && socket.readyState === WebSocket.OPEN) {
         // Probe right away so a dead socket is found in seconds, not at the
         // next beat.

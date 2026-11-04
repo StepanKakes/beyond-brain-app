@@ -180,9 +180,8 @@ a {
   left: 0;
   right: 0;
   z-index: 40;
-  height: max(6px, env(safe-area-inset-top, 0px));
+  height: max(1px, env(safe-area-inset-top, 0px));
   background: var(--bb-bg);
-  pointer-events: none;
 }
 
 /* Lišta */

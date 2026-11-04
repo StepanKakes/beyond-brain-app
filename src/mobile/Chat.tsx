@@ -335,6 +335,7 @@ export function ChatScreen({
   const spacer = useRef<HTMLDivElement>(null);
   // Kolo začalo tady na obrazovce: dotaz pak drží nahoře a odpověď roste pod ním.
   const pinned = useRef(false);
+  const sends = useRef(0);
   const seenUsers = useRef<number | null>(null);
 
   const setBusy = (value: boolean) => {
@@ -362,7 +363,7 @@ export function ChatScreen({
     if (UKAZKA && !id) return;
     try {
       const data = await api<{ messages: unknown[] }>(
-        `/api/providers/sessions/${encodeURIComponent(id)}/messages?limit=120&offset=0`,
+        `/api/providers/sessions/${encodeURIComponent(id)}/messages?limit=120&offset=0&slim=1`,
       );
       flush();
       loadedAt.current = Date.now();
@@ -640,7 +641,9 @@ export function ChatScreen({
         }
         if (m.type === 'session-status') {
           if (m.sessionId !== uuidRef.current) return;
-          setBusy(Boolean(m.turnActive));
+          // Doběhlo to, dokud appka spala: načítání zůstane, dokud není odpověď tady.
+          const finishedAway = !m.turnActive && runningRef.current && Boolean(uuidRef.current);
+          if (!finishedAway) setBusy(Boolean(m.turnActive));
           const tool = m.activity as { name?: string } | null | undefined;
           setActivity(m.turnActive && tool?.name ? tool.name : null);
           if (m.turnActive) {
@@ -664,7 +667,15 @@ export function ChatScreen({
             }
           }
           // Při otevření se přepis načetl před chvílí, podruhé nemá smysl.
-          if (uuidRef.current && Date.now() - loadedAt.current > 2000) void reload(uuidRef.current);
+          if (finishedAway) {
+            flush();
+            bubble.current = null;
+            setStreamingId(null);
+            const turn = sends.current;
+            void reload(uuidRef.current || '').finally(() => {
+              if (sends.current === turn) setBusy(false);
+            });
+          } else if (uuidRef.current && Date.now() - loadedAt.current > 2000) void reload(uuidRef.current);
           const pending = (m.pendingPermissions || []) as { requestId: string; toolName: string; input: unknown }[];
           pending.forEach((p) => handleKind({ kind: 'permission_request', ...p }));
           return;
@@ -740,6 +751,7 @@ export function ChatScreen({
     setAttachments([]);
     setMessages((prev) => [...prev, { id: uid(), role: 'user', kind: 'text', text: shown }]);
     setBusy(true);
+    sends.current += 1;
     scroller.current?.scrollTo({ top: 0, behavior: 'smooth' });
 
     if (!uuidRef.current) {

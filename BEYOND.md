@@ -723,7 +723,9 @@ změn a může rozbít `npm ci` na Windows. Novou závislost do něj dopisuj cí
 
 Odpověď podle Siri, na mobilu i na počítači (`chat/useRevealPhase.ts`, `BeyondLoader.tsx`, `chat/answer-motion.css`): během práce se text neukazuje, jen prstenec a dýchající popisek. Po konci kola stav zmizí za 0,25 s, 0,3 s klid, bloky naběhnou po 70 ms (fade a posun 25 bodů za 0,23 s, odhalení shora). Dotaz stojí nahoře, `fitTurn` dopočítává místo pod ním, proto se při příchodu odpovědi nehne.
 
-Horní blur iOS 26+: nestačí status-bar-style, pomáhá prvek `position: fixed` s pozadím úplně nahoře (`.m-status-cover`, přímo v body), aspoň 6 px vysoký, přes 80 % šířky, do 4 px od okraje.
+Horní blur iOS 27: kreslí se jen pod průsvitným stavovým řádkem, styl `default` ho odstraní, ale iOS ho čte jen při přidání na plochu, stará instalace ho drží (poznáš podle nenulového `safe-area-inset-top`, appka na to sama upozorní). `.m-status-cover` je skutečný fixed prvek v body, podle kterého iOS barví stavový řádek, pseudoprvky nevidí. `prefers-color-scheme` může být v appce na ploše zamrzlý do jejího restartu.
+
+Návrat na stránku: historie se tahá se `slim=1` (ořezané výstupy nástrojů, server je na domácím připojení), stav běhu zmizí až po načtení odpovědi, počítač po 5 s mimo stránku otevře nové spojení hned.
 
 Kopie požadavků v transkriptu: Claude Code zapisuje do JSONL i řádky `api-request-blob` s `message.role`, bez `uuid` a času, s kopií odeslaných zpráv. Konverzace jsou jen řádky `user` a `assistant`, jinak se dotazy a odpovědi zobrazí dvakrát a objeví se kontext, který nikdo nepsal (`isRequestCopy`).
 

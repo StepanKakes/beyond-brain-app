@@ -26,9 +26,8 @@ window.addEventListener('m-theme', applyTheme);
 
 root.classList.add('m-html');
 
-// iOS 26+ kreslí pod stavovým řádkem appky na ploše rozmazaný pruh. Nedělá to, když
-// je úplně nahoře fixed prvek s pozadím, a podle jeho barvy obarví i stavový řádek.
-// Musí být přímo v body, v pohyblivých obrazovkách by přestal být opravdu fixed.
+// iOS obarví stavový řádek podle skutečného fixed prvku úplně nahoře, pseudoprvky
+// nevidí. Musí být přímo v body, v pohyblivých obrazovkách by přestal být fixed.
 const statusCover = document.createElement('div');
 statusCover.className = 'm-status-cover';
 document.body.append(statusCover);

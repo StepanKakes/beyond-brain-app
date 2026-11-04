@@ -171,6 +171,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
   // A turn began on this screen: its prompt stays at the top, its answer grows below.
   const pinnedRef = useRef(false);
   const seenUsersRef = useRef(0);
+  const sendsRef = useRef(0);
   // What the CLI is doing while the spinner runs (a retry after a 429 and
   // such), so a long wait has a reason on the screen.
   const [thinkingNote, setThinkingNote] = useState<string | null>(null);
@@ -382,8 +383,8 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
   }, [thinking, sendMessage]);
 
   const reloadHistory = useCallback((uuid: string) => {
-    if (!uuid) return;
-    authenticatedFetch(`/api/providers/sessions/${encodeURIComponent(uuid)}/messages`)
+    if (!uuid) return Promise.resolve();
+    return authenticatedFetch(`/api/providers/sessions/${encodeURIComponent(uuid)}/messages?slim=1`)
       .then(async (r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (!data) return;
@@ -1089,8 +1090,13 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
         recoveredRef.current = false;
         setLiveTool(null);
         thinkingRef.current = false;
-        if (Date.now() - historyLoadedAtRef.current > 2000) reloadHistory(sessionIdRef.current);
-        setThinking(false);
+        streamBubbleIdRef.current = null;
+        setStreamingId(null);
+        // The status stays until the answer is here, so nothing looks empty.
+        const turn = sendsRef.current;
+        void reloadHistory(sessionIdRef.current).finally(() => {
+          if (sendsRef.current === turn) setThinking(false);
+        });
       }
       // A question or approval sent while we were away never reached this
       // screen. The server keeps it until answered, so show it again; one
@@ -1250,6 +1256,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
       setValue('');
       setAttachments([]);
       setThinking(true);
+      sendsRef.current += 1;
 
       // Only resume when we already have a real SDK-issued UUID. On the very
       // first turn we let the SDK assign one and pick it up via session_created.
