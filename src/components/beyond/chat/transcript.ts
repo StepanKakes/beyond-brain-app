@@ -74,6 +74,29 @@ export function rebuildHistory(raw: unknown[]): ChatMessage[] {
       }
     }
   }
+  return withoutReplays(out);
+}
+
+/**
+ * A resumed session can repeat a prompt with its answer word for word. A person
+ * asking again never gets the very same answer, so such a pair is a replay.
+ */
+function withoutReplays(messages: ChatMessage[]): ChatMessage[] {
+  const seen = new Set<string>();
+  const out: ChatMessage[] = [];
+  for (let i = 0; i < messages.length; i += 1) {
+    const message = messages[i];
+    const next = messages[i + 1];
+    if (message.role === 'user' && 'text' in message && next?.role === 'assistant' && 'text' in next) {
+      const pair = `${message.text.trim()}\n${next.text.trim()}`;
+      if (seen.has(pair)) {
+        i += 1;
+        continue;
+      }
+      seen.add(pair);
+    }
+    out.push(message);
+  }
   return out;
 }
 

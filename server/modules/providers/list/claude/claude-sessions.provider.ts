@@ -131,6 +131,7 @@ async function getSessionMessages(
     const agentFiles = files.filter((file) => file.endsWith('.jsonl') && file.startsWith('agent-'));
 
     const messages: AnyRecord[] = [];
+    const seenUuids = new Set<string>();
     const agentToolsCache = new Map<string, AnyRecord[]>();
 
     const fileStream = fs.createReadStream(jsonLPath);
@@ -147,6 +148,9 @@ async function getSessionMessages(
       try {
         const entry = JSON.parse(line) as AnyRecord;
         if (entry.sessionId === sessionId && entry.isSidechain !== true) {
+          // A resumed session can write the same rows into the file again.
+          if (entry.uuid && seenUuids.has(entry.uuid)) continue;
+          if (entry.uuid) seenUuids.add(entry.uuid);
           messages.push(entry);
         }
       } catch {
@@ -229,6 +233,8 @@ const INTERNAL_CONTENT_PREFIXES = [
 ] as const;
 
 function isInternalContent(content: string): boolean {
+  // The SDK's own confirmation after it loads a deferred tool, not a person.
+  if (content.trim() === 'Tool loaded.') return true;
   return INTERNAL_CONTENT_PREFIXES.some((prefix) => content.startsWith(prefix));
 }
 

@@ -932,6 +932,8 @@ function scheduleBeyondGraceEnd(entry) {
  *  detach-on-close grace. Used at spawn, on every turn, and on reconnect —
  *  so a dropped socket detaches (grace) instead of killing the turn. */
 function attachWsToBeyondEntry(entry, ws) {
+  // A status check from the socket already attached changes nothing.
+  if (ws && entry.ws === ws && entry.wsAlive) return;
   entry.ws = ws || null;
   entry.wsAlive = Boolean(ws);
   if (entry.graceTimer) { clearTimeout(entry.graceTimer); entry.graceTimer = null; }

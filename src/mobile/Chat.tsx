@@ -344,6 +344,7 @@ export function ChatScreen({
   const frame = useRef(0);
   const runningRef = useRef(false);
   const scroller = useRef<HTMLDivElement>(null);
+  const composer = useRef<HTMLFormElement>(null);
 
   const setBusy = (value: boolean) => {
     runningRef.current = value;
@@ -392,6 +393,28 @@ export function ChatScreen({
     // jen při otevření obrazovky
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Pole plave nad přepisem, poslední zpráva pod ním nesmí zůstat schovaná.
+  useEffect(() => {
+    const form = composer.current;
+    const scroll = scroller.current;
+    if (!form || !scroll) return undefined;
+    const observer = new ResizeObserver(() => {
+      scroll.style.setProperty('--m-composer-h', `${form.offsetHeight}px`);
+    });
+    observer.observe(form);
+    return () => observer.disconnect();
+  }, []);
+
+  // Uspané spojení může události ztratit a nic o tom neví. Dokud kolo běží,
+  // appka se sama ptá na stav, takže se nikdy nezasekne na staré obrazovce.
+  useEffect(() => {
+    if (!running || !uuid || UKAZKA) return undefined;
+    const timer = setInterval(() => {
+      sendSocket({ type: 'check-session-status', sessionId: uuid, provider: 'claude' });
+    }, 15000);
+    return () => clearInterval(timer);
+  }, [running, uuid]);
 
   useEffect(() => {
     api<{ models?: ModelOption[] }>('/api/beyond/models')
@@ -727,15 +750,7 @@ export function ChatScreen({
 
   return (
     <div className="m-chat">
-      <PushedBar
-        title={title}
-        sub={
-          <button type="button" className="m-bar-sub" onClick={() => setPicking('model')}>
-            <span>{modelLabel}</span>
-            <Icon name="down" size={12} />
-          </button>
-        }
-      />
+      <PushedBar title={title} />
       {/* column-reverse: scroll drží spodek sám a bez JavaScriptu, i při klávesnici */}
       <div className="m-chat-scroll" ref={scroller}>
         <div className="m-chat-log">
@@ -769,11 +784,13 @@ export function ChatScreen({
       </div>
       <form
         className="m-composer"
+        ref={composer}
         onSubmit={(event) => {
           event.preventDefault();
           send();
         }}
       >
+        <div className="m-composer-card">
         {attachments.length ? (
           <div className="m-attachments">
             {attachments.map((attachment) => (
@@ -791,27 +808,36 @@ export function ChatScreen({
             ))}
           </div>
         ) : null}
-        <div className="m-composer-row">
-          <button
-            type="button"
-            className="m-composer-add"
-            aria-label="Přidat přílohu"
-            onPointerDown={(event) => event.preventDefault()}
-            onClick={() => setPicking('attach')}
-          >
-            <Icon name="plus" size={22} />
-          </button>
-          <div className="m-composer-field">
-            <textarea
-              value={text}
-              rows={1}
-              placeholder="Napiš brainu"
-              aria-label="Zpráva"
-              onChange={(event) => setText(event.target.value)}
-            />
+          <textarea
+            value={text}
+            rows={1}
+            placeholder="Napiš brainu"
+            aria-label="Zpráva"
+            onChange={(event) => setText(event.target.value)}
+          />
+          <div className="m-composer-tools">
+            <button
+              type="button"
+              className="m-composer-tool"
+              aria-label="Přidat přílohu"
+              onPointerDown={(event) => event.preventDefault()}
+              onClick={() => setPicking('attach')}
+            >
+              <Icon name="plus" size={21} />
+            </button>
+            <button
+              type="button"
+              className="m-composer-model"
+              title={modelLabel}
+              onPointerDown={(event) => event.preventDefault()}
+              onClick={() => setPicking('model')}
+            >
+              <span className="m-truncate">{modelLabel}</span>
+              <Icon name="down" size={12} />
+            </button>
             {running && !canSend ? (
               <button type="button" className="m-send" aria-label="Zastavit" onClick={stop}>
-                <Icon name="stop" size={20} />
+                <Icon name="stop" size={18} />
               </button>
             ) : (
               <button
@@ -822,7 +848,7 @@ export function ChatScreen({
                 // Klávesnice se při odeslání nesmí zavřít.
                 onPointerDown={(event) => event.preventDefault()}
               >
-                <Icon name="up" size={20} />
+                <Icon name="up" size={19} />
               </button>
             )}
           </div>

@@ -24,7 +24,9 @@
   --bb-tint: rgba(20, 22, 26, 0.05);
   --bb-font: 'Figtree', system-ui, -apple-system, 'Helvetica Neue', sans-serif;
   --bb-mono: 'JetBrains Mono', ui-monospace, monospace;
-  --m-top: env(safe-area-inset-top, 0px);
+  /* V průsvitné stavové liště iOS 26 a novější rozmazává ještě asi 40 bodů pod ní
+     a stránka to nevypne. S neprůsvitnou lištou je inset 0 a odsazení zmizí. */
+  --m-top: calc(env(safe-area-inset-top, 0px) + min(env(safe-area-inset-top, 0px), 40px));
   --m-bottom: env(safe-area-inset-bottom, 0px);
   --m-gutter: 16px;
   --m-ease: cubic-bezier(0.32, 0.72, 0, 1);
@@ -1537,15 +1539,6 @@ html.dark .m-root {
 }
 
 .m-add-field,
-.m-composer-field {
-  display: flex;
-  align-items: flex-end;
-  gap: 6px;
-  padding: 5px;
-  border: 0.5px solid var(--bb-line);
-  border-radius: 24px;
-  background: var(--bb-raise);
-}
 
 .m-add-field {
   background: var(--bb-tint);
@@ -1629,8 +1622,7 @@ html.dark .m-root {
   white-space: nowrap;
 }
 
-.m-add-field .m-send,
-.m-composer-field .m-send {
+.m-add-field .m-send {
   flex: none;
   width: 36px;
   height: 36px;
@@ -1935,39 +1927,10 @@ textarea.m-detail-title {
   gap: 8px;
 }
 
-.m-composer-row {
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-}
 
-.m-composer-add {
-  flex: none;
-  display: inline-grid;
-  place-items: center;
-  width: 46px;
-  height: 46px;
-  border-radius: 23px;
-  background: var(--bb-raise);
-  border: 0.5px solid var(--bb-line);
-}
 
-.m-composer-add:active {
-  opacity: 0.55;
-}
 
-.m-composer-field {
-  flex: 1;
-  min-width: 0;
-}
 
-.m-composer .m-composer-field textarea {
-  min-height: 36px;
-  padding: 7px 8px 7px 12px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
 
 .m-attachments {
   display: flex;
@@ -2113,4 +2076,139 @@ textarea.m-detail-title {
 .m-actions > .lg-button {
   flex: 1;
   min-width: 0;
+}
+
+/* Liquid glass: pole a kulaté ikony v lištách */
+.m-root {
+  background: var(--bb-bg);
+  --m-glass: rgb(255 255 255 / 0.66);
+  --m-glass-rim:
+    inset 0 0.5px 0 rgb(255 255 255 / 0.9),
+    inset 0 0 0 0.5px rgb(0 0 0 / 0.05);
+  --m-glass-shadow: 0 4px 18px rgb(0 0 0 / 0.1);
+  --m-glass-fill: rgb(0 0 0 / 0.05);
+}
+
+html.dark .m-root {
+  --m-glass: rgb(58 60 68 / 0.62);
+  --m-glass-rim:
+    inset 0 0.5px 0 rgb(255 255 255 / 0.2),
+    inset 0 0 0 0.5px rgb(255 255 255 / 0.07);
+  --m-glass-shadow: 0 4px 22px rgb(0 0 0 / 0.42);
+  --m-glass-fill: rgb(255 255 255 / 0.09);
+}
+
+.m-bar .m-icon-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 20px;
+  background: var(--m-glass);
+  box-shadow: var(--m-glass-rim), var(--m-glass-shadow);
+  -webkit-backdrop-filter: blur(18px) saturate(1.7);
+  backdrop-filter: blur(18px) saturate(1.7);
+  transition: transform 0.14s ease-out;
+}
+
+.m-bar .m-icon-btn:active {
+  opacity: 1;
+  transform: scale(0.9);
+}
+
+.m-bar .m-bar-back {
+  flex: 0 0 40px;
+  margin-left: 0;
+}
+
+.m-bar-action {
+  flex-basis: 40px;
+}
+
+.m-composer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  display: block;
+  padding: 0 10px max(10px, calc(var(--m-bottom) - 14px));
+  pointer-events: none;
+}
+
+.m-composer-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px 8px;
+  border-radius: 28px;
+  background: var(--m-glass);
+  box-shadow: var(--m-glass-rim), var(--m-glass-shadow);
+  -webkit-backdrop-filter: blur(26px) saturate(1.8);
+  backdrop-filter: blur(26px) saturate(1.8);
+  pointer-events: auto;
+}
+
+.m-composer-card textarea {
+  display: block;
+  width: 100%;
+  min-height: 38px;
+  max-height: 150px;
+  padding: 8px 8px 6px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 16px;
+  line-height: 22px;
+  outline: none;
+  resize: none;
+  field-sizing: content;
+}
+
+.m-composer-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.m-composer-tool,
+.m-composer-model {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  border-radius: 18px;
+  background: var(--m-glass-fill);
+  transition: transform 0.14s ease-out;
+}
+
+.m-composer-tool {
+  flex: none;
+  width: 36px;
+}
+
+.m-composer-model {
+  gap: 4px;
+  min-width: 0;
+  max-width: 55%;
+  padding: 0 12px;
+  font-size: 14px;
+}
+
+.m-composer-tool:active,
+.m-composer-model:active {
+  transform: scale(0.94);
+}
+
+.m-composer-tools .m-send {
+  width: 36px;
+  height: 36px;
+  border-radius: 18px;
+  margin-left: auto;
+}
+
+.m-chat {
+  position: relative;
+}
+
+.m-chat-log {
+  padding-bottom: calc(var(--m-composer-h, 110px) + 14px);
 }

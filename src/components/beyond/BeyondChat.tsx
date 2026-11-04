@@ -361,6 +361,18 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
   const clientRunIdRef = useRef<string | null>(null);
   const adoptingRef = useRef(false);
   const [liveTool, setLiveTool] = useState<{ name: string } | null>(null);
+  // A socket that went to sleep can lose events without knowing. While a turn
+  // runs, keep asking for its state, so the screen can never get stuck on it.
+  useEffect(() => {
+    if (!thinking) return undefined;
+    const timer = setInterval(() => {
+      if (sessionIdRef.current) {
+        sendMessage({ type: 'check-session-status', sessionId: sessionIdRef.current, provider: 'claude' });
+      }
+    }, 15000);
+    return () => clearInterval(timer);
+  }, [thinking, sendMessage]);
+
   const reloadHistory = useCallback((uuid: string) => {
     if (!uuid) return;
     authenticatedFetch(`/api/providers/sessions/${encodeURIComponent(uuid)}/messages`)
