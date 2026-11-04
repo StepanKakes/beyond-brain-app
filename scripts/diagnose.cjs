@@ -1,5 +1,6 @@
-// What the app recorded lately: the last chat messages and job runs. Run by
-// the Diagnose workflow on the box; read-only.
+// What the app recorded lately: the shape of the last chat messages and job runs.
+// Run by the Diagnose workflow on the box; read-only. The repo and its logs are
+// public, so this never prints message text, summaries or errors, only lengths.
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -14,13 +15,13 @@ if (!dbPath) {
 }
 console.log('db', dbPath);
 const db = new Database(dbPath, { readonly: true });
-const rows = db.prepare("SELECT session_id, role, ts, substr(replace(content, char(10), ' '), 1, 110) AS c FROM beyond_messages ORDER BY id DESC LIMIT 40").all().reverse();
-for (const r of rows) console.log(r.ts, r.session_id.slice(0, 8), r.role.padEnd(9), r.c);
+const rows = db.prepare('SELECT session_id, role, ts, length(content) AS n FROM beyond_messages ORDER BY id DESC LIMIT 40').all().reverse();
+for (const r of rows) console.log(r.ts, r.session_id.slice(0, 8), r.role.padEnd(9), `${r.n} znaku`);
 console.log('--- runs');
 try {
-  for (const r of db.prepare("SELECT job, status, started_at, finished_at, substr(coalesce(error, summary, ''), 1, 90) AS s FROM beyond_runs ORDER BY id DESC LIMIT 8").all()) {
-    console.log(r.started_at, String(r.job).padEnd(18), String(r.status).padEnd(8), r.s);
+  for (const r of db.prepare('SELECT job, status, started_at, finished_at, error IS NOT NULL AS failed FROM beyond_runs ORDER BY id DESC LIMIT 8').all()) {
+    console.log(r.started_at, String(r.job).padEnd(18), String(r.status).padEnd(8), r.failed ? 'ma chybu' : '');
   }
 } catch (e) {
-  console.log('runs:', e.message);
+  console.log('runs: nejde precist');
 }

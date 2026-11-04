@@ -47,14 +47,18 @@ jobs:
           foreach ($l in $logs) {
             if (Test-Path $l) {
               Write-Host "--- $l ($( (Get-Item $l).LastWriteTime ))"
-              Get-Content $l -Tail 200 -ErrorAction SilentlyContinue | Select-String -Pattern 'beyond|stream|error|Error|restart|shutdown|listening|session' | Select-Object -Last 120
+              # Public logs: these lines can carry message text, so only count them.
+              foreach ($pattern in 'error', 'restart', 'shutdown', 'listening') {
+                $hits = @(Get-Content $l -Tail 200 -ErrorAction SilentlyContinue | Select-String -Pattern $pattern).Count
+                Write-Host "  $pattern`: $hits"
+              }
             }
           }
 
           Write-Host "=== claude on the box"
           try {
             $cfg = Get-Content "$env:USERPROFILE\.claude.json" -Raw | ConvertFrom-Json
-            Write-Host "account: $($cfg.oauthAccount.emailAddress)  org: $($cfg.oauthAccount.organizationName)  sub: $($cfg.oauthAccount.subscriptionType)"
+            Write-Host "signed in: $([bool]$cfg.oauthAccount.emailAddress)  sub: $($cfg.oauthAccount.subscriptionType)"
           } catch { Write-Host "no .claude.json: $_" }
           try { Write-Host "version: $(claude --version 2>&1)" } catch { Write-Host "claude not on PATH: $_" }
           foreach ($m in 'sonnet', 'opus') {
@@ -70,7 +74,7 @@ jobs:
             Remove-Job $job -Force
           }
 
-          Write-Host "=== app history (last 40 chat messages)"
+          Write-Host "=== app history (shape of the last 40 chat messages)"
           node scripts\diagnose.cjs
 
           Write-Host "=== claude transcripts touched in the last $hours h"
@@ -81,11 +85,9 @@ jobs:
               try {
                 $j = $_ | ConvertFrom-Json
                 $role = if ($j.message.role) { $j.message.role } else { $j.type }
-                $txt = ''
-                if ($j.message.content -is [string]) { $txt = $j.message.content }
-                elseif ($j.message.content) { $txt = ($j.message.content | ForEach-Object { if ($_.type -eq 'text') { $_.text } elseif ($_.type -eq 'tool_use') { "[tool $($_.name)]" } elseif ($_.type -eq 'tool_result') { '[tool_result]' } }) -join ' ' }
-                if ($txt.Length -gt 110) { $txt = $txt.Substring(0, 110) }
-                Write-Host ("  {0} {1,-9} {2}" -f $j.timestamp, $role, ($txt -replace "`n", ' '))
+                # Shape only: the repo's logs are public.
+                $parts = @($j.message.content | ForEach-Object { if ($_.type -eq 'tool_use') { "tool:$($_.name)" } elseif ($_.type) { $_.type } else { 'string' } }) -join ','
+                Write-Host ("  {0} {1,-9} {2}" -f $j.timestamp, $role, $parts)
               } catch { Write-Host "  ?" }
             }
           }
