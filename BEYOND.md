@@ -684,8 +684,19 @@ desktop se nenačítá). `src/main.jsx` jen rozhoduje, který balík se stáhne;
 začíná v `src/desktop-entry.jsx`. Appka přidaná na plochu telefonu míří na `/` a
 přesměruje se na `/m`, `/?desktop=1` to pro dané spuštění vypne.
 
-- **Komponenty:** tab bar, přepínače a tlačítka z knihovny `glisse`. Safari neumí
-  živě lámat světlo pozadí, lišty jsou proto rozmazané sklo z `mobile.css`.
+- **Obrazovky:** pět tabů (Dnes, Chaty, Klienti, Hovory, Více). `Today.tsx`,
+  `TaskDetail.tsx` (úkol i návrh), `Chats.tsx` + `Chat.tsx`, `Clients.tsx`,
+  `Calls.tsx`, `More.tsx` (Návrhy, Obsah, KPI, Soubory jen ke čtení, nastavení).
+  Správa agenta, konektorů a týmu, Google a ICS, úpravy souborů a stříhání klipů
+  zůstávají v plné verzi.
+- **Komponenty:** tab bar, přepínače a tlačítka z knihovny `glisse`. Horní lišta je
+  plná barva bez `backdrop-filter`: na skutečném iPhonu rozmazával i vlastní obsah
+  lišty (v simulátoru to vidět nebylo). Čára pod ní se ukáže až po odscrollování
+  (`.is-scrolled`).
+- **Klávesnice:** `MobileApp.tsx` srovnává `visualViewport.height` s největší
+  naměřenou výškou, ne s `innerHeight`, ten se v režimu z plochy mění s ní.
+- **Zprávy lidem:** odeslání přes WhatsApp v chatu i návrhy jdou podržením,
+  bez volby "vždy povolit".
 - **Rychlost:** kostra a písma ze service workeru, data hned z localStorage
   (`store.ts`) a potichu dohnaná ze serveru, taby zůstávají v DOMu i se scrollem,
   animace jen `transform` přes Web Animations, chat scrolluje `column-reverse`.

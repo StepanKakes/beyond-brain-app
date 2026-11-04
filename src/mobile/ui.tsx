@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 
-import { Icon } from './icons';
+import { Icon, type IconName } from './icons';
 import { back } from './router';
 
 const MarkdownBody = lazy(() => import('./Markdown'));
@@ -23,10 +23,10 @@ export function Markdown({ text }: { text: string }) {
   );
 }
 
-/** Obrazovka tabu: velký nadpis, který při scrollu přejde do malého ve skleněné liště. */
 /** Kolik bodů odjede velký nadpis, než ho nahradí titulek v liště. */
 const COLLAPSE_AT = 40;
 
+/** Obrazovka tabu: velký nadpis, který při scrollu přejde do malého v liště. */
 export function TabScreen({
   title,
   subtitle,
@@ -60,24 +60,33 @@ export function TabScreen({
 }
 
 /** Lišta vnořené obrazovky se šipkou zpět. */
-export function PushedBar({ title, action }: { title: string; action?: ReactNode }) {
+export function PushedBar({ title, sub, action }: { title: string; sub?: ReactNode; action?: ReactNode }) {
   return (
     <header className="m-bar m-bar-pushed">
       <button type="button" className="m-icon-btn m-bar-back" aria-label="Zpět" onClick={() => back()}>
         <Icon name="back" size={22} />
       </button>
       <div className="m-bar-title" title={title}>
-        {title}
+        <span className="m-bar-title-text">{title}</span>
+        {sub}
       </div>
       <div className="m-bar-action">{action}</div>
     </header>
   );
 }
 
-export function Section({ title, children }: { title?: string; children: ReactNode }) {
+export function Section({
+  title,
+  tone,
+  children,
+}: {
+  title?: string;
+  tone?: 'danger';
+  children: ReactNode;
+}) {
   return (
     <section className="m-section">
-      {title ? <h2>{title}</h2> : null}
+      {title ? <h2 className={tone === 'danger' ? 'is-danger' : undefined}>{title}</h2> : null}
       <div className="m-group">{children}</div>
     </section>
   );
@@ -263,19 +272,22 @@ export function HoldButton({
   );
 }
 
-// Krátké hlášky nahoře.
-export function toast(text: string): void {
-  window.dispatchEvent(new CustomEvent('m-toast', { detail: text }));
+type ToastDetail = { text: string; action?: { label: string; run: () => void }; ms?: number };
+
+// Krátké hlášky nahoře, případně s akcí Vrátit.
+export function toast(text: string, action?: ToastDetail['action'], ms?: number): void {
+  window.dispatchEvent(new CustomEvent<ToastDetail>('m-toast', { detail: { text, action, ms } }));
 }
 
 export function ToastHost() {
-  const [text, setText] = useState<string | null>(null);
+  const [item, setItem] = useState<ToastDetail | null>(null);
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
     const show = (event: Event) => {
-      setText((event as CustomEvent<string>).detail);
+      const detail = (event as CustomEvent<ToastDetail>).detail;
+      setItem(detail);
       clearTimeout(timer);
-      timer = setTimeout(() => setText(null), 3200);
+      timer = setTimeout(() => setItem(null), detail.ms ?? 3200);
     };
     window.addEventListener('m-toast', show);
     return () => {
@@ -283,12 +295,344 @@ export function ToastHost() {
       clearTimeout(timer);
     };
   }, []);
-  if (!text) return null;
+  if (!item) return null;
   return (
     <div className="m-toast" role="status">
-      {text}
+      <span>{item.text}</span>
+      {item.action ? (
+        <button
+          type="button"
+          onClick={() => {
+            item.action?.run();
+            setItem(null);
+          }}
+        >
+          {item.action.label}
+        </button>
+      ) : null}
     </div>
   );
+}
+
+/**
+ * Smazání s možností si to rozmyslet: z obrazovky zmizí hned, na server jde,
+ * až když se během pár vteřin nevrátí.
+ */
+export function deleteWithUndo({
+  text,
+  hide,
+  restore,
+  commit,
+}: {
+  text: string;
+  hide: () => void;
+  restore: () => void;
+  commit: () => Promise<unknown>;
+}): void {
+  hide();
+  const ms = 5000;
+  const timer = setTimeout(() => {
+    commit().catch((error: Error) => {
+      restore();
+      toast(error.message || 'Smazání se nepovedlo');
+    });
+  }, ms);
+  toast(
+    text,
+    {
+      label: 'Vrátit',
+      run: () => {
+        clearTimeout(timer);
+        restore();
+      },
+    },
+    ms,
+  );
+}
+
+/** Řádek se seznamu, který vede dál: nadpis, popis a šipka. */
+export function LinkRow({
+  icon,
+  title,
+  sub,
+  value,
+  danger,
+  href,
+  onClick,
+}: {
+  icon?: IconName;
+  title: string;
+  sub?: string;
+  value?: ReactNode;
+  danger?: boolean;
+  href?: string;
+  onClick?: () => void;
+}) {
+  const body = (
+    <>
+      {icon ? (
+        <span className="m-link-icon">
+          <Icon name={icon} size={22} />
+        </span>
+      ) : null}
+      <span className="m-link-text">
+        <span className={`m-row-title${danger ? ' is-danger' : ''}`} title={title}>
+          {title}
+        </span>
+        {sub ? <span className="m-row-sub">{sub}</span> : null}
+      </span>
+      {value !== undefined ? <span className="m-link-value">{value}</span> : null}
+      {onClick && !danger ? (
+        <span className="m-link-chevron">
+          <Icon name="right" size={16} />
+        </span>
+      ) : null}
+    </>
+  );
+  if (href) {
+    return (
+      <a className="m-row m-link" href={href}>
+        {body}
+      </a>
+    );
+  }
+  return (
+    <button type="button" className="m-row m-link" onClick={onClick}>
+      {body}
+    </button>
+  );
+}
+
+export type PickerOption = { value: string; label: string; sub?: string; tone?: string };
+
+/** Výběr z možností ve spodním listu. Delší seznam jde prohledat. */
+export function Picker({
+  title,
+  options,
+  value,
+  onPick,
+  onClose,
+  children,
+}: {
+  title: string;
+  options: PickerOption[];
+  value?: string | null;
+  onPick: (value: string) => void;
+  onClose: () => void;
+  children?: ReactNode;
+}) {
+  const [query, setQuery] = useState('');
+  const needle = query.trim().toLocaleLowerCase('cs');
+  const shown = needle ? options.filter((o) => o.label.toLocaleLowerCase('cs').includes(needle)) : options;
+  return (
+    <Sheet title={title} onClose={onClose}>
+      {options.length > 8 ? (
+        <input
+          className="m-input m-picker-search"
+          placeholder="Hledat"
+          aria-label="Hledat"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+      ) : null}
+      <div className="m-picker">
+        {shown.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            className="m-picker-row"
+            aria-pressed={option.value === value}
+            onClick={() => {
+              onPick(option.value);
+              onClose();
+            }}
+          >
+            {option.tone ? <span className={`m-flag ${option.tone}`} aria-hidden="true" /> : null}
+            <span className="m-link-text">
+              <span className="m-row-title" title={option.label}>
+                {option.label}
+              </span>
+              {option.sub ? <span className="m-row-sub">{option.sub}</span> : null}
+            </span>
+            {option.value === value ? <Icon name="check" size={20} /> : null}
+          </button>
+        ))}
+      </div>
+      {children}
+    </Sheet>
+  );
+}
+
+const SWIPE_OPEN = 84;
+
+/**
+ * Řádek, který jde stáhnout doleva a odhalit akci. Pohyb sleduje prst 1:1,
+ * dlouhé nebo rychlé stažení akci rovnou provede.
+ */
+export function SwipeRow({
+  label,
+  onAction,
+  disabled,
+  children,
+}: {
+  label: string;
+  onAction: () => void;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
+  const content = useRef<HTMLDivElement>(null);
+  const state = useRef({ x: 0, y: 0, base: 0, dx: 0, last: 0, t: 0, speed: 0, axis: '' as '' | 'x' | 'y', moved: false });
+  const hide = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const [open, setOpen] = useState(false);
+
+  const place = (x: number, animate: boolean) => {
+    const el = content.current;
+    if (!el) return;
+    el.style.transition = animate ? `transform 320ms ${EASE}` : 'none';
+    el.style.transform = x ? `translate3d(${x}px,0,0)` : '';
+    // Červená akce je vidět jen při stažení, jinak prosvítá v zaoblených rozích.
+    const root = el.parentElement;
+    if (x) {
+      clearTimeout(hide.current);
+      root?.classList.add('is-active');
+    } else {
+      hide.current = setTimeout(() => root?.classList.remove('is-active'), animate ? 330 : 0);
+    }
+  };
+
+  if (disabled) return <>{children}</>;
+
+  const width = () => content.current?.getBoundingClientRect().width ?? 360;
+
+  return (
+    <div
+      className="m-swipe"
+      onPointerDown={(event) => {
+        state.current = {
+          x: event.clientX,
+          y: event.clientY,
+          base: open ? -SWIPE_OPEN : 0,
+          dx: open ? -SWIPE_OPEN : 0,
+          last: event.clientX,
+          t: event.timeStamp,
+          speed: 0,
+          axis: '',
+          moved: false,
+        };
+      }}
+      onPointerMove={(event) => {
+        const s = state.current;
+        if (!s.t || s.axis === 'y') return;
+        const dx = event.clientX - s.x;
+        const dy = event.clientY - s.y;
+        if (!s.axis) {
+          if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+          s.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+          if (s.axis === 'y') return;
+          event.currentTarget.setPointerCapture(event.pointerId);
+          s.moved = true;
+        }
+        s.speed = (event.clientX - s.last) / Math.max(1, event.timeStamp - s.t);
+        s.last = event.clientX;
+        s.t = event.timeStamp;
+        s.dx = Math.min(0, s.base + dx);
+        place(s.dx, false);
+      }}
+      onPointerUp={() => {
+        const s = state.current;
+        s.t = 0;
+        if (s.axis !== 'x') return;
+        const total = width();
+        // Kam by se řádek setrvačností dostal, ne kde ho prst pustil.
+        const projected = s.dx + s.speed * 180;
+        if (projected < -total * 0.55) {
+          place(-total, true);
+          setTimeout(onAction, 200);
+          return;
+        }
+        const next = projected < -SWIPE_OPEN / 2;
+        setOpen(next);
+        place(next ? -SWIPE_OPEN : 0, true);
+      }}
+      onPointerCancel={() => {
+        state.current.t = 0;
+        place(open ? -SWIPE_OPEN : 0, true);
+      }}
+      onClickCapture={(event) => {
+        // Klepnutí po stažení nebo na otevřený řádek jen řádek zavře.
+        if (state.current.moved) {
+          state.current.moved = false;
+          event.preventDefault();
+          event.stopPropagation();
+        } else if (open) {
+          event.preventDefault();
+          event.stopPropagation();
+          setOpen(false);
+          place(0, true);
+        }
+      }}
+    >
+      <button
+        type="button"
+        className="m-swipe-action"
+        onClickCapture={(event) => {
+          event.stopPropagation();
+          setOpen(false);
+          place(0, false);
+          onAction();
+        }}
+      >
+        {label}
+      </button>
+      <div ref={content} className="m-swipe-content">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** Iniciály místo fotky. */
+export function Initials({ name, size = 40 }: { name: string; size?: number }) {
+  const letters = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0])
+    .join('')
+    .toLocaleUpperCase('cs');
+  return (
+    <span className="m-initials" style={{ width: size, height: size, fontSize: size * 0.38 }} aria-hidden="true">
+      {letters}
+    </span>
+  );
+}
+
+/** Než přijdou první data: tiché řádky místo prázdné stránky. */
+export function Skeleton({ rows = 4 }: { rows?: number }) {
+  return (
+    <div className="m-section" aria-hidden="true">
+      <div className="m-group">
+        {Array.from({ length: rows }, (_, index) => (
+          <div className="m-skeleton-row" key={index}>
+            <span />
+            <span />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function ago(iso: string | number): string {
+  const ms = typeof iso === 'number' ? iso : new Date(iso).getTime();
+  const minutes = Math.round((Date.now() - ms) / 60000);
+  if (minutes < 1) return 'teď';
+  if (minutes < 60) return `před ${minutes} min`;
+  const date = new Date(ms);
+  if (date.toDateString() === new Date().toDateString()) return timeOf(date.toISOString());
+  const days = Math.floor((Date.now() - ms) / 86400000);
+  if (days < 7) return date.toLocaleDateString('cs-CZ', { weekday: 'long' });
+  return date.toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric' });
 }
 
 export function plural(count: number, one: string, few: string, many: string): string {

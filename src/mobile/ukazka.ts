@@ -9,6 +9,8 @@ const day = (offset: number) => new Date(now + offset * 86400000).toISOString().
 const call = (id: string, title: string, clientName: string | null, start: number, live = false) => ({
   id,
   uid: id,
+  clientSlug: clientName ? 'pavel' : null,
+  host: { key: 'stepan', name: 'Štěpán' },
   title,
   clientName,
   startIso: iso(start),
@@ -57,9 +59,10 @@ const tasks = [
     dueKind: 'today',
   },
   { ...base, id: 'u-4', text: 'Projít nápady z hovorů', priority: 4, state: 'none' },
+  { ...base, id: 'u-z', text: 'Připravit prezentaci na workshop', priority: 3, state: 'none', due: day(1), dueLabel: 'zítra' },
   { ...base, id: 'u-5', text: 'Objednat mikrofon', priority: 4, state: 'done' },
   // Dost řádků, aby se dal zkoušet scroll pod horní lištu a tab bar.
-  ...Array.from({ length: 14 }, (_, index) => ({
+  ...Array.from({ length: 4 }, (_, index) => ({
     ...base,
     id: `u-d${index}`,
     text: `Úkol do zásoby číslo ${index + 1}`,
@@ -94,14 +97,138 @@ const history = [
   },
 ];
 
+const signal = (title: string, detail: string, severity: string, slug: string, name: string) => ({
+  type: title,
+  severity,
+  title,
+  detail,
+  clientSlug: slug,
+  clientName: name,
+});
+
+const client = (slug: string, name: string, week: number, worst: string | null, score: number, signals: unknown[] = []) => ({
+  slug,
+  name,
+  stav: 'Aktivní',
+  isActive: true,
+  programWeek: week,
+  totalWeeks: 12,
+  daysToEnd: (12 - week) * 7,
+  notionUrl: 'https://example.com',
+  openOurs: 1,
+  openTheirs: 2,
+  openFlags: worst ? 1 : 0,
+  lastCallIso: iso(-4 * 1440),
+  nextCall: null,
+  score,
+  worst,
+  counts: { critical: worst === 'critical' ? 1 : 0, watch: worst === 'watch' ? 1 : 0 },
+  signals,
+});
+
+const pavelSignals = [signal('Neodpovídá 9 dní', 'Poslední zpráva od něj byla minulý týden', 'critical', 'pavel', 'Pavel Sedláček')];
+const board = [
+  client('pavel', 'Pavel Sedláček', 5, 'critical', 90, pavelSignals),
+  client('lucie', 'Lucie Nováková', 8, 'watch', 40, [signal('Chybí měření', 'Tento týden neposlala čísla', 'watch', 'lucie', 'Lucie Nováková')]),
+  client('dlouhy', 'Klient s opravdu hodně dlouhým jménem a příjmením s.r.o.', 2, null, 0),
+  client('jana', 'Jana Horáková', 11, null, 0),
+];
+
 export function mockApi(path: string, options: Options): unknown {
+  if (path.startsWith('/api/beyond/velin/ukoly/parse')) {
+    const quick = String((options.body as { quick?: string })?.quick || '');
+    return {
+      priority: /\bp1\b/.test(quick) ? 1 : 4,
+      due: /zítra/.test(quick) ? 'zítra' : /dnes/.test(quick) ? 'dnes' : null,
+      clientName: /Pavl/.test(quick) ? 'Pavel Sedláček' : null,
+      owner: 'stepan',
+      text: quick,
+    };
+  }
+  if (path === '/api/beyond/velin/') {
+    return { me: { key: 'stepan', displayName: 'Štěpán' }, needsUs: pavelSignals, risks: board[1].signals };
+  }
+  if (path.startsWith('/api/beyond/velin/pocty')) return { navrhy: 1, obsah: 2, klienti: 2, velin: 3 };
+  if (path.startsWith('/api/beyond/velin/board')) return { clients: board };
+  if (path.startsWith('/api/beyond/velin/client/')) {
+    const slug = decodeURIComponent(path.split('/').pop() || '');
+    const found = board.find((c) => c.slug === slug) || board[0];
+    return {
+      client: {
+        ...found,
+        measurements: [{ isoWeek: '2026-W44', range: '26. 10. až 1. 11.', values: { sledujici: 1240, leady: 18, cally: 6 } }],
+        promises: {
+          ours: [{ text: 'Poslat šablonu nabídky', dueIso: iso(1440), person: 'Štěpán' }],
+          theirs: [{ text: 'Natočit tři reely', dueIso: iso(4320), person: found.name }],
+        },
+        flags: [{ severity: 'watch', title: 'Váhá nad cenou', stav: null, open: true, body: 'Zmínil to na posledním hovoru' }],
+        daysSinceLastCall: 4,
+      },
+      signals: found.signals,
+      timeline: [
+        { kind: 'call', dateIso: iso(-4 * 1440), title: 'Coaching', excerpt: 'Probrali jsme nový hook a cenu programu' },
+        { kind: 'whatsapp', dateIso: iso(-9 * 1440), title: 'Zpráva', excerpt: 'Díky, koukám na to a ozvu se' },
+      ],
+      calls: [],
+    };
+  }
+  if (path.startsWith('/api/beyond/velin/agent/mozek')) {
+    return { items: [{ id: 3, title: 'Tón zpráv Pavlovi', reason: 'Odpovídá lépe na kratší zprávy', before: 'Delší zprávy', after: 'Krátké zprávy, jedna otázka' }] };
+  }
+  if (path.startsWith('/api/beyond/velin/obsah')) {
+    if (options.method && options.method !== 'GET') return { ok: true };
+    return {
+      items: [
+        { id: 'o1', kind: 'reel', state: 'navrh', title: 'Proč prodejní hovor nekončí cenou', hook: 'Cena není konec hovoru', why: 'Zaznělo na třech hovorech tento týden', caption: 'Popisek reelu', client: 'Pavel Sedláček', quote: 'Tohle mi změnilo prodej', speaker: 'Pavel', clip: null },
+        { id: 'o2', kind: 'story', state: 'schvaleno', title: 'Tři chyby v nabídce', hook: null, why: null, caption: null, client: null, clip: null },
+      ],
+    };
+  }
+  if (path.startsWith('/api/beyond/velin/kpi')) {
+    const metric = (key: string, area: string, label: string, unit: string, dir = 'max') => ({ key, area, label, unit, dir });
+    const period = {
+      values: { leady: 42, cally: 11, trzby: 184000, cpl: 95 },
+      targets: { leady: 50, cally: 10, trzby: 150000, cpl: 120 },
+    };
+    return {
+      configured: true,
+      currentWeek: '2026-W45',
+      metrics: [
+        metric('leady', 'akvizice', 'Nové leady', 'count'),
+        metric('cally', 'cally', 'Prodejní hovory', 'count'),
+        metric('trzby', 'trzby', 'Tržby', 'czk'),
+        metric('cpl', 'reklama', 'Cena za lead', 'czk', 'min'),
+      ],
+      weeks: [
+        { ...period, week: '2026-W44', from: day(-9), to: day(-3), status: 'past' },
+        { ...period, week: '2026-W45', from: day(-2), to: day(4), status: 'current' },
+      ],
+      months: [{ ...period, month: day(0).slice(0, 7) }],
+      errors: [],
+    };
+  }
+  if (path.startsWith('/api/beyond/files/tree')) {
+    return {
+      roots: [
+        { type: 'dir', name: 'clients', path: 'clients', children: [{ type: 'file', name: 'pavel.md', path: 'clients/pavel.md' }] },
+        { type: 'file', name: 'README.md', path: 'README.md' },
+      ],
+    };
+  }
+  if (path.startsWith('/api/beyond/file')) return { content: '# Pavel\n\nDvanáctitýdenní program, pátý týden' };
+  if (path.startsWith('/api/beyond/models')) {
+    return { models: [{ value: 'opus', displayName: 'Opus', description: 'Nejschopnější' }, { value: 'sonnet', displayName: 'Sonnet', description: 'Rychlejší' }] };
+  }
   if (path.startsWith('/api/beyond/velin/ukoly')) {
     if (options.method && options.method !== 'GET') return { ok: true };
     return {
       me: { key: 'stepan' },
       today: day(0),
-      people: [],
-      clients: [{ slug: 'pavel', name: 'Pavel Sedláček' }],
+      people: [
+        { key: 'stepan', displayName: 'Štěpán' },
+        { key: 'tim', displayName: 'Tim' },
+      ],
+      clients: board.map((c) => ({ slug: c.slug, name: c.name })),
       tasks,
     };
   }

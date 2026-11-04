@@ -4,7 +4,10 @@ import { Button, Input, TabBar } from 'glisse';
 import { UKAZKA, getToken, login } from './api';
 import { ChatScreen } from './Chat';
 import { Icon } from './icons';
-import { CallsScreen, ChatsScreen, MoreScreen } from './Lists';
+import { CallsScreen } from './Calls';
+import { ChatsScreen } from './Chats';
+import { ClientDetailScreen, ClientsScreen } from './Clients';
+import { FilesScreen, KpiScreen, MoreScreen, ObsahDetailScreen, ObsahScreen, ProposalsScreen } from './More';
 import { takePendingLink } from './push';
 import { navigate, selectTab, useRouter, type Entry, type Tab } from './router';
 import { startSocket, stopSocket } from './socket';
@@ -16,6 +19,7 @@ import { ToastHost } from './ui';
 const TABS: { value: Tab; label: string; icon: Parameters<typeof Icon>[0]['name'] }[] = [
   { value: 'dnes', label: 'Dnes', icon: 'tasks' },
   { value: 'chaty', label: 'Chaty', icon: 'chat' },
+  { value: 'klienti', label: 'Klienti', icon: 'team' },
   { value: 'hovory', label: 'Hovory', icon: 'calendar' },
   { value: 'vice', label: 'Více', icon: 'more' },
 ];
@@ -105,9 +109,15 @@ function Shell() {
 
   const renderPushed = (entry: Entry, active: boolean) => {
     if (entry.route.name === 'chat') {
-      return <ChatScreen uuid={entry.route.uuid} slug={entry.route.slug} active={active} />;
+      return <ChatScreen uuid={entry.route.uuid} slug={entry.route.slug} draft={entry.route.draft} active={active} />;
     }
     if (entry.route.name === 'ukol') return <TaskDetail id={entry.route.id} />;
+    if (entry.route.name === 'klient') return <ClientDetailScreen slug={entry.route.slug} />;
+    if (entry.route.name === 'navrhy') return <ProposalsScreen />;
+    if (entry.route.name === 'obsah') return <ObsahScreen />;
+    if (entry.route.name === 'obsah-detail') return <ObsahDetailScreen id={entry.route.id} />;
+    if (entry.route.name === 'kpi') return <KpiScreen />;
+    if (entry.route.name === 'soubory') return <FilesScreen path={entry.route.path} />;
     return null;
   };
 
@@ -119,6 +129,7 @@ function Shell() {
             <div key={value} className={`m-tab${value === tab ? ' is-active' : ''}`} aria-hidden={value !== tab}>
               {value === 'dnes' ? <TodayScreen /> : null}
               {value === 'chaty' ? <ChatsScreen /> : null}
+              {value === 'klienti' ? <ClientsScreen /> : null}
               {value === 'hovory' ? <CallsScreen /> : null}
               {value === 'vice' ? <MoreScreen /> : null}
             </div>

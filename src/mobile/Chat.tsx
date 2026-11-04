@@ -5,11 +5,12 @@ import { rebuildHistory, uid } from '../components/beyond/chat/transcript';
 import type { ChatMessage, ToolStep } from '../components/beyond/chat/types';
 import { UKAZKA, api } from './api';
 import { Icon } from './icons';
-import { replaceTop } from './router';
+import { UNIVERSAL, replaceTop } from './router';
 import { onSocket, sendSocket, type SocketMessage } from './socket';
-import { mutate, readCache, writeCache } from './store';
-import type { ChatSession } from './types';
-import { Markdown, PushedBar, Sheet, plural, toast } from './ui';
+import { mutate, readCache, useResource, writeCache } from './store';
+import { TASKS_KEY, TASKS_PATH } from './Today';
+import type { ChatSession, TasksResponse } from './types';
+import { HoldButton, Markdown, Picker, PushedBar, Sheet, plural, toast } from './ui';
 
 export const CHATS_KEY = 'chaty';
 
@@ -21,6 +22,58 @@ const allowedTools = (): string[] => {
     return [];
   }
 };
+
+const MODEL_KEY = 'bm.model';
+const savedModel = (): string => {
+  try {
+    return localStorage.getItem(MODEL_KEY) || 'opus';
+  } catch {
+    return 'opus';
+  }
+};
+
+type ModelOption = { value: string; displayName?: string; description?: string };
+
+const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
+const MAX_TEXT_BYTES = 256 * 1024;
+const TEXT_FILE = /\.(md|txt|json|ya?ml|csv|tsv|log|html?|css|js|ts|tsx|jsx|py|sh|toml|ini|env|jsonl)$/i;
+
+type Attachment = { id: string; kind: 'image' | 'text'; name: string; mimeType: string; data: string };
+
+function readAttachment(file: File): Promise<Attachment> {
+  return new Promise((resolve, reject) => {
+    const image = file.type.startsWith('image/');
+    if (!image && !file.type.startsWith('text/') && !TEXT_FILE.test(file.name)) {
+      reject(new Error(`${file.name}: tenhle typ souboru chat neumí`));
+      return;
+    }
+    if (file.size > (image ? MAX_IMAGE_BYTES : MAX_TEXT_BYTES)) {
+      reject(new Error(`${file.name}: soubor je moc velký`));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error(`${file.name}: nejde přečíst`));
+    reader.onload = () =>
+      resolve({
+        id: uid(),
+        kind: image ? 'image' : 'text',
+        name: file.name || 'Fotka',
+        mimeType: file.type,
+        data: String(reader.result),
+      });
+    if (image) reader.readAsDataURL(file);
+    else reader.readAsText(file);
+  });
+}
+
+/** Název nástroje bez technické předpony. */
+const toolLabel = (name: string): string => name.replace(/^mcp__.+?__/, '').replace(/[-_]/g, ' ');
+
+const PROMPTS = [
+  'Co mám dnes nejdůležitějšího?',
+  'Kdo z klientů potřebuje pozornost?',
+  'Připrav mě na další hovor',
+];
 
 type Question = {
   question: string;
@@ -42,6 +95,19 @@ const Row = memo(function Row({ message, streaming }: { message: ChatMessage; st
   ) : (
     <div className="m-msg-ai">
       <Markdown text={message.text} />
+      <button
+        type="button"
+        className="m-msg-copy"
+        aria-label="Kopírovat odpověď"
+        onClick={() =>
+          void navigator.clipboard
+            .writeText(message.text)
+            .then(() => toast('Zkopírováno'))
+            .catch(() => toast('Kopírování se nepovedlo'))
+        }
+      >
+        <Icon name="copy" size={17} />
+      </button>
     </div>
   );
 });
@@ -54,14 +120,17 @@ function Steps({ steps }: { steps: ToolStep[] }) {
   return (
     <div className="m-steps">
       <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
-        {running ? 'Pracuje' : `${n} ${plural(n, 'krok', 'kroky', 'kroků')}`}
-        {failed ? ', něco selhalo' : ''}
+        <span>
+          {running ? `Pracuje: ${toolLabel(steps[n - 1].name)}` : `${n} ${plural(n, 'krok', 'kroky', 'kroků')}`}
+          {failed ? ', něco selhalo' : ''}
+        </span>
+        <Icon name={open ? 'down' : 'right'} size={14} />
       </button>
       {open ? (
         <ul>
           {steps.map((step) => (
             <li key={step.id} className={step.isError ? 'is-error' : undefined} title={step.name}>
-              {step.name}
+              {toolLabel(step.name)}
             </li>
           ))}
         </ul>
@@ -138,8 +207,47 @@ function PermissionSheet({
   onDecide,
 }: {
   request: PermissionRequest;
-  onDecide: (decision: 'deny' | 'once' | 'always') => void;
+  onDecide: (decision: 'deny' | 'once' | 'always', input?: unknown) => void;
 }) {
+  const original = (request.input || {}) as Record<string, unknown>;
+  const whatsapp = request.toolName.startsWith('mcp__waha__send-');
+  const hasText = request.toolName === 'mcp__waha__send-text';
+  const [body, setBody] = useState(typeof original.text === 'string' ? original.text : '');
+
+  // Zpráva skutečnému člověku: vidět komu a co, odeslání podržením a nikdy "vždy".
+  if (whatsapp) {
+    const chat = typeof original.chatId === 'string' ? original.chatId : '';
+    const who = chat.replace(/@c\.us$/, '').replace(/@g\.us$/, ' (skupina)') || 'Příjemce neznámý';
+    return (
+      <Sheet title="Poslat přes WhatsApp" onClose={() => onDecide('deny')} dismissable={false}>
+        <p className="m-detail-label">Pro</p>
+        <p className="m-detail-who" title={who}>
+          {who}
+        </p>
+        {hasText ? (
+          <textarea
+            className="m-textarea"
+            value={body}
+            aria-label="Text zprávy"
+            onChange={(event) => setBody(event.target.value)}
+          />
+        ) : (
+          <pre className="m-pre">{JSON.stringify(original, null, 2).slice(0, 800)}</pre>
+        )}
+        <div className="m-sheet-actions">
+          <Button destructive onClick={() => onDecide('deny')}>
+            Neposílat
+          </Button>
+          <HoldButton
+            label="Podrž a odešli"
+            disabled={hasText && !body.trim()}
+            onConfirm={() => onDecide('once', hasText ? { ...original, text: body } : original)}
+          />
+        </div>
+      </Sheet>
+    );
+  }
+
   const detail = (() => {
     try {
       return JSON.stringify(request.input, null, 2).slice(0, 800);
@@ -148,9 +256,9 @@ function PermissionSheet({
     }
   })();
   return (
-    <Sheet title="Povolit nástroj" onClose={() => onDecide('deny')} dismissable={false}>
+    <Sheet title="Brain chce použít nástroj" onClose={() => onDecide('deny')} dismissable={false}>
       <p className="m-ask-q" title={request.toolName}>
-        {request.toolName}
+        {toolLabel(request.toolName)}
       </p>
       {detail ? <pre className="m-pre">{detail}</pre> : null}
       <div className="m-sheet-actions">
@@ -166,7 +274,27 @@ function PermissionSheet({
   );
 }
 
-export function ChatScreen({ uuid: initial, slug, active }: { uuid: string | null; slug: string; active: boolean }) {
+export function ChatScreen({
+  uuid: initial,
+  slug: initialSlug,
+  draft = '',
+  active,
+}: {
+  uuid: string | null;
+  slug: string;
+  draft?: string;
+  active: boolean;
+}) {
+  const [slug, setSlug] = useState(initialSlug);
+  const tasks = useResource<TasksResponse>(TASKS_KEY, TASKS_PATH);
+  const clients = tasks.data?.clients || [];
+  const clientName = clients.find((c) => c.slug === slug)?.name;
+  const [model, setModel] = useState(savedModel);
+  const [models, setModels] = useState<ModelOption[]>([]);
+  const [picking, setPicking] = useState<'model' | 'client' | 'attach' | null>(null);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const photoInput = useRef<HTMLInputElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
   const [uuid, setUuid] = useState(initial);
   const [messages, setMessages] = useState<ChatMessage[]>(() =>
     initial ? readCache<ChatMessage[]>(`chat.${initial}`) || [] : [],
@@ -179,7 +307,7 @@ export function ChatScreen({ uuid: initial, slug, active }: { uuid: string | nul
   const [streamingId, setStreamingId] = useState<string | null>(null);
   const [ask, setAsk] = useState<AskRequest | null>(null);
   const [permission, setPermission] = useState<PermissionRequest | null>(null);
-  const [text, setText] = useState('');
+  const [text, setText] = useState(draft);
 
   const uuidRef = useRef(initial);
   const adoptNext = useRef(!initial);
@@ -248,6 +376,12 @@ export function ChatScreen({ uuid: initial, slug, active }: { uuid: string | nul
     sendSocket({ type: 'check-session-status', sessionId: initial, provider: 'claude' });
     // jen při otevření obrazovky
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    api<{ models?: ModelOption[] }>('/api/beyond/models')
+      .then((data) => setModels((data.models || []).filter((m) => typeof m.value === 'string')))
+      .catch(() => undefined);
   }, []);
 
   // Cache přepisu, ne během streamu, a bez výstupů nástrojů.
@@ -436,19 +570,58 @@ export function ChatScreen({ uuid: initial, slug, active }: { uuid: string | nul
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, []);
 
-  const send = () => {
-    const command = text.trim();
-    if (!command) return;
+  const addFiles = async (files: FileList | null) => {
+    if (!files) return;
+    for (const file of Array.from(files)) {
+      try {
+        const attachment = await readAttachment(file);
+        setAttachments((current) => [...current, attachment]);
+      } catch (error) {
+        toast((error as Error).message);
+      }
+    }
+  };
+
+  const nameChat = (command: string) => {
+    if (UKAZKA) return;
+    void api<{ title?: string } | string>('/api/beyond/sessions/suggest-title', {
+      method: 'POST',
+      body: { text: command },
+    })
+      .then((result) => {
+        const suggested = typeof result === 'string' ? result : result?.title;
+        if (!suggested) return;
+        titleRef.current = suggested;
+        setTitle(suggested);
+        if (uuidRef.current) remember(uuidRef.current);
+      })
+      .catch(() => undefined);
+  };
+
+  const send = (preset?: string) => {
+    const typed = (preset ?? text).trim();
+    if (!typed && !attachments.length) return;
+    const textFiles = attachments.filter((a) => a.kind === 'text');
+    const images = attachments
+      .filter((a) => a.kind === 'image')
+      .map((a) => ({ data: a.data, mimeType: a.mimeType, name: a.name }));
+    const block = textFiles.map((f) => `\n\n=== Přiložený soubor: ${f.name} ===\n${f.data}\n=== /soubor ===`).join('');
+    const command = (typed + block).trim() || 'Podívej se na přiložený obrázek';
+    const shown = [typed, ...attachments.map((a) => `Příloha: ${a.name}`)].filter(Boolean).join('\n');
+
     setText('');
-    setMessages((prev) => [...prev, { id: uid(), role: 'user', kind: 'text', text: command }]);
+    setAttachments([]);
+    setMessages((prev) => [...prev, { id: uid(), role: 'user', kind: 'text', text: shown }]);
     setBusy(true);
     scroller.current?.scrollTo({ top: 0, behavior: 'smooth' });
 
     if (!uuidRef.current) {
       adoptNext.current = true;
-      const short = command.length > 60 ? `${command.slice(0, 57)}...` : command;
+      const seed = typed || 'Chat s přílohou';
+      const short = seed.length > 60 ? `${seed.slice(0, 57)}...` : seed;
       titleRef.current = short;
       setTitle(short);
+      if (typed) nameChat(typed);
     } else {
       remember(uuidRef.current);
     }
@@ -456,8 +629,9 @@ export function ChatScreen({ uuid: initial, slug, active }: { uuid: string | nul
       type: 'claude-command',
       command,
       options: {
-        model: 'opus',
+        model,
         connectors: [],
+        ...(images.length ? { images } : {}),
         ...(uuidRef.current ? { sessionId: uuidRef.current, resume: true } : {}),
         sessionSummary: 'Beyond · mobil',
         toolsSettings: { allowedTools: allowedTools(), disallowedTools: [], skipPermissions: false },
@@ -482,7 +656,7 @@ export function ChatScreen({ uuid: initial, slug, active }: { uuid: string | nul
     setAsk(null);
   };
 
-  const decide = (decision: 'deny' | 'once' | 'always') => {
+  const decide = (decision: 'deny' | 'once' | 'always', edited?: unknown) => {
     if (!permission) return;
     if (decision === 'always') {
       try {
@@ -495,17 +669,46 @@ export function ChatScreen({ uuid: initial, slug, active }: { uuid: string | nul
       type: 'claude-permission-response',
       requestId: permission.requestId,
       allow: decision !== 'deny',
-      ...(decision !== 'deny' ? { updatedInput: permission.input } : { message: 'Uživatel zamítl' }),
+      ...(decision !== 'deny' ? { updatedInput: edited ?? permission.input } : { message: 'Uživatel zamítl' }),
     });
     setPermission(null);
   };
 
+  const modelLabel = models.find((m) => m.value === model)?.displayName || model.replace(/^./, (c) => c.toUpperCase());
+  const canSend = Boolean(text.trim() || attachments.length);
+  const fresh = !messages.length && !uuid;
+
   return (
     <div className="m-chat">
-      <PushedBar title={title} />
+      <PushedBar
+        title={title}
+        sub={
+          <button type="button" className="m-bar-sub" onClick={() => setPicking('model')}>
+            <span>{modelLabel}</span>
+            <Icon name="down" size={12} />
+          </button>
+        }
+      />
       {/* column-reverse: scroll drží spodek sám a bez JavaScriptu, i při klávesnici */}
       <div className="m-chat-scroll" ref={scroller}>
         <div className="m-chat-log">
+          {fresh ? (
+            <div className="m-chat-empty">
+              <h2>Co pro tebe můžu udělat</h2>
+              <button type="button" className="m-pill" onClick={() => setPicking('client')}>
+                <Icon name="person" size={15} />
+                <span className="m-truncate">{clientName || 'Bez klienta'}</span>
+                <Icon name="down" size={12} />
+              </button>
+              <div className="m-prompts">
+                {PROMPTS.map((prompt) => (
+                  <button key={prompt} type="button" onClick={() => send(prompt)}>
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
           {messages.map((message) => (
             <div className="m-chat-row" key={message.id}>
               <Row message={message} streaming={message.id === streamingId} />
@@ -521,30 +724,121 @@ export function ChatScreen({ uuid: initial, slug, active }: { uuid: string | nul
           send();
         }}
       >
-        <textarea
-          value={text}
-          rows={1}
-          placeholder="Napiš brainu"
-          aria-label="Zpráva"
-          onChange={(event) => setText(event.target.value)}
-        />
-        {running && !text.trim() ? (
-          <button type="button" className="m-send" aria-label="Zastavit" onClick={stop}>
-            <Icon name="stop" size={20} />
-          </button>
-        ) : (
+        {attachments.length ? (
+          <div className="m-attachments">
+            {attachments.map((attachment) => (
+              <span key={attachment.id} className="m-attachment" title={attachment.name}>
+                {attachment.kind === 'image' ? <img src={attachment.data} alt="" /> : <Icon name="doc" size={18} />}
+                <span className="m-truncate">{attachment.name}</span>
+                <button
+                  type="button"
+                  aria-label={`Odebrat ${attachment.name}`}
+                  onClick={() => setAttachments((list) => list.filter((a) => a.id !== attachment.id))}
+                >
+                  <Icon name="close" size={14} />
+                </button>
+              </span>
+            ))}
+          </div>
+        ) : null}
+        <div className="m-composer-row">
           <button
-            type="submit"
-            className="m-send"
-            aria-label="Odeslat"
-            disabled={!text.trim()}
-            // Klávesnice se při odeslání nesmí zavřít.
+            type="button"
+            className="m-composer-add"
+            aria-label="Přidat přílohu"
             onPointerDown={(event) => event.preventDefault()}
+            onClick={() => setPicking('attach')}
           >
-            <Icon name="up" size={20} />
+            <Icon name="plus" size={22} />
           </button>
-        )}
+          <div className="m-composer-field">
+            <textarea
+              value={text}
+              rows={1}
+              placeholder="Napiš brainu"
+              aria-label="Zpráva"
+              onChange={(event) => setText(event.target.value)}
+            />
+            {running && !canSend ? (
+              <button type="button" className="m-send" aria-label="Zastavit" onClick={stop}>
+                <Icon name="stop" size={20} />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                className="m-send"
+                aria-label="Odeslat"
+                disabled={!canSend}
+                // Klávesnice se při odeslání nesmí zavřít.
+                onPointerDown={(event) => event.preventDefault()}
+              >
+                <Icon name="up" size={20} />
+              </button>
+            )}
+          </div>
+        </div>
+        <input
+          ref={photoInput}
+          type="file"
+          accept="image/*"
+          multiple
+          hidden
+          onChange={(event) => {
+            void addFiles(event.target.files);
+            event.target.value = '';
+          }}
+        />
+        <input
+          ref={fileInput}
+          type="file"
+          multiple
+          hidden
+          onChange={(event) => {
+            void addFiles(event.target.files);
+            event.target.value = '';
+          }}
+        />
       </form>
+      {picking === 'attach' ? (
+        <Picker
+          title="Přidat přílohu"
+          options={[
+            { value: 'photo', label: 'Fotka' },
+            { value: 'file', label: 'Soubor', sub: 'Text, tabulka nebo kód' },
+          ]}
+          onPick={(value) => (value === 'photo' ? photoInput : fileInput).current?.click()}
+          onClose={() => setPicking(null)}
+        />
+      ) : null}
+      {picking === 'model' ? (
+        <Picker
+          title="Model"
+          value={model}
+          options={(models.length ? models : [{ value: 'opus', displayName: 'Opus' }, { value: 'sonnet', displayName: 'Sonnet' }]).map((m: ModelOption) => ({
+            value: m.value,
+            label: m.displayName || m.value,
+            sub: m.description,
+          }))}
+          onPick={(value) => {
+            setModel(value);
+            try {
+              localStorage.setItem(MODEL_KEY, value);
+            } catch {
+              /* volba platí aspoň v tomhle chatu */
+            }
+          }}
+          onClose={() => setPicking(null)}
+        />
+      ) : null}
+      {picking === 'client' ? (
+        <Picker
+          title="Ke kterému klientovi"
+          value={slug}
+          options={[{ value: UNIVERSAL, label: 'Bez klienta' }, ...clients.map((c) => ({ value: c.slug, label: c.name }))]}
+          onPick={setSlug}
+          onClose={() => setPicking(null)}
+        />
+      ) : null}
       {ask ? <AskSheet request={ask} onAnswer={answer} /> : null}
       {permission ? <PermissionSheet request={permission} onDecide={decide} /> : null}
     </div>

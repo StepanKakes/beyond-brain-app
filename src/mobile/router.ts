@@ -3,12 +3,18 @@ import { useSyncExternalStore } from 'react';
 // Malý router postavený na historii prohlížeče. Taby historii nepřidávají
 // (jako v iOS), vnořené obrazovky ano, takže jde používat zpět i swipe.
 
-export type Tab = 'dnes' | 'chaty' | 'hovory' | 'vice';
+export type Tab = 'dnes' | 'chaty' | 'klienti' | 'hovory' | 'vice';
 
 export type Route =
   | { name: 'tab'; tab: Tab }
-  | { name: 'chat'; uuid: string | null; slug: string }
-  | { name: 'ukol'; id: string };
+  | { name: 'chat'; uuid: string | null; slug: string; draft: string }
+  | { name: 'ukol'; id: string }
+  | { name: 'klient'; slug: string }
+  | { name: 'navrhy' }
+  | { name: 'obsah' }
+  | { name: 'obsah-detail'; id: string }
+  | { name: 'kpi' }
+  | { name: 'soubory'; path: string };
 
 export type Entry = { key: string; url: string; route: Route };
 
@@ -22,10 +28,16 @@ export function parseRoute(url: string): Route {
       name: 'chat',
       uuid: parts[1] && parts[1] !== 'new' ? parts[1] : null,
       slug: searchParams.get('k') || UNIVERSAL,
+      draft: searchParams.get('t') || '',
     };
   }
   if (parts[0] === 'ukol' && parts[1]) return { name: 'ukol', id: parts[1] };
-  if (parts[0] === 'chaty' || parts[0] === 'hovory' || parts[0] === 'vice') {
+  if (parts[0] === 'klient' && parts[1]) return { name: 'klient', slug: parts[1] };
+  if (parts[0] === 'navrhy') return { name: 'navrhy' };
+  if (parts[0] === 'obsah') return parts[1] ? { name: 'obsah-detail', id: parts[1] } : { name: 'obsah' };
+  if (parts[0] === 'kpi') return { name: 'kpi' };
+  if (parts[0] === 'soubory') return { name: 'soubory', path: searchParams.get('p') || '' };
+  if (parts[0] === 'chaty' || parts[0] === 'klienti' || parts[0] === 'hovory' || parts[0] === 'vice') {
     return { name: 'tab', tab: parts[0] };
   }
   return { name: 'tab', tab: 'dnes' };

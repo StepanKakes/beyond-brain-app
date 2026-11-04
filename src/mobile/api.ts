@@ -70,6 +70,9 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
     const message = (data as { error?: string } | null)?.error;
     throw new Error(message || 'Server teď neodpovídá');
   }
+  // Akce, která selhala z pochopitelného důvodu, odpovídá 200 s ok:false.
+  const failed = data as { ok?: boolean; error?: string } | null;
+  if (failed?.ok === false) throw new Error(failed.error || 'Akce se nepovedla');
   return data as T;
 }
 
@@ -80,4 +83,12 @@ export async function login(username: string, password: string): Promise<void> {
   });
   if (!data?.token) throw new Error(data?.error || 'Přihlášení se nepovedlo');
   setToken(data.token);
+}
+
+/** Soubor za přihlášením (klip, obrázek) jako adresa pro prohlížeč. */
+export async function fetchBlobUrl(path: string): Promise<string> {
+  const token = getToken();
+  const response = await fetch(path, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!response.ok) throw new Error('Soubor se nepodařilo načíst');
+  return URL.createObjectURL(await response.blob());
 }

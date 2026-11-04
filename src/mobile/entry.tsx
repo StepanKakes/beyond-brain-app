@@ -20,6 +20,7 @@ const applyTheme = () => {
 };
 applyTheme();
 media.addEventListener('change', applyTheme);
+window.addEventListener('m-theme', applyTheme);
 
 root.classList.add('m-html');
 
