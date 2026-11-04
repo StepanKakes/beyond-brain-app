@@ -300,9 +300,8 @@ export function ChatScreen({
   const clientName = clients.find((c) => c.slug === slug)?.name;
   const [model, setModel] = useState(savedModel);
   const [models, setModels] = useState<ModelOption[]>([]);
-  const [picking, setPicking] = useState<'model' | 'client' | 'attach' | null>(null);
+  const [picking, setPicking] = useState<'model' | 'client' | null>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const photoInput = useRef<HTMLInputElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const [uuid, setUuid] = useState(initial);
   const [messages, setMessages] = useState<ChatMessage[]>(() =>
@@ -904,7 +903,7 @@ export function ChatScreen({
               className="m-composer-tool"
               aria-label="Přidat přílohu"
               onPointerDown={(event) => event.preventDefault()}
-              onClick={() => setPicking('attach')}
+              onClick={() => fileInput.current?.click()}
             >
               <Icon name="plus" size={21} />
             </button>
@@ -937,17 +936,6 @@ export function ChatScreen({
           </div>
         </Glass>
         <input
-          ref={photoInput}
-          type="file"
-          accept="image/*"
-          multiple
-          hidden
-          onChange={(event) => {
-            void addFiles(event.target.files);
-            event.target.value = '';
-          }}
-        />
-        <input
           ref={fileInput}
           type="file"
           multiple
@@ -958,17 +946,6 @@ export function ChatScreen({
           }}
         />
       </form>
-      {picking === 'attach' ? (
-        <Picker
-          title="Přidat přílohu"
-          options={[
-            { value: 'photo', label: 'Fotka' },
-            { value: 'file', label: 'Soubor', sub: 'Text, tabulka nebo kód' },
-          ]}
-          onPick={(value) => (value === 'photo' ? photoInput : fileInput).current?.click()}
-          onClose={() => setPicking(null)}
-        />
-      ) : null}
       {picking === 'model' ? (
         <Picker
           title="Model"
