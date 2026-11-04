@@ -1551,10 +1551,14 @@ async function handleBeyondStreamMessage(entry, message) {
   if (message.type === 'assistant') recordSdkMessage(entry.sdkSessionId, message);
 
   entry.lastMessageAt = Date.now();
-  if (message.type === 'system' && message.subtype === 'task_started') {
+  if (message.type === 'system' && message.subtype === 'task_started' && !message.skip_transcript) {
     (entry.runningTasks ||= new Set()).add(message.task_id);
   } else if (message.type === 'system' && message.subtype === 'task_notification') {
     entry.runningTasks?.delete(message.task_id);
+  } else if (message.type === 'system' && message.subtype === 'session_state_changed' && message.state === 'idle') {
+    // The SDK's own word that the turn and its background agents are over.
+    entry.runningTasks?.clear();
+    entry.midTurn = false;
   }
   if (message.type === 'assistant' || message.type === 'stream_event') entry.midTurn = true;
 
@@ -1968,6 +1972,13 @@ async function abortClaudeSDKSession(sessionId) {
 
   try {
     console.log(`Aborting SDK session: ${sessionId}`);
+
+    // Stopped by the person: nothing should keep showing as running.
+    for (const entry of beyondStreamSessions.values()) {
+      if (entry.sdkSessionId !== sessionId) continue;
+      entry.runningTasks?.clear();
+      entry.midTurn = false;
+    }
 
     // Call interrupt() on the query instance
     await session.instance.interrupt();

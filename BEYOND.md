@@ -721,6 +721,10 @@ změn a může rozbít `npm ci` na Windows. Novou závislost do něj dopisuj cí
 
 ## Běh chatu (4.11.2026)
 
+Kopie požadavků v transkriptu: Claude Code zapisuje do JSONL i řádky `api-request-blob` s `message.role`, bez `uuid` a času, s kopií odeslaných zpráv. Konverzace jsou jen řádky `user` a `assistant`, jinak se dotazy a odpovědi zobrazí dvakrát a objeví se kontext, který nikdo nepsal (`isRequestCopy`).
+
+Práce na pozadí: kolo může skončit `result`, zatímco agenti běží dál, a model je probudí až za několik minut bez čekajícího kola. Server počítá běžící úlohy (`runningTasks`) a práci po výsledku (`midTurn`), `isBeyondEntryBusy` je základ pro `turnActive`, ochranu při nasazení i odpojení, `complete` nese `backgroundTasks`. Workflow Chat structure ukáže tvar transkriptu podle hashe začátku zprávy a nevypisuje text, protože logy repozitáře jsou veřejné.
+
 Odpověď nezávisí na otevřeném okně, stejně jako u ChatGPT.
 
 - **Server:** běh přežije odpojení, grace timer ho během kola neukončí. `entry.partialText`

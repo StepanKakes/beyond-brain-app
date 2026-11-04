@@ -36,6 +36,16 @@ type ClaudeHistoryMessagesResult =
     limit?: number | null;
   };
 
+/**
+ * Claude Code also logs each API request into the transcript: rows like
+ * `api-request-blob` hold a copy of the messages it sent, with a `message.role`
+ * but no uuid or timestamp. Only `user` and `assistant` rows are the conversation,
+ * reading the copies would show prompts and answers twice.
+ */
+function isRequestCopy(entry: AnyRecord): boolean {
+  return Boolean(entry.message) && entry.type !== 'user' && entry.type !== 'assistant';
+}
+
 async function parseAgentTools(filePath: string): Promise<AnyRecord[]> {
   const tools: AnyRecord[] = [];
 
@@ -53,6 +63,7 @@ async function parseAgentTools(filePath: string): Promise<AnyRecord[]> {
 
       try {
         const entry = JSON.parse(line) as AnyRecord;
+        if (isRequestCopy(entry)) continue;
 
         if (entry.message?.role === 'assistant' && Array.isArray(entry.message?.content)) {
           for (const part of entry.message.content as AnyRecord[]) {
@@ -147,7 +158,7 @@ async function getSessionMessages(
 
       try {
         const entry = JSON.parse(line) as AnyRecord;
-        if (entry.sessionId === sessionId && entry.isSidechain !== true) {
+        if (entry.sessionId === sessionId && entry.isSidechain !== true && !isRequestCopy(entry)) {
           // A resumed session can write the same rows into the file again.
           if (entry.uuid && seenUuids.has(entry.uuid)) continue;
           if (entry.uuid) seenUuids.add(entry.uuid);
@@ -233,8 +244,6 @@ const INTERNAL_CONTENT_PREFIXES = [
 ] as const;
 
 function isInternalContent(content: string): boolean {
-  // The SDK's own confirmation after it loads a deferred tool, not a person.
-  if (content.trim() === 'Tool loaded.') return true;
   return INTERNAL_CONTENT_PREFIXES.some((prefix) => content.startsWith(prefix));
 }
 

@@ -282,6 +282,17 @@ export function mockSocket(message: Record<string, unknown>, emit: (m: Record<st
   if (message.type !== 'claude-command') return;
   const sessionId = (message.options as { sessionId?: string }).sessionId || 'ukazka-nova';
   emit({ kind: 'session_created', newSessionId: sessionId, sessionId });
+  if (String(message.command || '').includes('analýz')) {
+    // Kolo se ohlásí jako hotové, agent běží dál a model pak dopíše odpověď.
+    emit({ kind: 'text', role: 'assistant', sessionId, content: 'Spouštím analýzu na pozadí' });
+    emit({ kind: 'complete', sessionId, backgroundTasks: 1 });
+    setTimeout(() => {
+      emit({ kind: 'stream_delta', sessionId, content: 'Analýza je hotová' });
+      emit({ kind: 'text', role: 'assistant', sessionId, content: 'Analýza je hotová' });
+      emit({ kind: 'complete', sessionId });
+    }, 2500);
+    return;
+  }
   const words = REPLY.split(' ');
   const pause = 1800;
   emit({ kind: 'tool_use', sessionId, toolId: 'u1', toolName: 'Grep' });

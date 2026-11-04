@@ -357,6 +357,11 @@ function extractClaudeSearchableMessage(entry: AnyRecord): ClaudeSearchableMessa
     return null;
   }
 
+  // Claude Code also logs a copy of each API request (`api-request-blob`).
+  if (entry.type !== 'user' && entry.type !== 'assistant') {
+    return null;
+  }
+
   const rawRole = entry.message.role;
   if (rawRole !== 'user' && rawRole !== 'assistant') {
     return null;
