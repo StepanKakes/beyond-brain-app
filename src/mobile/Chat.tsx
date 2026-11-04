@@ -302,7 +302,6 @@ export function ChatScreen({
   const [models, setModels] = useState<ModelOption[]>([]);
   const [picking, setPicking] = useState<'model' | 'client' | null>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const fileInput = useRef<HTMLInputElement>(null);
   const [uuid, setUuid] = useState(initial);
   const [messages, setMessages] = useState<ChatMessage[]>(() =>
     initial ? readCache<ChatMessage[]>(`chat.${initial}`) || [] : [],
@@ -898,15 +897,20 @@ export function ChatScreen({
             onChange={(event) => setText(event.target.value)}
           />
           <div className="m-composer-tools">
-            <button
-              type="button"
-              className="m-composer-tool"
-              aria-label="Přidat přílohu"
-              onPointerDown={(event) => event.preventDefault()}
-              onClick={() => fileInput.current?.click()}
-            >
+            {/* Skutečné pole přes celé tlačítko. Programové click() iOS po zavření
+                výběru polyká, takže reagovalo jen každé druhé klepnutí. */}
+            <label className="m-composer-tool">
               <Icon name="plus" size={21} />
-            </button>
+              <input
+                type="file"
+                multiple
+                aria-label="Přidat přílohu"
+                onChange={(event) => {
+                  void addFiles(event.target.files);
+                  event.target.value = '';
+                }}
+              />
+            </label>
             <button
               type="button"
               className="m-composer-model"
@@ -935,16 +939,6 @@ export function ChatScreen({
             )}
           </div>
         </Glass>
-        <input
-          ref={fileInput}
-          type="file"
-          multiple
-          hidden
-          onChange={(event) => {
-            void addFiles(event.target.files);
-            event.target.value = '';
-          }}
-        />
       </form>
       {picking === 'model' ? (
         <Picker

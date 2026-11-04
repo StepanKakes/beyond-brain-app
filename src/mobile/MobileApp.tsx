@@ -99,11 +99,21 @@ function Shell() {
 
   // Cíl z notifikace, ať je appka zavřená, nebo jen na pozadí.
   useEffect(() => {
+    // Appka se může probudit dřív, než service worker cíl uloží. Proto se po
+    // návratu podívá víckrát, a zpráva od workeru na iOS nemusí dorazit vůbec.
+    const timers: number[] = [];
     const openPending = () => {
       if (document.visibilityState !== 'visible') return;
-      void takePendingLink().then((url) => {
-        if (url) navigate(url);
-      });
+      timers.splice(0).forEach(clearTimeout);
+      for (const delay of [0, 400, 1200, 3000]) {
+        timers.push(
+          window.setTimeout(() => {
+            void takePendingLink().then((url) => {
+              if (url) navigate(url);
+            });
+          }, delay),
+        );
+      }
     };
     const onMessage = (event: MessageEvent) => {
       const data = event.data as { type?: string; urlPath?: string } | null;
@@ -114,8 +124,11 @@ function Shell() {
     };
     openPending();
     document.addEventListener('visibilitychange', openPending);
+    window.addEventListener('focus', openPending);
     navigator.serviceWorker?.addEventListener('message', onMessage);
     return () => {
+      timers.forEach(clearTimeout);
+      window.removeEventListener('focus', openPending);
       document.removeEventListener('visibilitychange', openPending);
       navigator.serviceWorker?.removeEventListener('message', onMessage);
     };

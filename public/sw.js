@@ -165,7 +165,8 @@ self.addEventListener('notificationclick', event => {
       if (!client.url.startsWith(self.location.origin)) continue;
       const { pathname } = new URL(client.url);
       const isMobile = pathname === '/m' || pathname.startsWith('/m/');
-      await client.focus();
+      // iOS umí focus odmítnout, cíl se kvůli tomu nesmí ztratit.
+      await client.focus().catch(() => {});
       if (isMobile) {
         client.postMessage({ type: 'notification:navigate', sessionId: sessionId || null, provider, urlPath });
       } else if (client.navigate) {
