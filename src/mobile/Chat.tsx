@@ -1,7 +1,9 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { Button, Glass } from 'glisse';
 
+import BeyondLoader from '../components/beyond/BeyondLoader';
 import { mergeHistory, rebuildHistory, statusLabel, uid } from '../components/beyond/chat/transcript';
+import { useRevealPhase } from '../components/beyond/chat/useRevealPhase';
 import type { ChatMessage, ToolStep } from '../components/beyond/chat/types';
 import { UKAZKA, api } from './api';
 import { Icon } from './icons';
@@ -87,92 +89,10 @@ type PermissionRequest = { requestId: string; toolName: string; input: unknown }
 // Markdown se chce mít hned, jinak první věty blikají jako prostý text.
 void import('./Markdown');
 
-/**
- * Odpověď se během práce neukazuje, přijde najednou jako u Siri: stav zmizí za
- * 0,25 s, 0,3 s je klid a pak po blocích naběhne text (časy změřené z videa).
- */
-type RevealPhase = 'idle' | 'leaving' | 'gap' | 'reveal';
-const STATUS_OUT_MS = 250;
-const REVEAL_GAP_MS = 300;
-const REVEAL_MS = 1500;
-
 function Answer({ text }: { text: string }) {
   return (
     <div className="m-answer">
       <Markdown text={text} />
-    </div>
-  );
-}
-
-// Osm kuliček od hlavy po ocas, sousední se slévají jako u Siri.
-const LOADER_DOTS = [3.6, 3.2, 2.8, 2.4, 2, 1.7, 1.4, 1.1];
-
-/** Rychlé nástroje by popisek jen rozblikaly, každý proto chvíli vydrží. */
-const LABEL_HOLD_MS = 1200;
-
-/** Stav běhu podle Siri: prstenec, který se točí, a popisek, který dýchá. */
-function Status({ label, leaving }: { label: string; leaving: boolean }) {
-  const [shown, setShown] = useState(label);
-  const [old, setOld] = useState<string | null>(null);
-  const shownAt = useRef(Date.now());
-
-  useEffect(() => {
-    if (label === shown) return undefined;
-    const swap = setTimeout(
-      () => {
-        shownAt.current = Date.now();
-        setOld(shown);
-        setShown(label);
-      },
-      Math.max(0, LABEL_HOLD_MS - (Date.now() - shownAt.current)),
-    );
-    return () => clearTimeout(swap);
-  }, [label, shown]);
-
-  useEffect(() => {
-    if (!old) return undefined;
-    const clear = setTimeout(() => setOld(null), 200);
-    return () => clearTimeout(clear);
-  }, [old]);
-
-  return (
-    <div className={`m-status${leaving ? ' is-leaving' : ''}`} role="status">
-      <svg className="m-loader" viewBox="0 0 32 32" aria-hidden="true">
-        <defs>
-          <filter id="m-loader-goo">
-            <feGaussianBlur stdDeviation="0.9" />
-            <feColorMatrix values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 14 -6" />
-          </filter>
-        </defs>
-        <g filter="url(#m-loader-goo)">
-          <g className="m-loader-breath">
-            <g className="m-loader-spin">
-              {LOADER_DOTS.map((radius, index) => {
-                const angle = (-index * Math.PI * 2) / LOADER_DOTS.length;
-                return (
-                  <circle
-                    key={radius}
-                    cx={16 + Math.sin(angle) * 10}
-                    cy={16 - Math.cos(angle) * 10}
-                    r={radius}
-                    fill="currentColor"
-                  />
-                );
-              })}
-            </g>
-          </g>
-        </g>
-      </svg>
-      <span className="m-status-text">
-        {old ? (
-          <span key={old} className="m-status-old">
-            {old}
-          </span>
-        ) : null}
-        <span key={shown} className="m-status-label">
-          {shown}
-        </span>
-      </span>
     </div>
   );
 }
@@ -416,8 +336,6 @@ export function ChatScreen({
   // Kolo začalo tady na obrazovce: dotaz pak drží nahoře a odpověď roste pod ním.
   const pinned = useRef(false);
   const seenUsers = useRef<number | null>(null);
-  const wasRunning = useRef(false);
-  const [phase, setPhase] = useState<RevealPhase>('idle');
 
   const setBusy = (value: boolean) => {
     runningRef.current = value;
@@ -469,27 +387,8 @@ export function ChatScreen({
 
   const lastUser = messages.reduce((found, message, index) => (message.role === 'user' ? index : found), -1);
   const usersCount = messages.reduce((count, message) => (message.role === 'user' ? count + 1 : count), 0);
-  const holding = running || phase === 'leaving' || phase === 'gap';
-
-  useLayoutEffect(() => {
-    const was = wasRunning.current;
-    wasRunning.current = running;
-    if (running) {
-      pinned.current = true;
-      setPhase('idle');
-      return undefined;
-    }
-    if (!was) return undefined;
-    setPhase('leaving');
-    const gap = setTimeout(() => setPhase('gap'), STATUS_OUT_MS);
-    const reveal = setTimeout(() => setPhase('reveal'), STATUS_OUT_MS + REVEAL_GAP_MS);
-    const done = setTimeout(() => setPhase('idle'), STATUS_OUT_MS + REVEAL_GAP_MS + REVEAL_MS);
-    return () => {
-      clearTimeout(gap);
-      clearTimeout(reveal);
-      clearTimeout(done);
-    };
-  }, [running]);
+  const { phase, holding, statusVisible, leaving } = useRevealPhase(running);
+  if (running) pinned.current = true;
 
   /** Místo pod dotazem, aby dotaz stál nahoře a při příchodu odpovědi se nehnul. */
   const fitTurn = useCallback(() => {
@@ -937,17 +836,19 @@ export function ChatScreen({
             const arriving = phase === 'reveal' && index > lastUser;
             return (
               <div
-                className={`m-chat-row${arriving ? ' is-reveal' : ''}`}
+                className={`m-chat-row${arriving ? ' bb-arriving' : ''}`}
                 key={message.id}
                 data-last-user={index === lastUser ? '' : undefined}
-                style={arriving ? ({ '--m-row': index - lastUser - 1 } as CSSProperties) : undefined}
+                style={arriving ? ({ '--bb-row': index - lastUser - 1 } as CSSProperties) : undefined}
               >
                 <Row message={message} />
               </div>
             );
           })}
-          {running || phase === 'leaving' ? (
-            <Status label={activity ? statusLabel(activity) : 'Přemýšlím'} leaving={!running} />
+          {statusVisible ? (
+            <div className="m-status-slot">
+              <BeyondLoader label={activity ? statusLabel(activity) : 'Přemýšlím'} leaving={leaving} />
+            </div>
           ) : null}
           <div ref={spacer} aria-hidden="true" />
         </div>

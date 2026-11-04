@@ -9,25 +9,17 @@ import { remarkBeyondFilePaths, parseBeyondFileHref, BEYOND_FILE_SCHEME } from '
 import BeyondCodeBlock from '../BeyondCodeBlock';
 import StoryViewer from '../velin/StoryViewer';
 import { describeTool, formatInput } from './toolDisplay';
-import { useSmoothText } from './useSmoothText';
 import type { ChatMessage, ToolStep } from './types';
 
 /**
  * Beyond Brain chat — one row of the transcript.
  *
  * Three shapes: a user bubble, a collapsed list of tool steps, or assistant
- * prose rendered as markdown. Prose that is still arriving is revealed at a
- * steady pace and fades out at its newest lines. Rows do not animate on mount:
+ * prose rendered as markdown. Prose arrives whole, see useRevealPhase. Rows do not animate on mount:
  * a chat coming back must look like it never left.
  */
 
-export default function MessageBlock({
-  message,
-  streaming = false,
-}: {
-  message: ChatMessage;
-  streaming?: boolean;
-}) {
+export default function MessageBlock({ message }: { message: ChatMessage }) {
   if (message.role === 'user') {
     return (
       <div className="bb-user">
@@ -44,7 +36,7 @@ export default function MessageBlock({
     return <StepList steps={message.steps} />;
   }
 
-  return <AssistantText message={message} streaming={streaming} />;
+  return <AssistantText message={message} />;
 }
 
 const IMAGE_RE = /!\[[^\]]*\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/g;
@@ -56,10 +48,8 @@ function imagesIn(text: string): string[] {
   return out;
 }
 
-function AssistantText({ message, streaming }: { message: ChatMessage; streaming: boolean }) {
-  const full = 'text' in message ? message.text : '';
-  const smooth = useSmoothText(full, streaming);
-  const text = smooth.text;
+function AssistantText({ message }: { message: ChatMessage }) {
+  const text = 'text' in message ? message.text : '';
   const [viewAt, setViewAt] = useState<number | null>(null);
   const images = imagesIn(text);
 
@@ -67,7 +57,7 @@ function AssistantText({ message, streaming }: { message: ChatMessage; streaming
     <div
       className="beyond-prose flex gap-2.5 min-w-0 break-words text-[15px] leading-relaxed text-beyond-ink [&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1 [&_li]:pl-1 [&_li>ul]:my-1 [&_li>ol]:my-1 [&_strong]:font-semibold [&_em]:italic [&_h1]:mb-2 [&_h1]:mt-4 [&_h1]:text-[18px] [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-[16px] [&_h2]:font-semibold [&_h3]:mb-1 [&_h3]:mt-3 [&_h3]:text-[15px] [&_h3]:font-semibold [&_h4]:mb-1 [&_h4]:mt-3 [&_h4]:text-[14px] [&_h4]:font-semibold [&_hr]:my-4 [&_hr]:border-0 [&_hr]:border-t [&_hr]:border-beyond-ink/10 [&_blockquote]:my-3 [&_blockquote]:border-l-2 [&_blockquote]:border-beyond-ink/15 [&_blockquote]:pl-3 [&_blockquote]:text-beyond-dim [&_thead]:bg-beyond-ink/[0.025] [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:text-[12.5px] [&_th]:font-semibold [&_th]:text-beyond-dim [&_th]:whitespace-nowrap [&_td]:px-3 [&_td]:py-2 [&_td]:align-top [&_td]:border-t [&_td]:border-beyond-ink/[0.06] [&_td]:text-[14px]"
     >
-      <div className={`bb-answer min-w-0 flex-1${smooth.revealing ? ' is-live' : ''}`}>
+      <div className="bb-answer min-w-0 flex-1">
           <ReactMarkdown
             remarkPlugins={[remarkGfm, remarkBeyondFilePaths]}
             // react-markdown sanitises hrefs to a safe-protocol allowlist, which

@@ -721,7 +721,7 @@ změn a může rozbít `npm ci` na Windows. Novou závislost do něj dopisuj cí
 
 ## Běh chatu (4.11.2026)
 
-Odpověď na mobilu podle Siri (`src/mobile/Chat.tsx`): během práce se text neukazuje, jen prstenec a dýchající popisek. Po konci kola stav zmizí za 0,25 s, 0,3 s klid, bloky naběhnou po 70 ms (fade a posun 25 bodů za 0,23 s, odhalení shora). Dotaz stojí nahoře, `fitTurn` dopočítává místo pod ním, proto se při příchodu odpovědi nehne. Počítač zatím streamuje dál.
+Odpověď podle Siri, na mobilu i na počítači (`chat/useRevealPhase.ts`, `BeyondLoader.tsx`, `chat/answer-motion.css`): během práce se text neukazuje, jen prstenec a dýchající popisek. Po konci kola stav zmizí za 0,25 s, 0,3 s klid, bloky naběhnou po 70 ms (fade a posun 25 bodů za 0,23 s, odhalení shora). Dotaz stojí nahoře, `fitTurn` dopočítává místo pod ním, proto se při příchodu odpovědi nehne.
 
 Horní blur iOS 26+: nestačí status-bar-style, pomáhá prvek `position: fixed` s pozadím úplně nahoře (`.m-status-cover`, přímo v body), aspoň 6 px vysoký, přes 80 % šířky, do 4 px od okraje.
 

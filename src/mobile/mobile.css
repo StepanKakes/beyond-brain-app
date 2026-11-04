@@ -798,181 +798,6 @@ a {
   color: var(--bb-danger);
 }
 
-.m-status {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 6px var(--m-gutter);
-  color: var(--bb-ink);
-  animation: m-fade-in 0.3s ease-out;
-}
-
-/* Exponenciální pokles jako u Siri, bez posunu. */
-.m-status.is-leaving {
-  animation: m-fade-out 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-.m-loader {
-  flex: none;
-  width: 30px;
-  height: 30px;
-  overflow: visible;
-  filter: drop-shadow(0 0 3px color-mix(in srgb, currentColor 45%, transparent));
-  animation: m-loader-grow 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-.m-loader-spin,
-.m-loader-breath {
-  transform-origin: 16px 16px;
-}
-
-.m-loader-spin {
-  animation: m-loader-spin 0.82s linear infinite;
-}
-
-.m-loader-breath {
-  animation: m-loader-breath 1.2s ease-in-out infinite;
-}
-
-.m-status-text {
-  position: relative;
-  min-width: 0;
-  flex: 1;
-  font-size: 17px;
-  line-height: 24px;
-}
-
-.m-status-label {
-  display: block;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  animation:
-    m-label-in 0.2s cubic-bezier(0.22, 1, 0.36, 1) both,
-    m-breathe 1.9s ease-in-out 0.2s infinite;
-}
-
-.m-status-old {
-  position: absolute;
-  left: 0;
-  right: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  animation: m-label-out 0.2s ease-out both;
-}
-
-@keyframes m-fade-in {
-  from {
-    opacity: 0;
-  }
-}
-
-@keyframes m-fade-out {
-  to {
-    opacity: 0;
-  }
-}
-
-@keyframes m-loader-grow {
-  from {
-    opacity: 0;
-    transform: scale(0.2);
-  }
-}
-
-@keyframes m-loader-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes m-loader-breath {
-  50% {
-    transform: scale(0.84);
-  }
-}
-
-@keyframes m-label-in {
-  from {
-    opacity: 0;
-    transform: translateY(15px);
-  }
-}
-
-@keyframes m-label-out {
-  to {
-    opacity: 0;
-    transform: translateY(-6px);
-  }
-}
-
-/* Vstup odpovědi podle Siri: blok se rozsvítí za 0,23 s, vyjede o 25 bodů a odhaluje se
-   shora dolů, další bloky startují po 70 ms. */
-@property --m-wipe {
-  syntax: '<percentage>';
-  inherits: false;
-  initial-value: 100%;
-}
-
-.m-chat-row.is-reveal {
-  /* content-visibility by oříznul bloky, které teprve vyjíždějí. */
-  content-visibility: visible;
-  --m-row-delay: calc(var(--m-row, 0) * 60ms);
-}
-
-.m-chat-row.is-reveal .m-md > *,
-.m-chat-row.is-reveal .m-steps,
-.m-chat-row.is-reveal .m-msg-copy {
-  --m-delay: calc(var(--m-row-delay) + var(--m-block, 12) * 70ms);
-  animation:
-    m-reveal-fade 0.23s linear var(--m-delay) both,
-    m-reveal-rise 0.23s cubic-bezier(0.33, 1, 0.68, 1) var(--m-delay) both,
-    m-reveal-wipe 0.2s linear var(--m-delay) both;
-  -webkit-mask-image: linear-gradient(to bottom, #000 calc(var(--m-wipe) - 20%), transparent var(--m-wipe));
-  mask-image: linear-gradient(to bottom, #000 calc(var(--m-wipe) - 20%), transparent var(--m-wipe));
-}
-
-.m-chat-row.is-reveal .m-steps {
-  --m-block: 0;
-}
-
-.m-chat-row.is-reveal .m-md > :nth-child(1) { --m-block: 0; }
-.m-chat-row.is-reveal .m-md > :nth-child(2) { --m-block: 1; }
-.m-chat-row.is-reveal .m-md > :nth-child(3) { --m-block: 2; }
-.m-chat-row.is-reveal .m-md > :nth-child(4) { --m-block: 3; }
-.m-chat-row.is-reveal .m-md > :nth-child(5) { --m-block: 4; }
-.m-chat-row.is-reveal .m-md > :nth-child(6) { --m-block: 5; }
-.m-chat-row.is-reveal .m-md > :nth-child(7) { --m-block: 6; }
-.m-chat-row.is-reveal .m-md > :nth-child(8) { --m-block: 7; }
-.m-chat-row.is-reveal .m-md > :nth-child(9) { --m-block: 8; }
-
-@keyframes m-reveal-fade {
-  from {
-    opacity: 0;
-  }
-}
-
-@keyframes m-reveal-rise {
-  from {
-    transform: translateY(25px);
-  }
-}
-
-@keyframes m-reveal-wipe {
-  from {
-    --m-wipe: 0%;
-  }
-  to {
-    --m-wipe: 120%;
-  }
-}
-
-@keyframes m-breathe {
-  50% {
-    opacity: 0.46;
-  }
-}
 
 .m-composer {
   flex: none;
@@ -1215,24 +1040,6 @@ a {
   font-weight: 600;
   text-decoration: underline;
   text-underline-offset: 2px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .m-status,
-  .m-status-label,
-  .m-status-old,
-  .m-loader,
-  .m-loader-breath {
-    animation: none;
-  }
-
-  .m-chat-row.is-reveal .m-md > *,
-  .m-chat-row.is-reveal .m-steps,
-  .m-chat-row.is-reveal .m-msg-copy {
-    animation: m-reveal-fade 0.2s linear both;
-    -webkit-mask-image: none;
-    mask-image: none;
-  }
 }
 
 /* Glisse má výchozí modrou iOS, Beyond je černobílý. */
@@ -2315,4 +2122,9 @@ html.dark .m-root {
 
 .m-chat-log {
   padding-bottom: calc(var(--m-composer-h, 110px) + 14px);
+}
+
+.m-status-slot {
+  --bb-status-size: 17px;
+  padding: 6px var(--m-gutter);
 }

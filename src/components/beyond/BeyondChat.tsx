@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ChevronRight,
@@ -20,6 +20,7 @@ import {
   type BeyondModelOption,
 } from './beyondModels';
 import BeyondLoader from './BeyondLoader';
+import { useRevealPhase } from './chat/useRevealPhase';
 import { toast } from './ui/toast';
 import BeyondBrainMark from './BeyondBrainMark';
 import BeyondSlashMenu from './BeyondSlashMenu';
@@ -165,6 +166,11 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [thinking, setThinking] = useState(false);
+  const threadRef = useRef<HTMLDivElement>(null);
+  const turnSpaceRef = useRef<HTMLDivElement>(null);
+  // A turn began on this screen: its prompt stays at the top, its answer grows below.
+  const pinnedRef = useRef(false);
+  const seenUsersRef = useRef(0);
   // What the CLI is doing while the spinner runs (a retry after a 429 and
   // such), so a long wait has a reason on the screen.
   const [thinkingNote, setThinkingNote] = useState<string | null>(null);
@@ -265,6 +271,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
   const activeSession = sessions.find((s) => s.uuid === sessionIdRef.current);
 
   const startNewSession = useCallback(() => {
+    pinnedRef.current = false;
     // Drop the current uuid + transcript; the next send() will spawn a fresh
     // SDK session and capture its new UUID via session_created. Server still
     // keeps the old session in the list so it can be switched back to.
@@ -288,6 +295,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
 
   const switchToSession = useCallback(
     (uuid: string) => {
+      pinnedRef.current = false;
       if (sessionIdRef.current === uuid) {
         setSessionsOpen(false);
         return;
@@ -1137,12 +1145,61 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
     };
   }, [sendMessage]);
 
-  // Autoscroll to bottom on new messages.
+  const lastUser = messages.reduce((found, message, index) => (message.role === 'user' ? index : found), -1);
+  const usersCount = messages.reduce((count, message) => (message.role === 'user' ? count + 1 : count), 0);
+  const { phase, holding, statusVisible, leaving } = useRevealPhase(thinking);
+  if (thinking) pinnedRef.current = true;
+
+  // The prompt sits at the top with room below it, so it stays put when the
+  // answer arrives. Reserve that room whenever the thread or the window changes.
+  const fitTurn = useCallback(() => {
+    const scroller = scrollerRef.current;
+    const space = turnSpaceRef.current;
+    const user = threadRef.current?.querySelector('[data-last-user]');
+    if (!scroller || !space) return;
+    if (!user || !pinnedRef.current) {
+      space.style.height = '0px';
+      return;
+    }
+    const below = space.getBoundingClientRect().top - user.getBoundingClientRect().top;
+    space.style.height = `${Math.max(0, scroller.clientHeight - below - 40)}px`;
+  }, []);
+
+  useLayoutEffect(fitTurn, [fitTurn, messages, thinking, phase, lastUser]);
+
   useEffect(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-  }, [messages, thinking]);
+    const scroller = scrollerRef.current;
+    if (!scroller) return undefined;
+    const observer = new ResizeObserver(fitTurn);
+    observer.observe(scroller);
+    return () => observer.disconnect();
+  }, [fitTurn]);
+
+  // An opened chat starts at its end. A new prompt rises from the composer to the top.
+  useLayoutEffect(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    if (!pinnedRef.current) {
+      scroller.scrollTop = scroller.scrollHeight;
+      seenUsersRef.current = usersCount;
+      return;
+    }
+    if (usersCount <= seenUsersRef.current) return;
+    seenUsersRef.current = usersCount;
+    scroller.scrollTop = scroller.scrollHeight;
+    const user = threadRef.current?.querySelector('[data-last-user]');
+    if (!user || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const distance = scroller.getBoundingClientRect().bottom - user.getBoundingClientRect().bottom;
+    if (distance <= 0) return;
+    threadRef.current?.animate(
+      [
+        { transform: `translateY(${distance}px)` },
+        { transform: 'translateY(-3px)', offset: 0.7 },
+        { transform: 'none' },
+      ],
+      { duration: 450, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+    );
+  }, [messages, thinking, usersCount]);
 
   const send = useCallback(
     (text: string) => {
@@ -1642,7 +1699,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
 
       {/* Messages */}
       <div ref={scrollerRef} className="bb-scroll">
-        <div className="bb-thread">
+        <div className="bb-thread" ref={threadRef}>
           {messages.length === 0 && !thinking && (
             <div className="flex min-h-[58vh] flex-col items-center justify-center gap-5 text-center">
               <BeyondBrainMark size={88} side={0.76} animate="pulse" />
@@ -1652,15 +1709,27 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
             </div>
           )}
 
-          {messages.map((m, i) =>
-            // While a turn runs its steps are the status line; the list comes after.
-            thinking && m.kind === 'steps' && i === messages.length - 1 ? null : (
-              <MessageBlock key={m.id} message={m} streaming={m.id === streamingId} />
-            ),
-          )}
+          {messages.map((m, i) => {
+            // What the model writes while it works arrives whole, see useRevealPhase.
+            if (holding && i > lastUser) return null;
+            const arriving = phase === 'reveal' && i > lastUser;
+            return (
+              <div
+                key={m.id}
+                className={arriving ? 'bb-arriving' : undefined}
+                data-last-user={i === lastUser ? '' : undefined}
+                style={arriving ? ({ '--bb-row': i - lastUser - 1 } as CSSProperties) : undefined}
+              >
+                <MessageBlock message={m} />
+              </div>
+            );
+          })}
 
-          {thinking && !streamingId && !askRequest && !permRequest && (
-            <BeyondLoader label={thinkingNote || (liveTool ? statusLabel(liveTool.name) : 'Přemýšlím')} />
+          {statusVisible && !askRequest && !permRequest && (
+            <BeyondLoader
+              label={thinkingNote || (liveTool ? statusLabel(liveTool.name) : 'Přemýšlím')}
+              leaving={leaving}
+            />
           )}
 
           {askRequest && (
@@ -1716,6 +1785,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
               Spojuju se…
             </p>
           )}
+          <div ref={turnSpaceRef} className="bb-turn-space" aria-hidden="true" />
         </div>
 
         {/* invisible context for screen readers */}
