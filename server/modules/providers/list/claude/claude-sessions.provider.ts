@@ -7,6 +7,7 @@ import type { IProviderSessions } from '@/shared/interfaces.js';
 import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
 import { createNormalizedMessage, generateMessageId, readObjectRecord } from '@/shared/utils.js';
 import { sessionsDb } from '@/modules/database/index.js';
+import { isSubagentTranscript } from './claude-session-synchronizer.provider.js';
 
 const PROVIDER = 'claude';
 
@@ -107,10 +108,22 @@ async function getSessionMessages(
   offset: number,
 ): Promise<ClaudeHistoryMessagesResult> {
   try {
-    const jsonLPath = sessionsDb.getSessionById(sessionId)?.jsonl_path;
+    const storedPath = sessionsDb.getSessionById(sessionId)?.jsonl_path;
 
-    if (!jsonLPath) {
+    if (!storedPath) {
       return { messages: [], total: 0, hasMore: false };
+    }
+
+    // Older index rows can point at a subagent's file. The chat itself lives
+    // next to the project's other sessions.
+    let jsonLPath = storedPath;
+    if (isSubagentTranscript(storedPath)) {
+      const dir = path.dirname(storedPath);
+      const projectDir = path.basename(dir) === 'subagents' ? path.dirname(path.dirname(dir)) : dir;
+      jsonLPath = path.join(projectDir, `${sessionId}.jsonl`);
+      if (!fs.existsSync(jsonLPath)) {
+        return { messages: [], total: 0, hasMore: false };
+      }
     }
 
     const projectDir = path.dirname(jsonLPath);
@@ -133,7 +146,7 @@ async function getSessionMessages(
 
       try {
         const entry = JSON.parse(line) as AnyRecord;
-        if (entry.sessionId === sessionId) {
+        if (entry.sessionId === sessionId && entry.isSidechain !== true) {
           messages.push(entry);
         }
       } catch {

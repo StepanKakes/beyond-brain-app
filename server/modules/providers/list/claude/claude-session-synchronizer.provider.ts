@@ -21,6 +21,15 @@ type ParsedSession = {
 /**
  * Session indexer for Claude transcript artifacts.
  */
+/**
+ * A subagent's transcript carries its parent's sessionId, so indexing it would
+ * point the parent chat at this file and open its prompt as a user bubble.
+ */
+export function isSubagentTranscript(filePath: string): boolean {
+  const parts = filePath.split(/[\\/]/);
+  return parts.includes('subagents') || (parts[parts.length - 1] ?? '').startsWith('agent-');
+}
+
 export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
   private readonly provider = 'claude' as const;
   private readonly claudeHome = path.join(os.homedir(), '.claude');
@@ -38,6 +47,9 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
 
     let processed = 0;
     for (const filePath of files) {
+      if (isSubagentTranscript(filePath)) {
+        continue;
+      }
       const parsed = await this.processSessionFile(filePath, nameMap);
       if (!parsed) {
         continue;
@@ -63,7 +75,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
    * Parses and upserts one Claude session JSONL file.
    */
   async synchronizeFile(filePath: string): Promise<string | null> {
-    if (!filePath.endsWith('.jsonl')) {
+    if (!filePath.endsWith('.jsonl') || isSubagentTranscript(filePath)) {
       return null;
     }
 

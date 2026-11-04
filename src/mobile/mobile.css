@@ -705,15 +705,46 @@ a {
 
 .m-md table {
   display: block;
+  width: calc(100% + 2 * var(--m-gutter));
+  margin: 12px calc(-1 * var(--m-gutter));
+  padding: 0 var(--m-gutter);
   overflow-x: auto;
   border-collapse: collapse;
   font-size: 14px;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.m-md table::-webkit-scrollbar {
+  display: none;
 }
 
 .m-md th,
 .m-md td {
-  padding: 5px 8px;
-  border: 0.5px solid var(--bb-line);
+  min-width: 84px;
+  max-width: 240px;
+  padding: 9px 14px 9px 0;
+  border-bottom: 0.5px solid var(--bb-line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.m-md th {
+  color: var(--bb-ink2);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.m-md tr:last-child td {
+  border-bottom: 0;
+}
+
+.m-md td:last-child,
+.m-md th:last-child {
+  padding-right: 0;
 }
 
 .m-steps button {
@@ -740,15 +771,80 @@ a {
   color: var(--bb-danger);
 }
 
-.m-thinking {
-  color: var(--bb-ink2);
+.m-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 24px;
+  color: var(--bb-ink);
   font-size: 15px;
-  animation: m-breathe 1.6s ease-in-out infinite;
+  animation: m-status-in 0.3s ease-out;
+}
+
+.m-status-label {
+  animation: m-status-in 0.3s ease-out, m-breathe 1.8s ease-in-out 0.3s infinite;
+}
+
+/* Pět teček s dozníváním, točí se jen transform. */
+.m-orbit {
+  position: relative;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  animation: m-orbit 1.1s linear infinite;
+}
+
+.m-orbit::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 3px;
+  height: 3px;
+  margin: -1.5px;
+  border-radius: 50%;
+  box-shadow:
+    0 -6px 0 0.5px currentColor,
+    5.7px -1.9px 0 0.2px color-mix(in srgb, currentColor 80%, transparent),
+    3.5px 4.9px 0 0 color-mix(in srgb, currentColor 60%, transparent),
+    -3.5px 4.9px 0 -0.2px color-mix(in srgb, currentColor 40%, transparent),
+    -5.7px -1.9px 0 -0.4px color-mix(in srgb, currentColor 25%, transparent);
+}
+
+@keyframes m-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes m-status-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Odpověď se zjevuje odshora: nejnovější řádky jsou ještě v přechodu do ztracena. */
+@property --m-reveal {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+.m-answer {
+  --m-reveal: 0px;
+  transition: --m-reveal 0.45s ease-out;
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - var(--m-reveal)), transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - var(--m-reveal)), transparent 100%);
+}
+
+.m-answer.is-live {
+  --m-reveal: 64px;
+  animation: m-status-in 0.28s ease-out;
 }
 
 @keyframes m-breathe {
   50% {
-    opacity: 0.4;
+    opacity: 0.45;
   }
 }
 
@@ -996,7 +1092,10 @@ a {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .m-thinking {
+  .m-status,
+  .m-status-label,
+  .m-orbit,
+  .m-answer.is-live {
     animation: none;
   }
 }
@@ -1452,17 +1551,82 @@ html.dark .m-root {
   background: var(--bb-tint);
 }
 
-.m-add-field input {
+/* Pole a jeho zrcadlo leží přes sebe, zrcadlo určuje výšku a kreslí zvýraznění. */
+.m-add-input {
   flex: 1;
   min-width: 0;
+  display: grid;
+}
+
+.m-add-mirror,
+.m-add-input textarea {
+  grid-area: 1 / 1;
+  min-width: 0;
   min-height: 36px;
-  padding: 0 10px;
+  margin: 0;
+  padding: 8px 10px;
   border: 0;
   background: transparent;
+  font: inherit;
   font-size: 16px;
+  line-height: 20px;
+  letter-spacing: normal;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.m-add-mirror {
+  pointer-events: none;
+}
+
+.m-add-input textarea {
+  resize: none;
+  overflow: hidden;
   outline: none;
+  color: transparent;
+  caret-color: var(--bb-ink);
+  -webkit-text-fill-color: transparent;
   -webkit-user-select: text;
   user-select: text;
+}
+
+.m-add-input textarea::placeholder {
+  color: var(--bb-ink2);
+  -webkit-text-fill-color: var(--bb-ink2);
+}
+
+.m-token {
+  border-radius: 5px;
+  color: inherit;
+  background: color-mix(in srgb, var(--bb-ink) 14%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--bb-ink) 14%, transparent);
+  font-weight: inherit;
+}
+
+.m-token.is-hot {
+  color: var(--bb-danger);
+  background: color-mix(in srgb, var(--bb-danger) 16%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--bb-danger) 16%, transparent);
+}
+
+.m-add-people {
+  display: flex;
+  gap: 6px;
+  min-height: 34px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.m-add-people > .m-pill {
+  flex: none;
+}
+
+.m-add-chips > .m-pill {
+  flex: none;
+  max-width: 70%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .m-add-field .m-send,
@@ -1475,10 +1639,11 @@ html.dark .m-root {
 
 .m-add-chips {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   min-height: 34px;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 
 /* Detail úkolu */

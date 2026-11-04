@@ -143,6 +143,12 @@ export function mockApi(path: string, options: Options): unknown {
       clientName: /Pavl/.test(quick) ? 'Pavel Sedláček' : null,
       owner: 'stepan',
       text: quick,
+      tokens: quick.split(/\s+/).flatMap((word, i) => {
+        if (/^p[1-4]$/.test(word)) return [{ i, word, kind: 'priority' }];
+        if (/^(dnes|zítra)$/.test(word)) return [{ i, word, kind: 'due' }];
+        if (/^Pavl/.test(word)) return [{ i, word, kind: 'client' }];
+        return [];
+      }),
     };
   }
   if (path === '/api/beyond/velin/') {
@@ -270,18 +276,21 @@ export function mockApi(path: string, options: Options): unknown {
   return {};
 }
 
-const REPLY = 'Jasně, koukám na to. Návrh pro Pavla je připravený, stačí ho otevřít v úkolech a podržet tlačítko';
+const REPLY = 'Jasně, koukám na to. Návrh pro Pavla je připravený, stačí ho otevřít v úkolech a podržet tlačítko\n\n## Přehled klientů\n\n| Klient | Týden | Stav | Další hovor |\n|---|---|---|---|\n| Pavel Sedláček | 5 z 12 | Neodpovídá 9 dní | sobota 14:00 |\n| Lucie Nováková | 8 z 12 | Chybí měření | dnes 19:36 |\n| Jana Horáková | 11 z 12 | V pořádku | úterý 10:00 |\n\nZačal bych **Pavlem**, zabere to minutu';
 
 export function mockSocket(message: Record<string, unknown>, emit: (m: Record<string, unknown>) => void): void {
   if (message.type !== 'claude-command') return;
   const sessionId = (message.options as { sessionId?: string }).sessionId || 'ukazka-nova';
   emit({ kind: 'session_created', newSessionId: sessionId, sessionId });
   const words = REPLY.split(' ');
+  const pause = 1800;
+  emit({ kind: 'tool_use', sessionId, toolId: 'u1', toolName: 'Grep' });
+  setTimeout(() => emit({ kind: 'tool_result', sessionId, toolId: 'u1' }), 900);
   words.forEach((word, index) => {
-    setTimeout(() => emit({ kind: 'stream_delta', sessionId, content: `${word} ` }), 300 + index * 70);
+    setTimeout(() => emit({ kind: 'stream_delta', sessionId, content: `${word} ` }), pause + index * 45);
   });
   setTimeout(() => {
     emit({ kind: 'text', role: 'assistant', sessionId, content: REPLY });
     emit({ kind: 'complete', sessionId });
-  }, 400 + words.length * 70);
+  }, pause + 300 + words.length * 45);
 }

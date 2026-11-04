@@ -55,6 +55,8 @@ type ChatWebSocketDependencies = {
   isGeminiSessionActive: (sessionId: string) => boolean;
   reconnectSessionWriter: (sessionId: string, ws: WebSocket) => boolean;
   isBeyondTurnActive: (sessionId: string, userId?: string | null) => boolean;
+  getBeyondTurnLive: (sessionId: string, userId?: string | null) => { partial: string; activity: unknown };
+  findBeyondRun: (runId: string, userId?: string | null) => string | null;
   getPendingApprovalsForSession: (sessionId: string) => unknown[];
   getActiveClaudeSDKSessions: () => unknown;
   getActiveCursorSessions: () => unknown;
@@ -260,6 +262,15 @@ export function handleChatConnection(
         return;
       }
 
+      if (messageType === 'adopt-run') {
+        const runId = typeof data.clientRunId === 'string' ? data.clientRunId : '';
+        const found = runId ? dependencies.findBeyondRun(runId, (ws as { userId?: string | null }).userId ?? null) : null;
+        if (found) {
+          writer.send({ kind: 'session_created', newSessionId: found, sessionId: found, provider: 'claude' });
+        }
+        return;
+      }
+
       if (messageType === 'check-session-status') {
         const provider = readProvider(data.provider);
         const sessionId = typeof data.sessionId === 'string' ? data.sessionId : '';
@@ -292,6 +303,9 @@ export function handleChatConnection(
           provider,
           isProcessing: isActive,
           turnActive,
+          ...(turnActive
+            ? dependencies.getBeyondTurnLive(sessionId, (ws as { userId?: string | null }).userId ?? null)
+            : { partial: '', activity: null }),
           // Questions and approvals still waiting for an answer, so a browser
           // that was away when they were sent can show them again.
           pendingPermissions:

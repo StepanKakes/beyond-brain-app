@@ -915,6 +915,11 @@ function scheduleBeyondGraceEnd(entry) {
   entry.graceTimer = setTimeout(() => {
     entry.graceTimer = null;
     if (!entry.wsAlive && !entry.ended) {
+      // Nobody is watching, but the answer must still get finished and saved.
+      if (entry.pendingTurnResolves.length > 0) {
+        scheduleBeyondGraceEnd(entry);
+        return;
+      }
       console.log('[beyond-stream] grace expired, ending session:', entry.sdkSessionId || entry.chatKey);
       try { entry.inputQueue.end(); } catch { /* already ended */ }
     }
@@ -950,6 +955,28 @@ function isBeyondTurnActive(sessionId, userId = null) {
   if (!sessionId) return false;
   const entry = beyondStreamSessions.get(beyondChatKey(userId, sessionId));
   return Boolean(entry && !entry.ended && entry.pendingTurnResolves.length > 0);
+}
+
+/** What a browser coming back mid-turn has missed: the message being written
+ *  right now (finished ones are on disk) and the tool at work. */
+function getBeyondTurnLive(sessionId, userId = null) {
+  const entry = sessionId ? beyondStreamSessions.get(beyondChatKey(userId, sessionId)) : null;
+  if (!entry || entry.ended || entry.pendingTurnResolves.length === 0) return { partial: '', activity: null };
+  return { partial: entry.partialText || '', activity: entry.activityTool || null };
+}
+
+// A browser that lost its socket before `session_created` has no session id to
+// come back to. It knows only the run id it sent with the first message.
+const beyondRunSessions = new Map();
+
+function rememberBeyondRun(userId, runId, sessionId) {
+  if (!runId) return;
+  beyondRunSessions.set(`${userId || ''}:${runId}`, sessionId);
+  if (beyondRunSessions.size > 200) beyondRunSessions.delete(beyondRunSessions.keys().next().value);
+}
+
+function findBeyondRun(runId, userId = null) {
+  return beyondRunSessions.get(`${userId || ''}:${runId}`) || null;
 }
 
 /** How many chat turns are in flight right now, across all people. A deploy
@@ -1480,6 +1507,16 @@ async function handleBeyondStreamMessage(entry, message) {
     }
     if (!entry.sessionCreatedSent) {
       entry.sessionCreatedSent = true;
+      const { clientRunId, chatSlug, chatTitle } = entry.initialOptions || {};
+      rememberBeyondRun(entry.userId, clientRunId, entry.sdkSessionId);
+      // The chat exists from now on, even if the person has already left.
+      if (chatSlug) {
+        import('./services/beyond-sessions-store.js')
+          .then(({ mergeSessionIndex }) => mergeSessionIndex(chatSlug, {
+            sessions: [{ uuid: entry.sdkSessionId, title: String(chatTitle || 'Nový chat').slice(0, 80), lastUsedAt: Date.now() }],
+          }))
+          .catch((err) => console.warn('[beyond-stream] chat index write failed:', err?.message || err));
+      }
       entry.ws?.send(createNormalizedMessage({
         kind: 'session_created',
         newSessionId: entry.sdkSessionId,
@@ -1501,6 +1538,16 @@ async function handleBeyondStreamMessage(entry, message) {
 
   // Normalize + forward to client.
   for (const msg of [...normalizeForBrowser(message, entry.sdkSessionId), ...explainSdkTrouble(message, entry.sdkSessionId)]) {
+    if (msg.kind === 'stream_delta') {
+      entry.partialText = (entry.partialText || '') + (msg.content || '');
+    } else if (msg.kind === 'text' && msg.role !== 'user') {
+      entry.partialText = '';
+    } else if (msg.kind === 'tool_use') {
+      entry.partialText = '';
+      entry.activityTool = { name: msg.toolName, input: msg.toolInput };
+    } else if (msg.kind === 'tool_result') {
+      entry.activityTool = null;
+    }
     try {
       entry.ws?.send(msg);
     } catch { /* ws gone */ }
@@ -1508,6 +1555,8 @@ async function handleBeyondStreamMessage(entry, message) {
 
   // On turn end: live context usage + resolve the oldest pending turn.
   if (message.type === 'result') {
+    entry.partialText = '';
+    entry.activityTool = null;
     recordUsage(message, { source: 'chat', label: entry.sessionSummary || null, actor: entry.historyUser || null, sessionId: entry.sdkSessionId });
     let liveCtx = null;
     try {
@@ -2337,6 +2386,8 @@ export {
   getPendingApprovalsForSession,
   reconnectSessionWriter,
   isBeyondTurnActive,
+  getBeyondTurnLive,
+  findBeyondRun,
   countActiveBeyondTurns,
   describeBeyondStreams,
   runSdkOneShot,

@@ -29,6 +29,8 @@ import {
     getPendingApprovalsForSession,
     reconnectSessionWriter,
     isBeyondTurnActive,
+    getBeyondTurnLive,
+    findBeyondRun,
     countActiveBeyondTurns,
     describeBeyondStreams,
 } from './claude-sdk.js';
@@ -127,6 +129,8 @@ const wss = createWebSocketServer(server, {
         isGeminiSessionActive,
         reconnectSessionWriter,
         isBeyondTurnActive,
+        getBeyondTurnLive,
+        findBeyondRun,
         getPendingApprovalsForSession,
         getActiveClaudeSDKSessions,
         getActiveCursorSessions,

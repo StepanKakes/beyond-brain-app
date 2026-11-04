@@ -45,7 +45,6 @@ import { useBrainPath } from './useBrainPath';
 import MessageBlock from './chat/MessageBlock';
 import Composer from './chat/Composer';
 import { Tip, TipGroup } from './ui';
-import TokenBudgetChip from './chat/TokenBudgetChip';
 import AskPanel from './chat/AskPanel';
 import PermissionPanel from './chat/PermissionPanel';
 import PermissionsSheet from './chat/PermissionsSheet';
@@ -70,6 +69,8 @@ import { isWhatsAppSendTool } from './chat/toolDisplay';
 import {
   appendAssistantTextById,
   appendStep,
+  mergeHistory,
+  statusLabel,
   taskStep,
   rebuildHistory,
   uid,
@@ -356,28 +357,25 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
   // reconnect / refocus recovery so an answer produced while the socket was
   // down (or the tab was backgrounded) shows up, and any broken live stream is
   // replaced by the authoritative on-disk history.
+  const historyLoadedAtRef = useRef(0);
+  const clientRunIdRef = useRef<string | null>(null);
+  const adoptingRef = useRef(false);
+  const [liveTool, setLiveTool] = useState<{ name: string } | null>(null);
   const reloadHistory = useCallback((uuid: string) => {
     if (!uuid) return;
     authenticatedFetch(`/api/providers/sessions/${encodeURIComponent(uuid)}/messages`)
       .then(async (r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (!data) return;
-        streamBubbleIdRef.current = null;
-        setStreamingId(null);
-        setMessages((prev) => {
-          const next = rebuildHistory(data.messages || []);
-          // The transcript on disk can lag behind the screen: a prompt sent a
-          // moment ago, and whatever streamed after it, may not be written
-          // yet. Never let a reload erase them; keep them after the transcript.
-          let lastUser = -1;
-          for (let i = prev.length - 1; i >= 0; i -= 1) if (prev[i].role === 'user') { lastUser = i; break; }
-          if (lastUser >= 0) {
-            const sent = (prev[lastUser] as { text: string }).text.trim();
-            const onDisk = next.some((m) => m.role === 'user' && m.kind === 'text' && m.text.trim() === sent);
-            if (!onDisk) return [...next, ...prev.slice(lastUser)];
-          }
-          return next;
-        });
+        historyLoadedAtRef.current = Date.now();
+        // A reload must not touch the bubble still being written, and rows that
+        // did not change keep their keys, so nothing on screen blinks.
+        const live = thinkingRef.current ? streamBubbleIdRef.current : null;
+        if (!thinkingRef.current) {
+          streamBubbleIdRef.current = null;
+          setStreamingId(null);
+        }
+        setMessages((prev) => mergeHistory(prev, rebuildHistory(data.messages || []), live));
       })
       .catch(() => { /* silent — a later turn or manual refresh recovers */ });
   }, []);
@@ -649,6 +647,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
         const data = await res.json();
         if (cancelled) return;
         setMessages(rebuildHistory(data.messages || []));
+        historyLoadedAtRef.current = Date.now();
         if (isConnectedRef.current) {
           recoveredRef.current = true;
           sendMessage({ type: 'check-session-status', sessionId: resumeUuid, provider: 'claude' });
@@ -720,6 +719,10 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
       if (!newId) return;
       expectingNewSessionRef.current = false;
       openSession(newId);
+      if (adoptingRef.current) {
+        adoptingRef.current = false;
+        sendMessage({ type: 'check-session-status', sessionId: newId, provider: 'claude' });
+      }
       writeLocalActive(client.slug, newId);
       // The raw first message — used both for the instant snippet title and to
       // ask the server for a nicer AI-generated label right after.
@@ -817,6 +820,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
       const text = (m.content as string | undefined) || '';
       if (!text) return;
       setThinkingNote(null);
+      setLiveTool(null);
       if (!streamBubbleIdRef.current) streamBubbleIdRef.current = uid();
       const id = streamBubbleIdRef.current;
       appendAssistantTextById(setMessages, id, text);
@@ -862,6 +866,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
       const name = String(m.toolName ?? '');
       const toolId = String(m.toolId ?? uid());
       if (!name) return;
+      setLiveTool({ name });
       // A tool step breaks the streaming text bubble; finalize it to Markdown
       // and let post-tool deltas open a fresh bubble.
       streamBubbleIdRef.current = null;
@@ -1020,6 +1025,10 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
       if (sessionIdRef.current) {
         recoveredRef.current = true;
         sendMessage({ type: 'check-session-status', sessionId: sessionIdRef.current, provider: 'claude' });
+      } else if (expectingNewSessionRef.current && clientRunIdRef.current) {
+        // The socket dropped before we learned this chat's id.
+        adoptingRef.current = true;
+        sendMessage({ type: 'adopt-run', clientRunId: clientRunIdRef.current });
       }
       return;
     }
@@ -1031,12 +1040,28 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
         // final `complete` triggers an authoritative reload.
         recoveredRef.current = true;
         setThinking(true);
-        reloadHistory(sessionIdRef.current);
+        thinkingRef.current = true;
+        setLiveTool((m.activity as { name: string } | null | undefined) || null);
+        // What was written while we were away: this message is the exact state
+        // at this moment in the stream, later deltas continue from it.
+        const partial = typeof m.partial === 'string' ? m.partial : '';
+        if (partial) {
+          const id = streamBubbleIdRef.current || uid();
+          streamBubbleIdRef.current = id;
+          setStreamingId(id);
+          setMessages((prev) => {
+            const row = { id, role: 'assistant' as const, kind: 'text' as const, text: partial };
+            return prev.some((x) => x.id === id) ? prev.map((x) => (x.id === id ? row : x)) : [...prev, row];
+          });
+        }
+        if (Date.now() - historyLoadedAtRef.current > 2000) reloadHistory(sessionIdRef.current);
       } else {
         // Finished (or session gone) while we were away — pull the answer and
         // stop the spinner.
         recoveredRef.current = false;
-        reloadHistory(sessionIdRef.current);
+        setLiveTool(null);
+        thinkingRef.current = false;
+        if (Date.now() - historyLoadedAtRef.current > 2000) reloadHistory(sessionIdRef.current);
         setThinking(false);
       }
       // A question or approval sent while we were away never reached this
@@ -1183,7 +1208,9 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
             : {}),
           model: modelRef.current,
           connectors: connectorsRef.current,
-          ...(resumeId ? { sessionId: resumeId, resume: true } : {}),
+          ...(resumeId
+            ? { sessionId: resumeId, resume: true }
+            : { clientRunId: (clientRunIdRef.current = uid()), chatSlug: client.slug, chatTitle: shortTitle(text) }),
           sessionSummary: `Beyond · ${client.name}`,
           ...(images.length > 0 ? { images } : {}),
           toolsSettings: {
@@ -1605,27 +1632,16 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
             </div>
           )}
 
-          {messages.map((m) => (
-            <MessageBlock key={m.id} message={m} streaming={m.id === streamingId} />
-          ))}
+          {messages.map((m, i) =>
+            // While a turn runs its steps are the status line; the list comes after.
+            thinking && m.kind === 'steps' && i === messages.length - 1 ? null : (
+              <MessageBlock key={m.id} message={m} streaming={m.id === streamingId} />
+            ),
+          )}
 
-          <AnimatePresence>
-            {thinking && !streamingId && !askRequest && !permRequest && (
-              <motion.div
-                key="thinking"
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.4, ease: 'easeOut' }}
-                className="bb-think"
-                data-active="true"
-                style={{ cursor: 'default' }}
-              >
-                <BeyondBrainMark size={34} side={0.76} animate="pulse" />
-                <BeyondLoader label={thinkingNote || 'Přemýšlím'} timer />
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {thinking && !streamingId && !askRequest && !permRequest && (
+            <BeyondLoader label={thinkingNote || (liveTool ? statusLabel(liveTool.name) : 'Přemýšlím')} />
+          )}
 
           {askRequest && (
             <AskPanel
@@ -1747,7 +1763,6 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
           onModel={changeModel}
           connectors={connectors}
           onConnectors={setConnectors}
-          budget={<TokenBudgetChip budget={tokenBudget} />}
         />
         <div className="bb-disclaimer">Beyond Brain může chybovat. U důležitých věcí prověř zdroje.</div>
       </div>

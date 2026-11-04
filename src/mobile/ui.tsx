@@ -7,7 +7,9 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type SyntheticEvent,
 } from 'react';
+import { createPortal } from 'react-dom';
 
 import { Icon, type IconName } from './icons';
 import { back } from './router';
@@ -107,6 +109,8 @@ const EASE = 'cubic-bezier(.32,.72,0,1)';
  * Spodní list. Tažením dolů se zavírá a pohyb sleduje prst. Obsah se scrolluje
  * nativně, list se táhne jen za úchyt nebo když je obsah nahoře.
  */
+const stop = (event: SyntheticEvent) => event.stopPropagation();
+
 export function Sheet({
   title,
   onClose,
@@ -190,8 +194,17 @@ export function Sheet({
     }
   };
 
-  return (
-    <div className="m-sheet-root">
+  // V portálu, jinak by list zůstal pod navbarem: vrstva obrazovky má vlastní
+  // stacking context. Události z něj nesmí probublat do rodičů v Reactu.
+  return createPortal(
+    <div
+      className="m-sheet-root"
+      onPointerDown={stop}
+      onPointerMove={stop}
+      onPointerUp={stop}
+      onPointerCancel={stop}
+      onClick={stop}
+    >
       <div ref={scrim} className="m-scrim" onClick={() => dismissable && close()} />
       <div
         ref={panel}
@@ -210,7 +223,8 @@ export function Sheet({
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.querySelector('.m-root') || document.body,
   );
 }
 

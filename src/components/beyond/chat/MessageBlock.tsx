@@ -7,28 +7,19 @@ import remarkGfm from 'remark-gfm';
 
 import { remarkBeyondFilePaths, parseBeyondFileHref, BEYOND_FILE_SCHEME } from '../beyondFilePaths';
 import BeyondCodeBlock from '../BeyondCodeBlock';
-import BeyondBrainMark from '../BeyondBrainMark';
-import StreamingText from '../StreamingText';
 import StoryViewer from '../velin/StoryViewer';
-import CallChip from '../bits/CallChip';
-import { describeTool, formatInput, iconForTool } from './toolDisplay';
+import { describeTool, formatInput } from './toolDisplay';
+import { useSmoothText } from './useSmoothText';
 import type { ChatMessage, ToolStep } from './types';
 
 /**
  * Beyond Brain chat — one row of the transcript.
  *
  * Three shapes: a user bubble, a collapsed list of tool steps, or assistant
- * prose rendered as markdown. The prose branch swaps to `StreamingText` while
- * the turn is still arriving so words cross-blur in instead of popping.
+ * prose rendered as markdown. Prose that is still arriving is revealed at a
+ * steady pace and fades out at its newest lines. Rows do not animate on mount:
+ * a chat coming back must look like it never left.
  */
-
-const VARIANTS = {
-  hidden: { opacity: 0, y: 8 },
-  show: { opacity: 1, y: 0 },
-};
-
-// 100ms fade-up per VISION.md — subtle, not flashy.
-const TRANSITION = { duration: 0.18, ease: 'easeOut' as const };
 
 export default function MessageBlock({
   message,
@@ -39,28 +30,18 @@ export default function MessageBlock({
 }) {
   if (message.role === 'user') {
     return (
-      <motion.div
-        initial="hidden"
-        animate="show"
-        variants={VARIANTS}
-        transition={TRANSITION}
-        className="bb-user"
-      >
+      <div className="bb-user">
         <div className="bb-user__col">
           <div className="bb-bubble min-w-0">
             <p className="whitespace-pre-line break-words">{message.text}</p>
           </div>
         </div>
-      </motion.div>
+      </div>
     );
   }
 
   if (message.kind === 'steps') {
-    return (
-      <motion.div initial="hidden" animate="show" variants={VARIANTS} transition={TRANSITION}>
-        <StepList steps={message.steps} />
-      </motion.div>
-    );
+    return <StepList steps={message.steps} />;
   }
 
   return <AssistantText message={message} streaming={streaming} />;
@@ -76,23 +57,17 @@ function imagesIn(text: string): string[] {
 }
 
 function AssistantText({ message, streaming }: { message: ChatMessage; streaming: boolean }) {
-  const text = 'text' in message ? message.text : '';
+  const full = 'text' in message ? message.text : '';
+  const smooth = useSmoothText(full, streaming);
+  const text = smooth.text;
   const [viewAt, setViewAt] = useState<number | null>(null);
   const images = imagesIn(text);
 
   return (
-    <motion.div
-      initial="hidden"
-      animate="show"
-      variants={VARIANTS}
-      transition={TRANSITION}
+    <div
       className="beyond-prose flex gap-2.5 min-w-0 break-words text-[15px] leading-relaxed text-beyond-ink [&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1 [&_li]:pl-1 [&_li>ul]:my-1 [&_li>ol]:my-1 [&_strong]:font-semibold [&_em]:italic [&_h1]:mb-2 [&_h1]:mt-4 [&_h1]:text-[18px] [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-[16px] [&_h2]:font-semibold [&_h3]:mb-1 [&_h3]:mt-3 [&_h3]:text-[15px] [&_h3]:font-semibold [&_h4]:mb-1 [&_h4]:mt-3 [&_h4]:text-[14px] [&_h4]:font-semibold [&_hr]:my-4 [&_hr]:border-0 [&_hr]:border-t [&_hr]:border-beyond-ink/10 [&_blockquote]:my-3 [&_blockquote]:border-l-2 [&_blockquote]:border-beyond-ink/15 [&_blockquote]:pl-3 [&_blockquote]:text-beyond-dim [&_thead]:bg-beyond-ink/[0.025] [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:text-[12.5px] [&_th]:font-semibold [&_th]:text-beyond-dim [&_th]:whitespace-nowrap [&_td]:px-3 [&_td]:py-2 [&_td]:align-top [&_td]:border-t [&_td]:border-beyond-ink/[0.06] [&_td]:text-[14px]"
     >
-      <BeyondBrainMark size={42} animate="in" className="mt-[2px] shrink-0 text-beyond-dim" title="Beyond" />
-      <div className="min-w-0 flex-1">
-        {streaming ? (
-          <StreamingText text={text} />
-        ) : (
+      <div className={`bb-answer min-w-0 flex-1${smooth.revealing ? ' is-live' : ''}`}>
           <ReactMarkdown
             remarkPlugins={[remarkGfm, remarkBeyondFilePaths]}
             // react-markdown sanitises hrefs to a safe-protocol allowlist, which
@@ -174,34 +149,44 @@ function AssistantText({ message, streaming }: { message: ChatMessage; streaming
           >
             {text}
           </ReactMarkdown>
-        )}
       </div>
       {viewAt !== null && images.length > 0 && (
-        // The message animates with a transform, which would pin a fixed
-        // overlay to the message instead of the window; render it on the body.
+        // The answer carries a mask, which would clip a fixed overlay inside it.
         createPortal(<StoryViewer images={images} startAt={viewAt} onClose={() => setViewAt(null)} />, document.body)
       )}
-    </motion.div>
-  );
-}
-
-function StepList({ steps }: { steps: ToolStep[] }) {
-  return (
-    <div className="bb-calls">
-      {steps.map((step) => (
-        <StepRow key={step.id} step={step} />
-      ))}
     </div>
   );
 }
 
-/** One tool call as a React Bits CallChip: the bar fills while it runs, the
- *  icon rolls to a check or a retry mark when it lands. Click opens the
- *  input and output underneath. */
+/** What the agent did, folded into one quiet line. It opens on demand. */
+function StepList({ steps }: { steps: ToolStep[] }) {
+  const [open, setOpen] = useState(false);
+  const failed = steps.some((s) => s.status === 'error');
+  const n = steps.length;
+  const noun = n === 1 ? 'krok' : n < 5 ? 'kroky' : 'kroků';
+  return (
+    <div className="bb-steps">
+      <button type="button" className="bb-steps__head" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+        <span>
+          {n} {noun}
+          {failed ? ', něco selhalo' : ''}
+        </span>
+        <ChevronRight size={14} className="bb-call__chev" data-open={open ? '' : undefined} />
+      </button>
+      {open && (
+        <div className="bb-calls">
+          {steps.map((step) => (
+            <StepRow key={step.id} step={step} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StepRow({ step }: { step: ToolStep }) {
   const [expanded, setExpanded] = useState(false);
   const { label, detail } = describeTool(step.name, step.input);
-  const Icon = iconForTool(step.name);
   const expandable = Boolean(step.output) || Boolean(step.input);
 
   return (
@@ -214,16 +199,10 @@ function StepRow({ step }: { step: ToolStep }) {
         data-expandable={expandable ? '' : undefined}
         title={detail || label}
       >
-        <CallChip
-          icon={<Icon size={14} />}
-          name={label}
-          argument={detail}
-          status={step.status}
-          size={30}
-          radius={10}
-          color="var(--bb-ink)"
-          className="bb-callchip"
-        />
+        <span className="bb-step" data-error={step.isError ? '' : undefined}>
+          <span className="bb-step__name">{label}</span>
+          {detail ? <span className="bb-step__detail">{detail}</span> : null}
+        </span>
         {expandable && <ChevronRight size={14} className="bb-call__chev" data-open={expanded ? '' : undefined} />}
       </button>
 

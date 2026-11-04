@@ -693,6 +693,10 @@ přesměruje se na `/m`, `/?desktop=1` to pro dané spuštění vypne.
   plná barva bez `backdrop-filter`: na skutečném iPhonu rozmazával i vlastní obsah
   lišty (v simulátoru to vidět nebylo). Čára pod ní se ukáže až po odscrollování
   (`.is-scrolled`).
+- **Horní blur:** v našem CSS žádný není, kreslí ho systém (scroll edge efekt iOS 26
+  nad průsvitnou stavovou lištou). Proto `apple-mobile-web-app-status-bar-style`
+  `default`: obsah začíná pod lištou. iOS čte tuhle značku jen při přidání na plochu.
+- **Listy:** `Sheet` jde portálem do `.m-root`, jinak zůstane pod navbarem.
 - **Klávesnice:** `MobileApp.tsx` srovnává `visualViewport.height` s největší
   naměřenou výškou, ne s `innerHeight`, ten se v režimu z plochy mění s ní.
 - **Zprávy lidem:** odeslání přes WhatsApp v chatu i návrhy jdou podržením,
@@ -712,3 +716,20 @@ platná adresa, Apple jinak push odmítne (`BEYOND_VAPID_SUBJECT`).
 
 **Zámek závislostí:** `npm install` na Macu přepíše `package-lock.json` tisíci
 změn a může rozbít `npm ci` na Windows. Novou závislost do něj dopisuj cíleně.
+
+## Běh chatu (4.11.2026)
+
+Odpověď nezávisí na otevřeném okně, stejně jako u ChatGPT.
+
+- **Server:** běh přežije odpojení, grace timer ho během kola neukončí. `entry.partialText`
+  a `entry.activityTool` drží rozepsanou zprávu a běžící nástroj, `session-status` je pošle
+  vracejícímu se klientovi, hotové zprávy jsou na disku. Chat se zapíše do indexu při vzniku
+  (`chatSlug`, `chatTitle`), i když člověk mezitím odešel. Spojení spadlé před
+  `session_created` obnoví `adopt-run` s `clientRunId`.
+- **Klient:** `mergeHistory` v `chat/transcript.ts` položí přepis z disku na obrazovku a
+  nechá klíče řádků, stejný přepis nic nepřekreslí. Řádky se při vzniku neanimují.
+- **Cizí bubliny:** soubory podagentů nesou sessionId rodiče. Synchronizer je přeskakuje
+  (`isSubagentTranscript`), `getSessionMessages` opraví staré záznamy a filtruje `isSidechain`.
+- **Vzhled:** jako Siri. Stavová řádka s tečkami (`statusLabel`), `useSmoothText` odkrývá text
+  stálým tempem, maska rozpouští nejnovější řádky, `holdBackTable` drží nedopsanou tabulku.
+  Kroky se po kole složí do jedné řádky. Pryč je blur po slovech, časovač a počítadlo tokenů.

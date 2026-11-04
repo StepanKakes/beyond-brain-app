@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { SegmentedControl } from 'glisse';
 
 import { api } from './api';
@@ -148,7 +148,41 @@ type Parsed = {
   clientName: string | null;
   owner: string;
   text: string;
+  tokens?: ParsedToken[];
 };
+
+type ParsedToken = { i: number; word: string; kind: 'priority' | 'due' | 'owner' | 'client' };
+
+/** Text úkolu s rozpoznanými slovy zvýrazněnými přímo v řádku, leží pod průhledným polem. */
+function Highlighted({ text, tokens }: { text: string; tokens: ParsedToken[] }) {
+  let index = -1;
+  return (
+    <>
+      {text.split(/(\s+)/).map((part, at) => {
+        if (!part.trim()) return part;
+        index += 1;
+        const token = tokens.find((t) => t.i === index && t.word === part);
+        if (!token) return part;
+        const hot = token.kind === 'priority' && /[12]$/.test(part);
+        return (
+          <mark key={at} className={`m-token${hot ? ' is-hot' : ''}`}>
+            {part}
+          </mark>
+        );
+      })}
+      {'\u200b'}
+    </>
+  );
+}
+
+function dueLabel(iso: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}/.test(iso)) return iso;
+  const date = new Date(`${iso.slice(0, 10)}T12:00:00`);
+  const days = Math.round((date.getTime() - new Date().setHours(12, 0, 0, 0)) / 86400000);
+  if (days === 0) return 'Dnes';
+  if (days === 1) return 'Zítra';
+  return date.toLocaleDateString('cs-CZ', { weekday: 'short', day: 'numeric', month: 'numeric' });
+}
 
 function AddTask({
   owner,
@@ -166,7 +200,7 @@ function AddTask({
   const [picking, setPicking] = useState(false);
   const seq = useRef(0);
 
-  // Co appka v textu rozpoznala, ukazuje průběžně pod polem.
+  // Co appka v textu rozpoznala, ukazuje průběžně přímo v poli.
   useEffect(() => {
     const quick = text.trim();
     if (!quick) {
@@ -180,7 +214,7 @@ function AddTask({
           if (mine === seq.current) setParsed(result);
         })
         .catch(() => undefined);
-    }, 220);
+    }, 90);
     return () => clearTimeout(timer);
   }, [text, who]);
 
@@ -200,10 +234,12 @@ function AddTask({
 
   const whoName = people.find((p) => p.key === who)?.displayName;
   const chips = [
-    parsed?.due ? parsed.due : null,
-    parsed && parsed.priority < 4 ? `P${parsed.priority}` : null,
+    parsed?.due ? dueLabel(parsed.due) : null,
+    parsed && parsed.priority < 4 ? `Priorita ${parsed.priority}` : null,
     parsed?.clientName || null,
   ].filter((chip): chip is string => Boolean(chip));
+  // Klepnutí v listu nesmí sebrat fokus, klávesnice by sjela a list s ní.
+  const keepFocus = (event: ReactPointerEvent) => event.preventDefault();
 
   return (
     <Sheet title="Nový úkol" onClose={onClose}>
@@ -215,47 +251,71 @@ function AddTask({
         }}
       >
         <div className="m-add-field">
-          <input
-            autoFocus
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            placeholder="p1 zítra zavolat Pavlovi"
-            aria-label="Text úkolu"
-            enterKeyHint="done"
-          />
+          <div className="m-add-input">
+            <div className="m-add-mirror" aria-hidden="true">
+              <Highlighted text={text} tokens={parsed?.tokens || []} />
+            </div>
+            <textarea
+              autoFocus
+              rows={1}
+              value={text}
+              onChange={(event) => setText(event.target.value.replace(/\n/g, ' '))}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  void submit();
+                }
+              }}
+              placeholder="p1 zítra zavolat Pavlovi"
+              aria-label="Text úkolu"
+              enterKeyHint="done"
+            />
+          </div>
           <button
             type="submit"
             className="m-send"
             aria-label="Přidat"
             disabled={!text.trim() || busy}
-            onPointerDown={(event) => event.preventDefault()}
+            onPointerDown={keepFocus}
           >
             <Icon name="up" size={20} />
           </button>
         </div>
-        <div className="m-add-chips">
-          {people.length > 1 ? (
-            <button type="button" className="m-pill" onClick={() => setPicking(true)}>
-              <Icon name="person" size={15} />
-              <span>{whoName || 'Přiřadit'}</span>
-            </button>
-          ) : null}
-          {chips.map((chip) => (
-            <span key={chip} className="m-pill is-passive">
-              {chip}
-            </span>
-          ))}
-        </div>
+        {picking ? (
+          <div className="m-add-people" role="listbox" aria-label="Komu">
+            {people.map((person) => (
+              <button
+                key={person.key}
+                type="button"
+                role="option"
+                aria-selected={person.key === who}
+                className={`m-pill${person.key === who ? ' is-solid' : ''}`}
+                onPointerDown={keepFocus}
+                onClick={() => {
+                  setWho(person.key);
+                  setPicking(false);
+                }}
+              >
+                {person.displayName}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="m-add-chips">
+            {people.length > 1 ? (
+              <button type="button" className="m-pill" onPointerDown={keepFocus} onClick={() => setPicking(true)}>
+                <Icon name="person" size={15} />
+                <span>{whoName || 'Přiřadit'}</span>
+              </button>
+            ) : null}
+            {chips.map((chip) => (
+              <span key={chip} className="m-pill is-passive" title={chip}>
+                {chip}
+              </span>
+            ))}
+          </div>
+        )}
       </form>
-      {picking ? (
-        <Picker
-          title="Komu"
-          value={who}
-          options={people.map((p) => ({ value: p.key, label: p.displayName }))}
-          onPick={setWho}
-          onClose={() => setPicking(false)}
-        />
-      ) : null}
     </Sheet>
   );
 }

@@ -1,7 +1,8 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from 'glisse';
 
-import { rebuildHistory, uid } from '../components/beyond/chat/transcript';
+import { mergeHistory, rebuildHistory, statusLabel, uid } from '../components/beyond/chat/transcript';
+import { useSmoothText } from '../components/beyond/chat/useSmoothText';
 import type { ChatMessage, ToolStep } from '../components/beyond/chat/types';
 import { UKAZKA, api } from './api';
 import { Icon } from './icons';
@@ -84,17 +85,39 @@ type Question = {
 type AskRequest = { requestId: string; input: { questions: Question[] } & Record<string, unknown> };
 type PermissionRequest = { requestId: string; toolName: string; input: unknown };
 
+// Markdown se chce mít hned, jinak první věty blikají jako prostý text.
+void import('./Markdown');
+
+function Answer({ text, live }: { text: string; live: boolean }) {
+  const smooth = useSmoothText(text, live);
+  return (
+    <div className={`m-answer${smooth.revealing ? ' is-live' : ''}`}>
+      <Markdown text={smooth.text} />
+    </div>
+  );
+}
+
+/** Stav běhu jako u Siri: točící se tečky a jedna řádka, která dýchá. */
+function Status({ label }: { label: string }) {
+  return (
+    <div className="m-status" role="status">
+      <span className="m-orbit" aria-hidden="true" />
+      <span key={label} className="m-status-label">
+        {label}
+      </span>
+    </div>
+  );
+}
+
 const Row = memo(function Row({ message, streaming }: { message: ChatMessage; streaming: boolean }) {
   if (message.kind === 'steps') return <Steps steps={message.steps} />;
   if (message.role === 'user') {
     return <div className="m-msg-user">{message.text}</div>;
   }
-  // Rozepsaná zpráva se překresluje s každým kouskem, Markdown až po dopsání.
-  return streaming ? (
-    <div className="m-md m-md-plain m-msg-ai">{message.text}</div>
-  ) : (
+  return (
     <div className="m-msg-ai">
-      <Markdown text={message.text} />
+      <Answer text={message.text} live={streaming} />
+      {streaming ? null : (
       <button
         type="button"
         className="m-msg-copy"
@@ -108,20 +131,20 @@ const Row = memo(function Row({ message, streaming }: { message: ChatMessage; st
       >
         <Icon name="copy" size={17} />
       </button>
+      )}
     </div>
   );
 });
 
 function Steps({ steps }: { steps: ToolStep[] }) {
   const [open, setOpen] = useState(false);
-  const running = steps.some((s) => s.status === 'running');
   const failed = steps.some((s) => s.status === 'error');
   const n = steps.length;
   return (
     <div className="m-steps">
       <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
         <span>
-          {running ? `Pracuje: ${toolLabel(steps[n - 1].name)}` : `${n} ${plural(n, 'krok', 'kroky', 'kroků')}`}
+          {`${n} ${plural(n, 'krok', 'kroky', 'kroků')}`}
           {failed ? ', něco selhalo' : ''}
         </span>
         <Icon name={open ? 'down' : 'right'} size={14} />
@@ -311,6 +334,10 @@ export function ChatScreen({
 
   const uuidRef = useRef(initial);
   const adoptNext = useRef(!initial);
+  const runId = useRef<string | null>(null);
+  const adopting = useRef(false);
+  const loadedAt = useRef(0);
+  const [activity, setActivity] = useState<string | null>(null);
   const titleRef = useRef(title);
   const buffer = useRef('');
   const bubble = useRef<string | null>(null);
@@ -346,25 +373,13 @@ export function ChatScreen({
         `/api/providers/sessions/${encodeURIComponent(id)}/messages?limit=120&offset=0`,
       );
       flush();
-      bubble.current = null;
-      setStreamingId(null);
-      setMessages((prev) => {
-        const next = rebuildHistory(data.messages || []);
-        // Na disku může chybět, co odešlo před chvílí. To nesmí zmizet.
-        let lastUser = -1;
-        for (let i = prev.length - 1; i >= 0; i -= 1) {
-          if (prev[i].role === 'user') {
-            lastUser = i;
-            break;
-          }
-        }
-        const sent = lastUser >= 0 ? prev[lastUser] : null;
-        const onDisk =
-          !sent ||
-          (sent.kind === 'text' &&
-            next.some((m) => m.role === 'user' && m.kind === 'text' && m.text.trim() === sent.text.trim()));
-        return onDisk ? next : [...next, ...prev.slice(lastUser)];
-      });
+      loadedAt.current = Date.now();
+      const live = runningRef.current ? bubble.current : null;
+      setMessages((prev) => mergeHistory(prev, rebuildHistory(data.messages || []), live));
+      if (!runningRef.current) {
+        bubble.current = null;
+        setStreamingId(null);
+      }
     } catch {
       /* zůstane, co je vidět z cache */
     }
@@ -416,6 +431,10 @@ export function ChatScreen({
         adoptNext.current = false;
         uuidRef.current = id;
         setUuid(id);
+        if (adopting.current) {
+          adopting.current = false;
+          sendSocket({ type: 'check-session-status', sessionId: id, provider: 'claude' });
+        }
         if (active) replaceTop(`/m/chat/${id}?k=${encodeURIComponent(slug)}`);
         remember(id);
       }
@@ -423,6 +442,7 @@ export function ChatScreen({
     }
 
     if (kind === 'stream_delta') {
+      setActivity(null);
       if (!bubble.current) {
         bubble.current = uid();
         setStreamingId(bubble.current);
@@ -451,6 +471,7 @@ export function ChatScreen({
     }
 
     if (kind === 'tool_use') {
+      setActivity(String(m.toolName || 'Nástroj'));
       flush();
       bubble.current = null;
       setStreamingId(null);
@@ -469,6 +490,7 @@ export function ChatScreen({
     }
 
     if (kind === 'tool_result') {
+      setActivity(null);
       const failed = Boolean(m.isError);
       setMessages((prev) =>
         prev.map((message) =>
@@ -508,6 +530,7 @@ export function ChatScreen({
     }
 
     if (kind === 'complete') {
+      setActivity(null);
       flush();
       bubble.current = null;
       setStreamingId(null);
@@ -531,13 +554,35 @@ export function ChatScreen({
         if (m.type === 'websocket-reconnected') {
           if (uuidRef.current) {
             sendSocket({ type: 'check-session-status', sessionId: uuidRef.current, provider: 'claude' });
+          } else if (adoptNext.current && runId.current) {
+            // Spojení spadlo dřív, než appka dostala id chatu.
+            adopting.current = true;
+            sendSocket({ type: 'adopt-run', clientRunId: runId.current });
           }
           return;
         }
         if (m.type === 'session-status') {
           if (m.sessionId !== uuidRef.current) return;
           setBusy(Boolean(m.turnActive));
-          if (uuidRef.current) void reload(uuidRef.current);
+          const tool = m.activity as { name?: string } | null | undefined;
+          setActivity(m.turnActive && tool?.name ? tool.name : null);
+          if (m.turnActive) {
+            // Co se mezitím napsalo: tahle zpráva je přesný stav k tomuhle okamžiku.
+            flush();
+            const partial = String(m.partial || '');
+            if (partial) {
+              const id = bubble.current || uid();
+              bubble.current = id;
+              setStreamingId(id);
+              setMessages((prev) => {
+                const at = prev.findIndex((x) => x.id === id);
+                const row: ChatMessage = { id, role: 'assistant', kind: 'text', text: partial };
+                return at >= 0 ? prev.map((x) => (x.id === id ? row : x)) : [...prev, row];
+              });
+            }
+          }
+          // Při otevření se přepis načetl před chvílí, podruhé nemá smysl.
+          if (uuidRef.current && Date.now() - loadedAt.current > 2000) void reload(uuidRef.current);
           const pending = (m.pendingPermissions || []) as { requestId: string; toolName: string; input: unknown }[];
           pending.forEach((p) => handleKind({ kind: 'permission_request', ...p }));
           return;
@@ -632,7 +677,9 @@ export function ChatScreen({
         model,
         connectors: [],
         ...(images.length ? { images } : {}),
-        ...(uuidRef.current ? { sessionId: uuidRef.current, resume: true } : {}),
+        ...(uuidRef.current
+          ? { sessionId: uuidRef.current, resume: true }
+          : { clientRunId: (runId.current = uid()), chatSlug: slug, chatTitle: titleRef.current }),
         sessionSummary: 'Beyond · mobil',
         toolsSettings: { allowedTools: allowedTools(), disallowedTools: [], skipPermissions: false },
       },
@@ -709,12 +756,15 @@ export function ChatScreen({
               </div>
             </div>
           ) : null}
-          {messages.map((message) => (
-            <div className="m-chat-row" key={message.id}>
-              <Row message={message} streaming={message.id === streamingId} />
-            </div>
-          ))}
-          {running && !streamingId ? <div className="m-thinking">Přemýšlí</div> : null}
+          {messages.map((message, index) =>
+            // Kroky běžícího kola shrnuje stavová řádka, seznam přijde až potom.
+            running && message.kind === 'steps' && index === messages.length - 1 ? null : (
+              <div className="m-chat-row" key={message.id}>
+                <Row message={message} streaming={message.id === streamingId} />
+              </div>
+            ),
+          )}
+          {running && !streamingId ? <Status label={activity ? statusLabel(activity) : 'Přemýšlím'} /> : null}
         </div>
       </div>
       <form
