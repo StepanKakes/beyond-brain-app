@@ -1,3 +1,4 @@
+import { Component, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import MobileApp from './MobileApp';
@@ -27,10 +28,37 @@ document.addEventListener('touchstart', () => undefined, { passive: true });
 
 // Po nasazení může uložená kostra chtít kousek, který už na serveru není.
 window.addEventListener('vite:preloadError', () => {
-  void caches?.delete('beyond-m-shell').finally(() => window.location.reload());
+  const clear = 'caches' in window ? caches.delete('beyond-m-shell') : Promise.resolve(true);
+  void clear.finally(() => window.location.reload());
 });
 
-createRoot(document.getElementById('root') as HTMLElement).render(<MobileApp />);
+// Pád vykreslení nesmí skončit tichou bílou stránkou.
+class CrashScreen extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div className="m-crash">
+        <h1>Něco se rozbilo</h1>
+        <pre>{String(this.state.error.message || this.state.error)}</pre>
+        <button type="button" onClick={() => window.location.reload()}>
+          Načíst znovu
+        </button>
+      </div>
+    );
+  }
+}
+
+createRoot(document.getElementById('root') as HTMLElement).render(
+  <CrashScreen>
+    <MobileApp />
+  </CrashScreen>,
+);
 
 // Markdown donačteme dopředu, ať je chat hned hotový i bez signálu.
 const idle = window.requestIdleCallback ?? ((fn: () => void) => setTimeout(fn, 1200));

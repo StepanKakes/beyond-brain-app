@@ -93,10 +93,7 @@ a {
 /* Chrome appky se nevybírá jako text na webu, čtený obsah ano. */
 .m-root {
   position: fixed;
-  top: var(--m-vt, 0);
-  left: 0;
-  right: 0;
-  height: var(--m-vh, 100dvh);
+  inset: 0;
   overflow: hidden;
   -webkit-user-select: none;
   user-select: none;
@@ -110,6 +107,24 @@ a {
   -webkit-user-select: text;
   user-select: text;
   -webkit-touch-callout: default;
+}
+
+/* iOS 26 dá appce na ploše viewport kratší o stavovou lištu, pokud je stránka
+   nižší než obrazovka (WebKit bug 301108). Vyšší html ho natáhne na celou výšku.
+   min() brání scrollování, kdyby stavová lišta nebyla průsvitná. */
+@media (display-mode: standalone) {
+  html.m-html {
+    min-height: min(100lvh, calc(100% + env(safe-area-inset-top)));
+  }
+}
+
+/* Výšku viditelné části bereme jen při otevřené klávesnici. Jinak je v appce na
+   ploše o stavovou lištu nižší než obrazovka. */
+.m-keyboard .m-root,
+.m-keyboard .m-sheet-root {
+  inset: auto 0 auto 0;
+  top: var(--m-vt, 0);
+  height: var(--m-vh, 100dvh);
 }
 
 /* Vrstvy */
@@ -148,7 +163,7 @@ a {
 }
 
 .m-tabscreen {
-  padding-bottom: calc(112px + var(--m-bottom));
+  padding-bottom: calc(92px + var(--m-bottom));
   scroll-timeline: --m-scroll block;
 }
 
@@ -459,7 +474,7 @@ a {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: max(10px, var(--m-bottom));
+  bottom: max(8px, calc(var(--m-bottom) - 13px));
   z-index: 10;
   display: flex;
   justify-content: center;
@@ -550,7 +565,7 @@ a {
   display: flex;
   gap: 8px;
   align-items: center;
-  padding: 10px var(--m-gutter) max(12px, var(--m-bottom));
+  padding: 10px var(--m-gutter) max(12px, calc(var(--m-bottom) - 10px));
 }
 
 .m-keyboard .m-actions,
@@ -746,7 +761,7 @@ a {
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  padding: 8px var(--m-gutter) max(10px, var(--m-bottom));
+  padding: 8px var(--m-gutter) max(10px, calc(var(--m-bottom) - 10px));
 }
 
 .m-composer textarea {
@@ -792,8 +807,6 @@ a {
   position: fixed;
   inset: 0;
   z-index: 60;
-  top: var(--m-vt, 0);
-  height: var(--m-vh, 100dvh);
 }
 
 .m-scrim {
@@ -806,7 +819,7 @@ a {
   position: absolute;
   left: 8px;
   right: 8px;
-  bottom: max(8px, var(--m-bottom));
+  bottom: max(8px, calc(var(--m-bottom) - 26px));
   display: flex;
   flex-direction: column;
   max-height: 86%;
@@ -928,6 +941,28 @@ a {
   margin: 0;
   color: var(--bb-danger);
   font-size: 14px;
+}
+
+.m-crash {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+  height: 100%;
+  padding: 24px;
+}
+
+.m-crash h1 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.m-crash pre {
+  margin: 0;
+  color: var(--bb-ink2);
+  font: 12px/1.45 var(--bb-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .m-toast {

@@ -58,6 +58,14 @@ const tasks = [
   },
   { ...base, id: 'u-4', text: 'Projít nápady z hovorů', priority: 4, state: 'none' },
   { ...base, id: 'u-5', text: 'Objednat mikrofon', priority: 4, state: 'done' },
+  // Dost řádků, aby se dal zkoušet scroll pod horní lištu a tab bar.
+  ...Array.from({ length: 14 }, (_, index) => ({
+    ...base,
+    id: `u-d${index}`,
+    text: `Úkol do zásoby číslo ${index + 1}`,
+    priority: 4,
+    state: 'none',
+  })),
 ];
 
 const proposal = {
