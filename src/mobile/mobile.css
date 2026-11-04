@@ -191,8 +191,10 @@ a {
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: var(--bb-bg);
-  border-bottom: 0.5px solid var(--bb-line);
+  /* Bez čáry a plné plochy, obsah jede pod ovládáním a nahoře se rozplyne jako v iOS. */
+  bottom: -10px;
+  background: linear-gradient(to bottom, var(--bb-bg) calc(var(--m-top) + 10px), transparent);
+  pointer-events: none;
 }
 
 .m-bar-title {
@@ -219,8 +221,25 @@ a {
 }
 
 .m-bar-pushed {
-  position: relative;
-  flex: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+}
+
+.m-bar-pushed .lg-button,
+.m-bar-pushed .m-bar-action > * {
+  pointer-events: auto;
+}
+
+.m-bar-pushed ~ .m-scroll {
+  box-sizing: border-box;
+  padding-top: calc(44px + var(--m-top) + 10px);
+}
+
+.m-bar-pushed ~ .m-chat-scroll .m-chat-log {
+  padding-top: calc(44px + var(--m-top) + 8px);
 }
 
 .m-icon-btn {
