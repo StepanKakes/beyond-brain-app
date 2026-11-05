@@ -75,6 +75,7 @@ import providerRoutes from './modules/providers/provider.routes.js';
 // Beyond Brain — client-focused endpoints (reads ~/Documents/GitHub/beyond-brain)
 import beyondRoutes from './routes/beyond.js';
 import beyondVelinRoutes from './routes/beyond-velin.js';
+import beyondWidgetRoutes from './routes/beyond-widget.js';
 import beyondGoogleRoutes from './routes/beyond-google.js';
 import { startScheduler, schedulerStatus } from './services/beyond-scheduler.js';
 import beyondEventsRoutes from './routes/beyond-events.js';
@@ -234,6 +235,9 @@ app.use('/api/agent', agentRoutes);
 // the /api/beyond catch-all so /api/beyond/mcp/* resolves here, not there.
 app.use('/api/beyond/mcp', authenticateToken, beyondMcpRoutes);
 // Velín — dashboards over the brain index + Cal.com. Also before the catch-all.
+// The phone widget has its own key, which reaches the task list and nothing else.
+app.use('/api/widget', beyondWidgetRoutes);
+
 app.use('/api/beyond/velin', authenticateToken, beyondVelinRoutes);
 // OAuth redirect target for MCP connectors — NO JWT (the provider redirects the
 // user's browser here). Secured by the single-use opaque `state`.

@@ -83,6 +83,7 @@ export function MoreScreen() {
         <LinkRow icon="chart" title="KPI" onClick={() => navigate('/m/kpi')} />
         <LinkRow icon="clock" title="Rutiny" onClick={() => navigate('/m/rutiny')} />
         <LinkRow icon="folder" title="Soubory" onClick={() => navigate('/m/soubory')} />
+        <LinkRow icon="tasks" title="Widget na plochu" onClick={() => navigate('/m/widget')} />
       </Section>
       <Section title="Nastavení">
         <div className="m-row m-row-setting">
@@ -629,6 +630,100 @@ export function FilesScreen({ path }: { path: string }) {
           ) : null}
         </div>
       )}
+    </>
+  );
+}
+
+/* ---- widget na plochu ---- */
+
+type WidgetInfo = { klic: boolean; vytvoren: string | null; pouzit: string | null };
+const WIDGET_KEY = 'widget';
+const WIDGET_PATH = `${VELIN}/widget`;
+const SCRIPTABLE_URL = 'https://apps.apple.com/app/scriptable/id1405459188';
+
+export function WidgetScreen() {
+  const { data } = useResource<WidgetInfo>(WIDGET_KEY, WIDGET_PATH);
+  const [script, setScript] = useState<string | null>(null);
+  const [fresh, setFresh] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  // Předem: po čekání na síť už iOS do schránky zapsat nedovolí.
+  useEffect(() => {
+    fetch('/brain-widget.js')
+      .then((res) => res.text())
+      .then(setScript)
+      .catch(() => undefined);
+  }, []);
+
+  const copy = (text: string, done: string) => {
+    void navigator.clipboard
+      .writeText(text)
+      .then(() => toast(done))
+      .catch(() => toast('Do schránky to nešlo, zkus to znovu'));
+  };
+
+  const issue = async () => {
+    setBusy(true);
+    try {
+      const { klic } = await api<{ klic: string }>(`${WIDGET_PATH}/klic`, { method: 'POST', body: {} });
+      setFresh(klic);
+      void refresh(WIDGET_KEY, WIDGET_PATH);
+    } catch (err) {
+      toast((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const revoke = async () => {
+    setBusy(true);
+    try {
+      await api(`${WIDGET_PATH}/klic`, { method: 'DELETE' });
+      setFresh(null);
+      void refresh(WIDGET_KEY, WIDGET_PATH);
+      toast('Klíč zrušený, widget přestal fungovat');
+    } catch (err) {
+      toast((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <PushedBar title="Widget na plochu" />
+      <div className="m-scroll m-pushed-list">
+        <p className="m-hint">Úkoly na dnešek přímo na ploše. Běží přes appku Scriptable, kterou si stáhneš zdarma</p>
+        <Section title="1. Scriptable">
+          <LinkRow title="Stáhnout z App Storu" href={SCRIPTABLE_URL} />
+        </Section>
+        <Section title="2. Skript">
+          <LinkRow
+            title={script ? 'Zkopírovat skript' : 'Načítám skript'}
+            onClick={script ? () => copy(script, 'Skript je ve schránce') : undefined}
+          />
+        </Section>
+        <p className="m-hint">Ve Scriptable klepni na plus, vlož skript a spusť ho tlačítkem vpravo dole</p>
+        <Section title="3. Klíč">
+          {fresh ? (
+            <LinkRow title="Zkopírovat klíč" sub="Ukáže se jen teď" onClick={() => copy(fresh, 'Klíč je ve schránce')} />
+          ) : (
+            <LinkRow
+              title={data?.klic ? 'Vytvořit nový klíč' : 'Vytvořit klíč'}
+              sub={data?.klic ? 'Starý klíč tím přestane platit' : undefined}
+              onClick={busy ? undefined : () => void issue()}
+            />
+          )}
+          {data?.klic ? <LinkRow title="Zrušit klíč" danger onClick={busy ? undefined : () => void revoke()} /> : null}
+        </Section>
+        <p className="m-hint">Skript se na klíč zeptá při spuštění. Klíč umí jen číst, přidávat a odškrtávat tvoje úkoly</p>
+        <Section title="4. Plocha">
+          <div className="m-row m-row-main">
+            <span className="m-row-title">Podrž plochu, přidej widget Scriptable a v jeho nastavení vyber skript</span>
+          </div>
+        </Section>
+        <p className="m-hint">Doporučuji střední velikost, malý widget neumí odškrtávat ani přidávat</p>
+      </div>
     </>
   );
 }

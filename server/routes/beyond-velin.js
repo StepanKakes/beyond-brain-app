@@ -17,7 +17,7 @@ import { beginAuthorization, disconnectGoogle, googleStatus, invalidateGoogle } 
 import { usageReport, subscriptionLimits, brainShare } from '../services/beyond-usage.js';
 import { getPeople, personForUser } from '../services/beyond-people.js';
 import { STAGES, stageFor, setStage } from '../services/beyond-pipeline.js';
-import { pushSubscriptionsDb, userDb } from '../modules/database/index.js';
+import { pushSubscriptionsDb, userDb, widgetKeysDb } from '../modules/database/index.js';
 import { BRIEF_ROUTINE, ROUTINE_TEMPLATES, briefDetail, listRoutines, reportRoutineZone, routineDetail, routineView, skipMissedSlot } from '../services/beyond-rutiny.js';
 import { listRuns, setJobEnabled } from '../services/beyond-runs.js';
 import { describeJobs, runJob, schedulerStatus, setPaused } from '../services/beyond-scheduler.js';
@@ -892,6 +892,23 @@ router.post('/rutiny/:name/spustit', (req, res) => {
   } catch (err) {
     res.status(400).json({ ok: false, error: err?.message || 'rutina nešla spustit' });
   }
+});
+
+/* ---- the phone widget's key ---- */
+
+router.get('/widget', (req, res) => {
+  const row = widgetKeysDb.getForUser(req.user.id);
+  res.json({ klic: Boolean(row), vytvoren: row?.created_at || null, pouzit: row?.last_used_at || null });
+});
+
+/** Shown once, only its hash is kept. A new key replaces the old one. */
+router.post('/widget/klic', (req, res) => {
+  res.json({ ok: true, klic: widgetKeysDb.issue(req.user.id) });
+});
+
+router.delete('/widget/klic', (req, res) => {
+  widgetKeysDb.revoke(req.user.id);
+  res.json({ ok: true });
 });
 
 /* ---- co hlídat: what a person decides about a client's signals ---- */

@@ -17,6 +17,7 @@ export type Route =
   | { name: 'rutiny' }
   | { name: 'rutina'; id: string }
   | { name: 'rutina-form'; id: string | null; sablona: string | null }
+  | { name: 'widget' }
   | { name: 'soubory'; path: string };
 
 export type Entry = { key: string; url: string; route: Route };
@@ -45,6 +46,7 @@ export function parseRoute(url: string): Route {
   }
   if (parts[0] === 'rutina' && parts[1] && parts[2] === 'upravit') return { name: 'rutina-form', id: parts[1], sablona: null };
   if (parts[0] === 'rutina' && parts[1]) return { name: 'rutina', id: parts[1] };
+  if (parts[0] === 'widget') return { name: 'widget' };
   if (parts[0] === 'soubory') return { name: 'soubory', path: searchParams.get('p') || '' };
   if (parts[0] === 'chaty' || parts[0] === 'klienti' || parts[0] === 'hovory' || parts[0] === 'vice') {
     return { name: 'tab', tab: parts[0] };

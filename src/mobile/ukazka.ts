@@ -154,6 +154,8 @@ export function mockApi(path: string, options: Options): unknown {
   if (path === '/api/beyond/velin/') {
     return { me: { key: 'stepan', displayName: 'Štěpán' }, needsUs: pavelSignals, risks: board[1].signals };
   }
+  if (path.startsWith('/api/beyond/velin/widget/klic')) return { ok: true, klic: 'ukazka-klic-neni-skutecny' };
+  if (path.startsWith('/api/beyond/velin/widget')) return { klic: false, vytvoren: null, pouzit: null };
   if (path.startsWith('/api/beyond/velin/rutiny')) return mockRoutines(path, options);
   if (path.startsWith('/api/beyond/velin/pocty')) return { navrhy: 1, obsah: 2, klienti: 2, velin: 3 };
   if (path.startsWith('/api/beyond/velin/board')) return { clients: board };

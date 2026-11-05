@@ -57,6 +57,16 @@ CREATE TABLE IF NOT EXISTS vapid_keys (
 );
 `;
 
+export const WIDGET_KEYS_TABLE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS widget_keys (
+    user_id INTEGER PRIMARY KEY,
+    key_hash TEXT NOT NULL UNIQUE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_used_at DATETIME,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+`;
+
 export const PUSH_SUBSCRIPTIONS_TABLE_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS push_subscriptions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -134,6 +144,8 @@ ${USER_NOTIFICATION_PREFERENCES_TABLE_SCHEMA_SQL}
 CREATE INDEX IF NOT EXISTS idx_user_notification_preferences_user_id ON user_notification_preferences(user_id);
 
 ${VAPID_KEYS_TABLE_SCHEMA_SQL}
+
+${WIDGET_KEYS_TABLE_SCHEMA_SQL}
 
 ${PUSH_SUBSCRIPTIONS_TABLE_SCHEMA_SQL}
 CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user_id ON push_subscriptions(user_id);

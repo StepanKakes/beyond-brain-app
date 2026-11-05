@@ -719,6 +719,10 @@ platná adresa, Apple jinak push odmítne (`BEYOND_VAPID_SUBJECT`).
 **Zámek závislostí:** `npm install` na Macu přepíše `package-lock.json` tisíci
 změn a může rozbít `npm ci` na Windows. Novou závislost do něj dopisuj cíleně.
 
+## Widget na plochu
+
+PWA nemůže mít vlastní widget, proto úkoly na dnešek ukazuje skript `public/brain-widget.js` v appce Scriptable. Návod a klíč jsou v appce (Více > Widget na plochu, `/m/widget`). Klíč je osobní, ukáže se jednou a v `widget_keys` je jen jeho hash. API `/api/widget` umí jen číst, přidat a odškrtnout úkoly dané osoby a stojí mimo přihlášení. Klepnutí na kolečko spustí skript, ten úkol odškrtne a zavře se; widget se překreslí, až mu to dovolí iOS.
+
 ## Co hlídat u klienta
 
 Signály z `brain-signals.js` se počítají z dat, takže se nedají odškrtnout přímo. Člověk o nich rozhoduje: Vyřešeno schová položku, dokud je její `stopa` stejná (sliby, den poslední zprávy), Připomenout za týden ji schová na týden. Rozhodnutí jsou ve `workspace/hlidani.json`, sdílí je tým a respektují je i úlohy, protože `signalsForClient` schované vrací zvlášť v `hidden`. Položky s `actor: agent` se nepočítají do čísla u klienta. Akce s klientem: `POST /client/:slug/signal/:type`, `/slib` (zaškrtne v `_action-items.md`), `/vlajka` (přepíše Stav ve `flags.md`). Zápis do souborů je v `beyond-klient-zapis.js`.

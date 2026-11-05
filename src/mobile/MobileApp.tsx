@@ -8,7 +8,7 @@ import { CallsScreen } from './Calls';
 import { ChatsScreen } from './Chats';
 import { ClientDetailScreen, ClientsScreen } from './Clients';
 import { RoutineFormScreen, RoutineScreen, RoutinesScreen } from './Routines';
-import { FilesScreen, KpiScreen, MoreScreen, ObsahDetailScreen, ObsahScreen, ProposalsScreen } from './More';
+import { FilesScreen, KpiScreen, MoreScreen, WidgetScreen, ObsahDetailScreen, ObsahScreen, ProposalsScreen } from './More';
 import { takePendingLink } from './push';
 import { navigate, selectTab, useRouter, type Entry, type Tab } from './router';
 import { startSocket, stopSocket } from './socket';
@@ -170,6 +170,7 @@ function Shell() {
     if (entry.route.name === 'obsah') return <ObsahScreen />;
     if (entry.route.name === 'obsah-detail') return <ObsahDetailScreen id={entry.route.id} />;
     if (entry.route.name === 'kpi') return <KpiScreen />;
+    if (entry.route.name === 'widget') return <WidgetScreen />;
     if (entry.route.name === 'rutiny') return <RoutinesScreen />;
     if (entry.route.name === 'rutina') return <RoutineScreen name={entry.route.id} />;
     if (entry.route.name === 'rutina-form') return <RoutineFormScreen name={entry.route.id} template={entry.route.sablona} />;
