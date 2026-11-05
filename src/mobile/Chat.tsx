@@ -38,18 +38,21 @@ type ModelOption = { value: string; displayName?: string; description?: string }
 
 const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
 const MAX_TEXT_BYTES = 256 * 1024;
+const MAX_PDF_BYTES = 20 * 1024 * 1024;
 const TEXT_FILE = /\.(md|txt|json|ya?ml|csv|tsv|log|html?|css|js|ts|tsx|jsx|py|sh|toml|ini|env|jsonl)$/i;
 
-type Attachment = { id: string; kind: 'image' | 'text'; name: string; mimeType: string; data: string };
+type Attachment = { id: string; kind: 'image' | 'pdf' | 'text'; name: string; mimeType: string; data: string };
 
 function readAttachment(file: File): Promise<Attachment> {
   return new Promise((resolve, reject) => {
     const image = file.type.startsWith('image/');
-    if (!image && !file.type.startsWith('text/') && !TEXT_FILE.test(file.name)) {
+    // Soubory z iCloudu někdy přijdou bez typu, proto i podle přípony.
+    const pdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+    if (!image && !pdf && !file.type.startsWith('text/') && !TEXT_FILE.test(file.name)) {
       reject(new Error(`${file.name}: tenhle typ souboru chat neumí`));
       return;
     }
-    if (file.size > (image ? MAX_IMAGE_BYTES : MAX_TEXT_BYTES)) {
+    if (file.size > (pdf ? MAX_PDF_BYTES : image ? MAX_IMAGE_BYTES : MAX_TEXT_BYTES)) {
       reject(new Error(`${file.name}: soubor je moc velký`));
       return;
     }
@@ -58,12 +61,12 @@ function readAttachment(file: File): Promise<Attachment> {
     reader.onload = () =>
       resolve({
         id: uid(),
-        kind: image ? 'image' : 'text',
+        kind: pdf ? 'pdf' : image ? 'image' : 'text',
         name: file.name || 'Fotka',
-        mimeType: file.type,
-        data: String(reader.result),
+        mimeType: pdf ? 'application/pdf' : file.type,
+        data: pdf ? String(reader.result).replace(/^data:[^;]*;/, 'data:application/pdf;') : String(reader.result),
       });
-    if (image) reader.readAsDataURL(file);
+    if (image || pdf) reader.readAsDataURL(file);
     else reader.readAsText(file);
   });
 }
@@ -739,10 +742,10 @@ export function ChatScreen({
     if (!typed && !attachments.length) return;
     const textFiles = attachments.filter((a) => a.kind === 'text');
     const images = attachments
-      .filter((a) => a.kind === 'image')
+      .filter((a) => a.kind !== 'text')
       .map((a) => ({ data: a.data, mimeType: a.mimeType, name: a.name }));
     const block = textFiles.map((f) => `\n\n=== Přiložený soubor: ${f.name} ===\n${f.data}\n=== /soubor ===`).join('');
-    const command = (typed + block).trim() || 'Podívej se na přiložený obrázek';
+    const command = (typed + block).trim() || 'Podívej se na přílohu';
     const shown = [typed, ...attachments.map((a) => `Příloha: ${a.name}`)].filter(Boolean).join('\n');
 
     setText('');

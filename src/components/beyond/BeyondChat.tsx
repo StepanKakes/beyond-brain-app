@@ -53,7 +53,7 @@ import AttachmentChip from './chat/AttachmentChip';
 import WhatsAppActionCard from './chat/WhatsAppActionCard';
 import SessionsMenu from './chat/SessionsMenu';
 import {
-  MAX_IMAGE_BYTES,
+  MAX_IMAGE_BYTES, MAX_PDF_BYTES,
   MAX_TEXT_BYTES,
   TEXT_LIKE_EXT,
   TEXT_LIKE_MIME,
@@ -486,9 +486,14 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
 
   const ingestFile = useCallback(async (file: File) => {
     const isImage = file.type.startsWith('image/');
-    const isText = !isImage && (TEXT_LIKE_MIME.test(file.type) || TEXT_LIKE_EXT.test(file.name));
-    if (!isImage && !isText) {
+    const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+    const isText = !isImage && !isPdf && (TEXT_LIKE_MIME.test(file.type) || TEXT_LIKE_EXT.test(file.name));
+    if (!isImage && !isPdf && !isText) {
       console.warn(`[Beyond] Unsupported attachment type: ${file.name} (${file.type})`);
+      return;
+    }
+    if (isPdf && file.size > MAX_PDF_BYTES) {
+      console.warn(`[Beyond] PDF too large: ${file.name}`);
       return;
     }
     if (isImage && file.size > MAX_IMAGE_BYTES) {
@@ -500,7 +505,18 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
       return;
     }
     const id = uid();
-    if (isImage) {
+    if (isPdf) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const data = String(reader.result || '').replace(/^data:[^;]*;/, 'data:application/pdf;');
+        if (!data.startsWith('data:')) return;
+        setAttachments((prev) => [
+          ...prev,
+          { id, name: file.name, mimeType: 'application/pdf', size: file.size, kind: 'pdf', data },
+        ]);
+      };
+      reader.readAsDataURL(file);
+    } else if (isImage) {
       const reader = new FileReader();
       reader.onload = () => {
         const data = String(reader.result || '');
@@ -1217,7 +1233,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
       // the prompt stays readable even after we inline text-file contents.
       const userPreview = trimmed || (attachments.length > 0 ? '📎' : '');
       const attachmentNote = attachments
-        .map((a) => `  · ${a.name} (${a.kind === 'image' ? 'obrázek' : 'text'})`)
+        .map((a) => `  · ${a.name} (${a.kind === 'image' ? 'obrázek' : a.kind === 'pdf' ? 'PDF' : 'text'})`)
         .join('\n');
       const userBubble = attachments.length > 0
         ? `${userPreview}\n${attachmentNote}`
@@ -1229,7 +1245,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
       // hand the file paths to Claude.
       const textFiles = attachments.filter((a) => a.kind === 'text');
       const images = attachments
-        .filter((a) => a.kind === 'image')
+        .filter((a) => a.kind !== 'text')
         .map((a) => ({ data: a.data, mimeType: a.mimeType, name: a.name }));
 
       let composedCommand = trimmed;
@@ -1808,7 +1824,7 @@ export default function BeyondChat({ client, initialPrompt, sessionOverride }: P
           ref={fileInputRef}
           type="file"
           multiple
-          accept="image/*,.md,.txt,.json,.csv,.yaml,.yml,.log,.html,.css,.js,.ts,.tsx,.jsx,.py,.sh,.toml,.ini,.env,.jsonl"
+          accept="image/*,.pdf,.md,.txt,.json,.csv,.yaml,.yml,.log,.html,.css,.js,.ts,.tsx,.jsx,.py,.sh,.toml,.ini,.env,.jsonl"
           className="hidden"
           onChange={async (e) => {
             const files = Array.from(e.target.files || []);

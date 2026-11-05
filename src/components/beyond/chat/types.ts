@@ -49,7 +49,7 @@ export type PendingAttachment = {
   name: string;
   mimeType: string;
   size: number;
-  kind: 'image' | 'text';
+  kind: 'image' | 'pdf' | 'text';
   /** Images: data:image/...;base64,... — text: raw UTF-8 content. */
   data: string;
 };

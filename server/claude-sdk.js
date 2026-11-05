@@ -523,7 +523,7 @@ async function handleImages(command, images, cwd) {
 
       const [, mimeType, base64Data] = matches;
       const extension = mimeType.split('/')[1] || 'png';
-      const filename = `image_${index}.${extension}`;
+      const filename = `${mimeType === 'application/pdf' ? 'priloha' : 'image'}_${index}.${extension}`;
       const filepath = path.join(tempDir, filename);
 
       // Write base64 data to file
@@ -534,7 +534,7 @@ async function handleImages(command, images, cwd) {
     // Include the full image paths in the prompt
     let modifiedCommand = command;
     if (tempImagePaths.length > 0 && command && command.trim()) {
-      const imageNote = `\n\n[Images provided at the following paths:]\n${tempImagePaths.map((p, i) => `${i + 1}. ${p}`).join('\n')}`;
+      const imageNote = `\n\n[Attached files at the following paths, read them with the Read tool:]\n${tempImagePaths.map((p, i) => `${i + 1}. ${p}`).join('\n')}`;
       modifiedCommand = command + imageNote;
     }
 

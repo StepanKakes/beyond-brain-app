@@ -10,3 +10,4 @@ export const TEXT_LIKE_MIME = /^(text\/|application\/(json|xml|javascript|typesc
 export const TEXT_LIKE_EXT = /\.(md|txt|json|ya?ml|csv|tsv|log|html?|css|js|ts|tsx|jsx|py|sh|toml|ini|env|jsonl)$/i;
 export const MAX_TEXT_BYTES = 256 * 1024;
 export const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
+export const MAX_PDF_BYTES = 20 * 1024 * 1024;
