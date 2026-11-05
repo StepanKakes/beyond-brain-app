@@ -484,6 +484,12 @@
   /* iOS při menším písmu přiblíží stránku. */
   font-size: 16px;
 }
+select.pl-field-input {
+  padding-right: 26px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .pl-field-input:focus { background: var(--bb-tint); }
 .pl-field-input::placeholder { color: var(--bb-ink3); }
 .pl-field-with-link {

@@ -761,6 +761,10 @@ export function Planner({
               {value}
             </button>
           ))}
+          <span className="pl-filter-gap" aria-hidden="true" />
+          <button type="button" className="pl-pill" disabled={importing} onClick={() => void pullFromNotion()}>
+            {importing ? 'Načítám z Notionu' : 'Načíst nové z Notionu'}
+          </button>
         </div>
       ) : null}
 
