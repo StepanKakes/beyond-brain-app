@@ -1435,10 +1435,12 @@ a {
   gap: 10px;
 }
 
-.m-add-field,
-
 .m-add-field {
-  background: var(--bb-tint);
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 5px 5px 5px 8px;
+  border-radius: 23px;
 }
 
 /* Pole a jeho zrcadlo leží přes sebe, zrcadlo určuje výšku a kreslí zvýraznění. */

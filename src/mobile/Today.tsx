@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { Button, SegmentedControl } from 'glisse';
+import { Button, Glass, SegmentedControl } from 'glisse';
 
 import { api } from './api';
 import { Icon } from './icons';
@@ -177,6 +177,13 @@ function Highlighted({ text, tokens }: { text: string; tokens: ParsedToken[] }) 
   );
 }
 
+/** Den podle telefonu, stejně jako to, co appka ukazuje jako dnešek. */
+function localDay(offset: number): string {
+  const day = new Date();
+  day.setDate(day.getDate() + offset);
+  return `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+}
+
 function dueLabel(iso: string): string {
   if (!/^\d{4}-\d{2}-\d{2}/.test(iso)) return iso;
   const date = new Date(`${iso.slice(0, 10)}T12:00:00`);
@@ -189,13 +196,17 @@ function dueLabel(iso: string): string {
 function AddTask({
   owner,
   people,
+  defaultDue,
   onClose,
 }: {
   owner: string | null;
   people: TasksResponse['people'];
+  /** Den, který úkol dostane, když v textu žádný není. Jde jedním klepnutím zrušit. */
+  defaultDue: string | null;
   onClose: () => void;
 }) {
   const [text, setText] = useState('');
+  const [fallbackDue, setFallbackDue] = useState(defaultDue);
   const [busy, setBusy] = useState(false);
   const [parsed, setParsed] = useState<Parsed | null>(null);
   const [who, setWho] = useState(owner);
@@ -225,7 +236,7 @@ function AddTask({
     if (!quick || busy) return;
     setBusy(true);
     try {
-      await api(TASKS_PATH, { method: 'POST', body: { quick, owner: who || undefined } });
+      await api(TASKS_PATH, { method: 'POST', body: { quick, owner: who || undefined, defaultDue: fallbackDue || undefined } });
       await refresh(TASKS_KEY, TASKS_PATH);
       onClose();
     } catch (error) {
@@ -252,7 +263,7 @@ function AddTask({
           void submit();
         }}
       >
-        <div className="m-add-field">
+        <Glass className="m-add-field">
           <div className="m-add-input">
             <div className="m-add-mirror" aria-hidden="true">
               <Highlighted text={text} tokens={parsed?.tokens || []} />
@@ -282,7 +293,7 @@ function AddTask({
           >
             <Icon name="up" size={20} />
           </button>
-        </div>
+        </Glass>
         {picking ? (
           <div className="m-add-people" role="listbox" aria-label="Komu">
             {people.map((person) => (
@@ -308,6 +319,18 @@ function AddTask({
               <button type="button" className="m-pill" onPointerDown={keepFocus} onClick={() => setPicking(true)}>
                 <Icon name="person" size={15} />
                 <span>{whoName || 'Přiřadit'}</span>
+              </button>
+            ) : null}
+            {!parsed?.due && fallbackDue ? (
+              <button
+                type="button"
+                className="m-pill"
+                aria-label={`${dueLabel(fallbackDue)}, klepnutím zrušíš termín`}
+                onPointerDown={keepFocus}
+                onClick={() => setFallbackDue(null)}
+              >
+                <span>{dueLabel(fallbackDue)}</span>
+                <Icon name="close" size={13} />
               </button>
             ) : null}
             {chips.map((chip) => (
@@ -570,7 +593,12 @@ export function TodayScreen() {
         <Icon name="plus" size={26} />
       </button>
       {adding ? (
-        <AddTask owner={person === 'tym' ? me : person} people={people} onClose={() => setAdding(false)} />
+        <AddTask
+          owner={person === 'tym' ? me : person}
+          people={people}
+          defaultDue={scope === 'brzy' ? localDay(1) : localDay(0)}
+          onClose={() => setAdding(false)}
+        />
       ) : null}
       {choosing ? (
         <Picker

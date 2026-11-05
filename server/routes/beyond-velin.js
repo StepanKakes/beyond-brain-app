@@ -624,6 +624,8 @@ router.post('/ukoly', async (req, res) => {
         clients: index.clients.filter((c) => c.isActive !== false).map((c) => ({ slug: c.slug, name: c.name, first: c.name.split(' ')[0] })),
       });
     }
+    // The list you add from decides the day, unless the text names one.
+    if (!fields.due && /^\d{4}-\d{2}-\d{2}$/.test(body.defaultDue || '')) fields = { ...fields, due: body.defaultDue };
     const task = await ukoly.createTask({ ...fields, createdBy: me });
     res.json({ ok: true, task });
   } catch (err) {
