@@ -103,6 +103,11 @@ export function behDatum(iso: string): string {
   });
 }
 
+/** Starší výstupy jsou prostý text po řádcích a markdown by je slil do jednoho. */
+export function behMarkdown(vystup: string): string {
+  return vystup.replace(/\n(?!\n)/g, '  \n');
+}
+
 export function behPopis(beh: RutinaBeh): string {
   if (beh.status === 'running') return 'Právě běží';
   if (beh.status === 'skipped') return 'Nebylo co hlásit';

@@ -2079,17 +2079,21 @@ html.dark .m-root {
   color: var(--bb-ink2);
 }
 
-.m-rutina-beh p {
+.m-rutina-beh > p {
   margin: 0;
   font-size: 16px;
   line-height: 1.4;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.m-rutina-beh > p,
+.m-rutina-beh .m-md {
   -webkit-user-select: text;
   user-select: text;
 }
 
-.m-rutina-beh p.is-quiet,
+.m-rutina-beh > p.is-quiet,
 .m-rutina-prazdno {
   color: var(--bb-ink2);
 }

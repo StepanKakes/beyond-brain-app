@@ -1019,8 +1019,18 @@ details.bb-set__group .bb-set__row:focus-within .bb-set__h { display: block; }
 .bb-rut__detailhead h2 { flex: 1; min-width: 0; margin: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 16px; font-weight: 600; letter-spacing: -.01em; color: var(--bb-ink); }
 .bb-rut__run { padding: 14px 0; border-top: 1px solid var(--bb-line2); }
 .bb-rut__run time { display: block; margin-bottom: 6px; font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--bb-ink2); }
-.bb-rut__run p { margin: 0; max-width: 68ch; font-size: 14px; line-height: 1.5; color: var(--bb-ink); white-space: pre-wrap; overflow-wrap: anywhere; }
-.bb-rut__run p[data-quiet="true"] { color: var(--bb-ink2); }
+.bb-rut__run > p { margin: 0; max-width: 68ch; font-size: 14px; line-height: 1.5; color: var(--bb-ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+.bb-rut__run > p[data-quiet] { color: var(--bb-ink2); }
+.bb-rut__md { max-width: 68ch; font-size: 14px; line-height: 1.55; color: var(--bb-ink); overflow-wrap: anywhere; }
+.bb-rut__md > :first-child { margin-top: 0; }
+.bb-rut__md > :last-child { margin-bottom: 0; }
+.bb-rut__md p, .bb-rut__md ul, .bb-rut__md ol { margin: 0 0 10px; }
+.bb-rut__md ul { padding-left: 20px; list-style: disc; }
+.bb-rut__md ol { padding-left: 20px; list-style: decimal; }
+.bb-rut__md li { margin: 3px 0; }
+.bb-rut__md h1, .bb-rut__md h2, .bb-rut__md h3 { margin: 16px 0 6px; font-size: 15px; font-weight: 600; }
+.bb-rut__md strong { font-weight: 600; }
+.bb-rut__md a { text-decoration: underline; }
 .bb-rut__form { gap: 18px; }
 .bb-rut__form label { display: block; min-width: 0; flex: 1; }
 .bb-rut__form .bb-section__label { display: block; margin-bottom: 6px; }

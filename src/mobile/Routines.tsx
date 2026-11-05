@@ -5,6 +5,7 @@ import {
   DNY,
   KDY_MOZNOSTI,
   behDatum,
+  behMarkdown,
   behPopis,
   kdyPopis,
   kdyZRozvrhu,
@@ -19,7 +20,7 @@ import {
 import { api } from './api';
 import { back, navigate } from './router';
 import { refresh, useResource } from './store';
-import { BarButton, Empty, LinkRow, Picker, PushedBar, Section, Sheet, Skeleton, toast } from './ui';
+import { BarButton, Empty, LinkRow, Markdown, Picker, PushedBar, Section, Sheet, Skeleton, toast } from './ui';
 
 // Rutina je úloha, která běží sama a dá o sobě vědět notifikací. Klepnutí na
 // notifikaci otevře detail s posledním výstupem.
@@ -149,7 +150,7 @@ export function RoutineScreen({ name }: { name: string }) {
                 data.behy.map((run) => (
                   <article key={run.id} className="m-rutina-beh">
                     <time>{behDatum(run.at)}</time>
-                    <p className={run.vystup ? undefined : 'is-quiet'}>{behPopis(run)}</p>
+                    {run.vystup ? <Markdown text={behMarkdown(run.vystup)} /> : <p className="is-quiet">{behPopis(run)}</p>}
                   </article>
                 ))
               ) : (

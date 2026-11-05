@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 import { Switch } from '../ui';
 import {
   DNY,
   KDY_MOZNOSTI,
   behDatum,
+  behMarkdown,
   behPopis,
   kdyZRozvrhu,
   rozvrhZKdy,
@@ -293,7 +296,13 @@ export default function RutinyPage() {
                   detail.behy.map((run) => (
                     <article key={run.id} className="bb-rut__run">
                       <time>{behDatum(run.at)}</time>
-                      <p data-quiet={!run.vystup}>{behPopis(run)}</p>
+                      {run.vystup ? (
+                        <div className="bb-rut__md">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{behMarkdown(run.vystup)}</ReactMarkdown>
+                        </div>
+                      ) : (
+                        <p data-quiet>{behPopis(run)}</p>
+                      )}
                     </article>
                   ))
                 ) : (

@@ -1837,8 +1837,14 @@ function runnableFromTask(task) {
           previous?.summary ? `Tvůj minulý výstup (${previous.at.slice(0, 10)}), nehlas znovu totéž:` : null,
           previous?.summary ? previous.summary.slice(0, 2000) : null,
           '',
-          'Odpověz jen výsledkem, doručí se beze změny. Prostý text bez markdownu.',
-          task.deliver?.kind === 'push' ? 'První řádek je jedna věta do notifikace, nejvýš 120 znaků. Pak prázdný řádek a celý výstup.' : null,
+          'Odpověz jen výsledkem, doručí se beze změny.',
+          ...(task.deliver?.kind === 'push'
+            ? [
+                'První řádek je jedna věta do notifikace, nejvýš 120 znaků, prostý text. Pak prázdný řádek a celý výstup.',
+                'Výstup piš v markdownu, ať se dobře čte na telefonu: krátké nadpisy ##, odrážky, tučně jména a termíny.',
+                'Bez tabulek, bez emoji, žádná omáčka kolem.',
+              ]
+            : ['Prostý text bez markdownu.']),
           'Když není co hlásit, odpověz přesně: [TICHO]',
         ]
           .filter((l) => l !== null)
@@ -1884,7 +1890,7 @@ function runnableFromTask(task) {
         const [first, ...rest] = text.split('\n');
         const message = {
           title: task.title,
-          body: first.trim().slice(0, 170) || task.title,
+          body: first.replace(/[*#`]/g, '').trim().slice(0, 170) || task.title,
           url: `/m/rutina/${encodeURIComponent(task.name)}`,
           tag: `rutina-${task.name}`,
         };
