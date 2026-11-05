@@ -15,6 +15,9 @@
  *
  * `tgChatId` is where that person's Telegram deliveries go (morning brief,
  * pre-call reminder). Optional; `BEYOND_TG_CHAT_ID` is the shared fallback.
+ *
+ * `wahaSession` is the WhatsApp number a message leaves from when that person
+ * presses send, so a client sees who actually wrote to them.
  */
 
 const DEFAULT_PEOPLE = [
@@ -26,6 +29,7 @@ const DEFAULT_PEOPLE = [
     calcomEmail: 'tim@creationwithtim.com',
     calcomUsername: 'creationwithtim',
     tgChatId: null,
+    wahaSession: 'default',
   },
   {
     key: 'stepan',
@@ -35,6 +39,7 @@ const DEFAULT_PEOPLE = [
     calcomEmail: 'stepan.kakes1@gmail.com',
     calcomUsername: null,
     tgChatId: null,
+    wahaSession: 'stepan',
   },
 ];
 
@@ -55,6 +60,7 @@ export function getPeople() {
           calcomEmail: p.calcomEmail || null,
           calcomUsername: p.calcomUsername || null,
           tgChatId: p.tgChatId != null && String(p.tgChatId).trim() ? String(p.tgChatId).trim() : null,
+          wahaSession: p.wahaSession ? String(p.wahaSession) : null,
         }));
         return cached;
       }

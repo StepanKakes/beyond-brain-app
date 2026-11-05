@@ -747,8 +747,11 @@ router.post('/navrhy/:id/odeslat', async (req, res) => {
     if (p.channel !== 'whatsapp') {
       return res.status(400).json({ ok: false, error: `Kanál ${p.channel} zatím neumíme` });
     }
-    console.log(`[velin] ${req.user?.username} odesílá návrh ${id} klientovi ${p.clientSlug}`);
-    await sendText({ chatId: p.target, text: p.body });
+    // Leaves from the number of whoever pressed send. No fallback to the other
+    // number on failure: a client must not get a message from someone who didn't send it.
+    const session = personForUser(req.user)?.wahaSession || undefined;
+    console.log(`[velin] ${req.user?.username} odesílá návrh ${id} klientovi ${p.clientSlug} (session ${session || 'default'})`);
+    await sendText({ chatId: p.target, text: p.body, session });
     res.json({ ok: true, proposal: markSent(id, req.user?.username) });
   } catch (err) {
     const message = err?.message || 'odeslání selhalo';
