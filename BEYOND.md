@@ -721,7 +721,7 @@ změn a může rozbít `npm ci` na Windows. Novou závislost do něj dopisuj cí
 
 ## Rutiny
 
-Rutina je vlastní úloha v `system/ulohy.json` (`deliver.kind: push`), kterou si člověk nastaví sám. Běží ji stejný plánovač a stejný `runnableFromTask` jako ostatní vlastní úlohy, `server/services/beyond-rutiny.js` je jen pohled pro appku a šablony. Obrazovky: mobil `src/mobile/Routines.tsx` (Více > Rutiny), počítač `src/components/beyond/velin/RutinyPage.tsx`, společné tvary a převod rozvrhu `src/rutiny.ts`. API je `/api/beyond/velin/rutiny`, každý vidí a mění jen své (`createdBy`).
+Rutina je vlastní úloha v `system/ulohy.json` (`deliver.kind: push`), kterou si člověk nastaví sám. Běží ji stejný plánovač a stejný `runnableFromTask` jako ostatní vlastní úlohy, `server/services/beyond-rutiny.js` je jen pohled pro appku a šablony. Obrazovky: mobil `src/mobile/Routines.tsx` (Více > Rutiny), počítač `src/components/beyond/velin/RutinyPage.tsx`, společné tvary a převod rozvrhu `src/rutiny.ts`. API je `/api/beyond/velin/rutiny`, každý vidí a mění jen své (`createdBy`). Navíc je v seznamu Ranní brief, vestavěný job pro celý tým: jde jen číst a vede na něj jeho notifikace.
 
 - Notifikace jde tvůrci (`pushToUser`), první řádek výstupu je její text, klepnutí otevře `/m/rutina/<name>` s výstupy z `beyond_runs`.
 - Rozvrh `po_hovoru` hodiny nikdy nespustí. Spouští ho `queueAfterCallRoutines` na konci `zpracuj-call`, protože po konci hovoru ještě není co shrnout, přepis přichází později přes Fathom a n8n. Hovor starší 3 dnů rutiny nebudí. Pozor: hovor bez nahrávky se do brainu nezapíše a rutinu nespustí.

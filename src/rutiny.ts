@@ -24,6 +24,8 @@ export type Rutina = {
   kdy: string;
   enabled: boolean;
   notion: boolean;
+  /** Společná pro tým: dá se jen číst, ne upravit. */
+  system?: boolean;
   posledni: RutinaBeh | null;
 };
 

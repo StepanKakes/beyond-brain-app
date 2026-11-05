@@ -240,7 +240,6 @@ export default function RutinyPage() {
         ) : null}
         {data?.pasmo ? <p className="bb-rut__hint">Časy se řídí telefonem, teď {data.pasmo}</p> : null}
         {error && !data ? <Empty>Rutiny se nenačetly</Empty> : null}
-        {data && !routines.length ? <Empty>Zatím žádná rutina. Začni ranním souhrnem hovorů</Empty> : null}
         {routines.length ? (
           <div className="bb-rut__grid">
             <div className="bb-rut__list">
@@ -250,11 +249,13 @@ export default function RutinyPage() {
                     <strong>{routine.title}</strong>
                     <small>{routine.enabled ? routine.kdy : `Vypnutá, ${routine.kdy}`}</small>
                   </button>
-                  <Switch
-                    on={routine.enabled}
-                    label={routine.enabled ? 'Vypnout rutinu' : 'Zapnout rutinu'}
-                    onChange={(next) => void toggle(routine, next)}
-                  />
+                  {routine.system ? null : (
+                    <Switch
+                      on={routine.enabled}
+                      label={routine.enabled ? 'Vypnout rutinu' : 'Zapnout rutinu'}
+                      onChange={(next) => void toggle(routine, next)}
+                    />
+                  )}
                 </div>
               ))}
             </div>
@@ -262,26 +263,30 @@ export default function RutinyPage() {
               <section className="bb-rut__detail">
                 <div className="bb-rut__detailhead">
                   <h2 title={detail.rutina.title}>{detail.rutina.title}</h2>
-                  <button type="button" className="bb-btn-soft bb-rut__btn" onClick={() => void runNow(detail.rutina)}>
-                    Spustit teď
-                  </button>
-                  <button
-                    type="button"
-                    className="bb-btn-soft bb-rut__btn"
-                    onClick={() =>
-                      setDialog({
-                        routine: detail.rutina,
-                        initial: {
-                          title: detail.rutina.title,
-                          prompt: detail.rutina.prompt,
-                          notion: detail.rutina.notion,
-                          kdy: kdyZRozvrhu(detail.rutina.schedule),
-                        },
-                      })
-                    }
-                  >
-                    Upravit
-                  </button>
+                  {detail.rutina.system ? null : (
+                    <>
+                      <button type="button" className="bb-btn-soft bb-rut__btn" onClick={() => void runNow(detail.rutina)}>
+                        Spustit teď
+                      </button>
+                      <button
+                        type="button"
+                        className="bb-btn-soft bb-rut__btn"
+                        onClick={() =>
+                          setDialog({
+                            routine: detail.rutina,
+                            initial: {
+                              title: detail.rutina.title,
+                              prompt: detail.rutina.prompt,
+                              notion: detail.rutina.notion,
+                              kdy: kdyZRozvrhu(detail.rutina.schedule),
+                            },
+                          })
+                        }
+                      >
+                        Upravit
+                      </button>
+                    </>
+                  )}
                 </div>
                 {note ? <p className="bb-rut__hint">{note}</p> : null}
                 {detail.behy.length ? (

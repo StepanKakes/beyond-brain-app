@@ -18,7 +18,7 @@ import { usageReport, subscriptionLimits, brainShare } from '../services/beyond-
 import { getPeople, personForUser } from '../services/beyond-people.js';
 import { STAGES, stageFor, setStage } from '../services/beyond-pipeline.js';
 import { pushSubscriptionsDb, userDb } from '../modules/database/index.js';
-import { ROUTINE_TEMPLATES, listRoutines, reportRoutineZone, routineDetail, routineView, skipMissedSlot } from '../services/beyond-rutiny.js';
+import { BRIEF_ROUTINE, ROUTINE_TEMPLATES, briefDetail, listRoutines, reportRoutineZone, routineDetail, routineView, skipMissedSlot } from '../services/beyond-rutiny.js';
 import { listRuns, setJobEnabled } from '../services/beyond-runs.js';
 import { describeJobs, runJob, schedulerStatus, setPaused } from '../services/beyond-scheduler.js';
 import { enqueueInternal, listEvents, listRoutes } from '../services/beyond-events.js';
@@ -820,7 +820,7 @@ router.post('/rutiny/pasmo', async (req, res) => {
 
 router.get('/rutiny/:name', (req, res) => {
   try {
-    res.json(routineDetail(routineOf(req)));
+    res.json(req.params.name === BRIEF_ROUTINE ? briefDetail() : routineDetail(routineOf(req)));
   } catch (err) {
     res.status(400).json({ ok: false, error: err?.message || 'rutina se nenačetla' });
   }

@@ -78,11 +78,6 @@ export function RoutinesScreen() {
               />
             ))}
           </Section>
-        ) : data ? (
-          <Empty title="Zatím žádná rutina">
-            <p>Brain může každé ráno nebo po každém hovoru sám sepsat přehled a dát ti vědět</p>
-            <Button onClick={() => setPicking(true)}>Nastavit první</Button>
-          </Empty>
         ) : error ? (
           <Empty title="Rutiny se nenačetly">{error}</Empty>
         ) : (
@@ -121,7 +116,7 @@ export function RoutineScreen({ name }: { name: string }) {
       <PushedBar
         title={routine?.title || 'Rutina'}
         action={
-          routine ? (
+          routine && !routine.system ? (
             <BarButton
               icon="compose"
               label="Upravit"
@@ -133,20 +128,22 @@ export function RoutineScreen({ name }: { name: string }) {
       <div className="m-scroll m-pushed-list">
         {routine ? (
           <>
-            <Section>
-              <div className="m-row m-row-setting">
-                <span className="m-row-title">
-                  Zapnutá
-                  <small className="m-rutina-kdy">{routine.kdy}</small>
-                </span>
-                <Switch
-                  aria-label="Zapnutá"
-                  checked={routine.enabled}
-                  onCheckedChange={(on) => void toggle(on)}
-                />
-              </div>
-              <LinkRow title="Spustit teď" onClick={() => void runNow()} />
-            </Section>
+            {routine.system ? null : (
+              <Section>
+                <div className="m-row m-row-setting">
+                  <span className="m-row-title">
+                    Zapnutá
+                    <small className="m-rutina-kdy">{routine.kdy}</small>
+                  </span>
+                  <Switch
+                    aria-label="Zapnutá"
+                    checked={routine.enabled}
+                    onCheckedChange={(on) => void toggle(on)}
+                  />
+                </div>
+                <LinkRow title="Spustit teď" onClick={() => void runNow()} />
+              </Section>
+            )}
             <Section title="Výstupy">
               {data.behy.length ? (
                 data.behy.map((run) => (

@@ -76,10 +76,50 @@ export function routineView(task) {
   };
 }
 
+/**
+ * The morning brief goes to everyone and belongs to nobody, so nobody can edit
+ * it here. It is listed because its notification has to lead somewhere that
+ * shows the text.
+ */
+export const BRIEF_ROUTINE = 'ranni-brief';
+
+/** Stored as the delivery note, the brief, then the run log, a paragraph each side. */
+function briefOf(summary) {
+  const parts = String(summary || '').split('\n\n');
+  return parts.slice(1, -1).join('\n\n').trim() || null;
+}
+
+function briefRunView(run) {
+  return { ...runView(run), vystup: run.status === 'ok' ? briefOf(run.summary) : null };
+}
+
+function briefView() {
+  const [last] = listRuns({ job: BRIEF_ROUTINE, limit: 1 });
+  return {
+    name: BRIEF_ROUTINE,
+    title: 'Ranní brief',
+    prompt: '',
+    schedule: { kind: 'manual' },
+    kdy: 'každé ráno pro celý tým',
+    enabled: true,
+    notion: false,
+    system: true,
+    posledni: last ? briefRunView(last) : null,
+  };
+}
+
+export function briefDetail() {
+  return {
+    rutina: briefView(),
+    behy: listRuns({ job: BRIEF_ROUTINE, limit: 20 }).map(briefRunView),
+  };
+}
+
 export function listRoutines(username) {
-  return listTasks()
+  const own = listTasks()
     .filter((t) => t.createdBy === username)
     .map(routineView);
+  return [...own, briefView()];
 }
 
 export function routineDetail(task) {

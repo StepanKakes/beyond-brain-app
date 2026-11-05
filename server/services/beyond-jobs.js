@@ -950,7 +950,7 @@ const morningBrief = {
     // text that should land.
     const text = String(result.text || '').trim();
     const delivery = await tgBroadcast(text);
-    void pushToEveryone({ title: 'Ranní brief', body: text.slice(0, 180), url: '/m', tag: 'ranni-brief' });
+    void pushToEveryone({ title: 'Ranní brief', body: text.slice(0, 180), url: '/m/rutina/ranni-brief', tag: 'ranni-brief' });
     const note = delivery.skipped
       ? `Telegram nenastavený (${delivery.skipped}), brief je jen v brainu.`
       : `Odesláno: ${delivery.sent.join(', ') || 'nikomu'}${delivery.failed?.length ? ` · selhalo: ${delivery.failed.join('; ')}` : ''}`;
