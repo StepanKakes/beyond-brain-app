@@ -113,13 +113,13 @@ function taskRow(widget, task, tappable) {
   const mark = row.addStack();
   if (tappable) mark.url = selfUrl(`hotovo=${encodeURIComponent(task.id)}`);
   const circle = mark.addImage(SFSymbol.named('circle').image);
-  circle.imageSize = new Size(18, 18);
+  circle.imageSize = new Size(20, 20);
   circle.tintColor = task.priority === 1 || task.late ? colors.hot : colors.quiet;
 
   const text = row.addStack();
   if (tappable) text.url = `${BRAIN}/m/ukol/${encodeURIComponent(task.id)}`;
   const label = text.addText(task.client ? `${task.client}: ${task.text}` : task.text);
-  label.font = Font.systemFont(13);
+  label.font = Font.systemFont(15);
   label.textColor = colors.ink;
   label.lineLimit = 1;
   row.addSpacer();
@@ -147,13 +147,15 @@ function build({ data, problem }, family) {
     message(widget, 'Na dnes nic');
   } else {
     const limit = LIMITS[family] || LIMITS.medium;
-    tasks.slice(0, limit).forEach((task, i) => {
+    // Když se všechny nevejdou, jeden řádek uvolní místo pro počet zbývajících.
+    const shown = tasks.length > limit ? limit - 1 : limit;
+    tasks.slice(0, shown).forEach((task, i) => {
       if (i) widget.addSpacer(5);
       taskRow(widget, task, tappable);
     });
-    if (tasks.length > limit) {
+    if (tasks.length > shown) {
       widget.addSpacer(4);
-      message(widget, `+${tasks.length - limit}`);
+      message(widget, `a další: ${tasks.length - shown}`);
     }
   }
   widget.addSpacer();
