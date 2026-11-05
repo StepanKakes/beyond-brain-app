@@ -17,6 +17,7 @@
  */
 
 import { daysSince, truncateWords } from './brain-index.js';
+import { hiddenBecause } from './beyond-hlidani.js';
 
 /** Client has said nothing for this long (and no call is booked). */
 const QUIET_WATCH_DAYS = 5;
@@ -79,7 +80,7 @@ function quiet(client, now, hasUpcomingCall) {
       'WhatsApp pull nevrací nic',
       `Synchronizace proběhla ${raw.syncedAt ? raw.syncedAt.slice(0, 10) : 'dnes'}, ale stáhla nula zpráv`,
       'Nevíme, jestli je ticho, nebo je rozbité napojení. Zkontrolovat ID skupiny a session ve WAHA',
-      { actor: 'us' },
+      { actor: 'us', stopa: ['napojeni'] },
     );
   }
 
@@ -94,7 +95,9 @@ function quiet(client, now, hasUpcomingCall) {
     d >= QUIET_CRITICAL_DAYS
       ? 'Odpojuje se. Po deseti dnech se většinou sám nevrátí'
       : 'Začíná se vzdalovat, ozvat se dřív, než z toho bude zvyk',
-    { days: d },
+    // Handled once, it comes back after the client writes again and goes quiet,
+    // or when a quiet week turns into a critical silence.
+    { days: d, stopa: [`${raw.lastInboundIso}:${d >= QUIET_CRITICAL_DAYS ? 'critical' : 'watch'}`] },
   );
 }
 
@@ -128,6 +131,7 @@ function funnelJam(client) {
     'Zácpa ve funnelu',
     `${top}: ${topPrev} → ${topNow}, ale ${next}: 0 dva týdny po sobě`,
     'Dělá vršek a nedělá spodek. Nejčastější důvod, proč program skončí bez výsledku',
+    { stopa: [latest.isoWeek] },
   );
 }
 
@@ -147,7 +151,7 @@ function ourDebt(client, now) {
     'Dlužíme my',
     `${overdue.length}× otevřené, nejstarší ${days(worst.age)}: ${truncateWords(worst.text, 90)}`,
     'Brzdíme klienta my. Tohle se řeší dřív než cokoli, co dluží on',
-    { actor: 'us', person: worst.person, count: overdue.length, items: overdue },
+    { actor: 'us', person: worst.person, count: overdue.length, items: overdue, stopa: overdue.map((p) => p.text) },
   );
 }
 
@@ -167,7 +171,7 @@ function theirOverdue(client, now) {
     overdue.length >= 3
       ? 'Tři a víc zmeškaných slibů není náhoda, ale vzorec. Řešit tempo, ne jednotlivý úkol'
       : 'Klouže. Připomenout dřív, než se z toho stane norma',
-    { count: overdue.length, items: overdue },
+    { count: overdue.length, items: overdue, stopa: overdue.map((p) => p.text) },
   );
 }
 
@@ -184,7 +188,7 @@ function missingMeasurement(client) {
       'Žádné měření',
       'Klient nemá mereni.md',
       'Bez čísel neuvidíme zácpu, dokud nebude pozdě. Založit páteř a ptát se na ni na check-inu',
-      { actor: 'us' },
+      { actor: 'us', stopa: ['bez-souboru'] },
     );
   }
   if (!client.measurements.length) return null;
@@ -197,7 +201,7 @@ function missingMeasurement(client) {
     'Měření bez čísel',
     `Poslední blok ${latest.isoWeek} je prázdný`,
     'Prázdno znamená nevíme, ne nulu. Doptat se na check-inu',
-    { actor: 'us' },
+    { actor: 'us', stopa: [latest.isoWeek] },
   );
 }
 
@@ -218,7 +222,7 @@ function staleFlags(client, now) {
     'Vlajka bez pohybu',
     `${stale.length}× beze změny, nejdéle ${days(ageInDays(worst.stavDateIso, now))}: ${worst.title}`,
     'Riziko, které jsme pojmenovali a pak na něj zapomněli',
-    { count: stale.length },
+    { count: stale.length, vlajky: stale.map((f) => f.title), stopa: stale.map((f) => f.title) },
   );
 }
 
@@ -238,7 +242,7 @@ function programEnd(client) {
       'Program po termínu',
       `Plánovaný konec ${client.endIso}, tedy před ${daysAgo(-d)}, stav je pořád Aktivní`,
       'Buď pokračuje a má se prodloužit, nebo skončil a má se uzavřít. Nerozhodnuto je nejhorší varianta',
-      { actor: 'us', days: -d },
+      { actor: 'us', days: -d, stopa: [client.endIso] },
     );
   }
   if (d <= ENDING_SOON_DAYS) {
@@ -248,7 +252,7 @@ function programEnd(client) {
       'Konec programu se blíží',
       `Zbývá ${days(d)} (konec ${client.endIso})`,
       'Poslední okno na výsledek a zároveň rozhodnutí o pokračování',
-      { days: d },
+      { days: d, stopa: [`${client.endIso}:${d <= 7 ? 'critical' : 'watch'}`] },
     );
   }
   return null;
@@ -266,7 +270,7 @@ function callWithoutNote(client) {
     'Call bez zápisu',
     `Fathom má ${newest.dateIso}, cally.md končí ${lastWritten || 'prázdno'}`,
     'Hovor proběhl a nepromítl se do brainu. Práce pro agenta, ne pro člověka',
-    { actor: 'agent' },
+    { actor: 'agent', stopa: [newest.dateIso] },
   );
 }
 
@@ -279,7 +283,7 @@ function staleWeek(client) {
     'Zastaralý týden v profilu',
     `Profil říká ${client.programWeekStated}, podle data startu je to W${String(client.programWeek).padStart(2, '0')}`,
     'Profil se nesynchronizoval. Dokud se liší, nedá se podle něj řídit roadmapa',
-    { actor: 'agent' },
+    { actor: 'agent', stopa: [String(client.programWeekStated)] },
   );
 }
 
@@ -288,6 +292,31 @@ function staleWeek(client) {
 /* ------------------------------------------------------------------ */
 
 const WEIGHT = { critical: 10, watch: 3 };
+
+/** What the button does: a ready prompt for a chat about this client. Nothing gets sent from it. */
+function actionFor(signal, client) {
+  const name = client.name;
+  const list = (signal.items || []).map((p) => `- ${p.text}`).join('\n');
+  switch (signal.type) {
+    case 'quiet':
+      return { label: 'Navrhnout zprávu', prompt: `${name}: ${signal.detail.toLowerCase()}. Podívej se, o čem jsme se naposledy bavili, a navrhni krátkou zprávu, kterou pošlu. Zatím nic neposílej.` };
+    case 'our-debt':
+      return { label: 'Připravit s brainem', prompt: `Dlužíme klientovi ${name}:\n${list}\n\nZjisti, co z toho už je hotové a co jde udělat hned, a připrav mi to. Nic neposílej.` };
+    case 'their-overdue':
+      return { label: 'Navrhnout připomínku', prompt: `${name} má po termínu tyhle sliby:\n${list}\n\nZjisti, jestli už něco z toho neudělal, a navrhni krátkou připomínku. Zatím nic neposílej.` };
+    case 'funnel-jam':
+      return { label: 'Rozebrat s brainem', prompt: `${name}: ${signal.detail}. Rozeber, kde to vázne, a řekni mi, co s tím na dalším hovoru.` };
+    case 'no-measurement':
+      return { label: 'Založit měření', prompt: `${name} nemá použitelné měření. Navrhni, která čísla sledovat, a připrav otázky na další hovor. Než něco zapíšeš, ukaž mi to.` };
+    case 'program-overdue':
+    case 'program-ending':
+      return { label: 'Rozhodnout s brainem', prompt: `${name}: ${signal.detail}. Shrň, jak na tom program je, a doporuč, jestli prodloužit, nebo uzavřít. Nic neměň, dokud neřeknu.` };
+    case 'wa-pipeline':
+      return { label: 'Zjistit proč', prompt: `${name}: ${signal.detail}. Zjisti, proč WhatsApp nic nevrací, a řekni mi, co opravit.` };
+    default:
+      return null;
+  }
+}
 
 /**
  * All signals for one client, worst first. Severity is summed rather than
@@ -299,12 +328,12 @@ export function signalsForClient(client, { now = Date.now(), upcomingCalls = [] 
   // engagement is drifting, and a finished one cannot drift. Reopening is a
   // one-word edit to `Stav` in profil.md.
   if (client.isActive === false) {
-    return { signals: [], score: 0, worst: null, counts: { critical: 0, watch: 0 } };
+    return { signals: [], hidden: [], score: 0, worst: null, counts: { critical: 0, watch: 0 } };
   }
 
   const hasUpcomingCall = upcomingCalls.some((c) => c.clientSlug === client.slug);
 
-  const found = [
+  const all = [
     programEnd(client),
     funnelJam(client),
     ourDebt(client, now),
@@ -314,18 +343,32 @@ export function signalsForClient(client, { now = Date.now(), upcomingCalls = [] 
     staleFlags(client, now),
     callWithoutNote(client),
     staleWeek(client),
-  ].filter(Boolean);
+  ]
+    .filter(Boolean)
+    .map((s) => ({ ...s, akce: actionFor(s, client) }));
+
+  // Decided by a person, so it leaves the list and the counts until it changes.
+  const hidden = [];
+  const found = [];
+  for (const s of all) {
+    const because = hiddenBecause(client.slug, s, now);
+    if (because) hidden.push({ ...s, schovano: because });
+    else found.push(s);
+  }
 
   found.sort((a, b) => WEIGHT[b.severity] - WEIGHT[a.severity]);
-  const score = found.reduce((sum, s) => sum + WEIGHT[s.severity], 0);
+  // The agent's own work stays listed but is not a person's attention.
+  const forPeople = found.filter((s) => s.actor !== 'agent');
+  const score = forPeople.reduce((sum, s) => sum + WEIGHT[s.severity], 0);
 
   return {
     signals: found,
+    hidden,
     score,
-    worst: found[0]?.severity || null,
+    worst: forPeople[0]?.severity || null,
     counts: {
-      critical: found.filter((s) => s.severity === 'critical').length,
-      watch: found.filter((s) => s.severity === 'watch').length,
+      critical: forPeople.filter((s) => s.severity === 'critical').length,
+      watch: forPeople.filter((s) => s.severity === 'watch').length,
     },
   };
 }
@@ -432,9 +475,10 @@ export function inbox(clients, opts = {}) {
     // for a reason already stated once at the top makes the column stop
     // discriminating, which is the opposite of what a status column is for.
     const own = row.signals.filter((s) => !systemicTypes.has(s.type));
+    const ownForPeople = own.filter((s) => s.actor !== 'agent');
     row.ownCounts = {
-      critical: own.filter((s) => s.severity === 'critical').length,
-      watch: own.filter((s) => s.severity === 'watch').length,
+      critical: ownForPeople.filter((s) => s.severity === 'critical').length,
+      watch: ownForPeople.filter((s) => s.severity === 'watch').length,
     };
     row.systemicTypes = row.signals.filter((s) => systemicTypes.has(s.type)).map((s) => s.type);
 

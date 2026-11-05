@@ -98,6 +98,11 @@ export type Signal = {
   title: string;
   detail: string;
   meaning?: string;
+  actor?: 'us' | 'agent';
+  items?: { text: string }[];
+  vlajky?: string[];
+  akce?: { label: string; prompt: string } | null;
+  schovano?: { stav: 'vyreseno' | 'odlozeno'; until?: string; at?: string; by?: string };
   clientSlug?: string;
   clientName?: string;
 };
@@ -137,8 +142,11 @@ export type TimelineItem = {
   dateIso: string;
   title: string;
   excerpt: string;
+  body?: string | null;
   future?: boolean;
 };
+
+export type TickedItem = { id: string; at: string; kind: 'ukol' | 'slib'; text: string; zdroj: string; dukaz: string };
 
 export type ClientResponse = {
   client: BoardClient & {
@@ -148,6 +156,8 @@ export type ClientResponse = {
     daysSinceLastCall: number | null;
   };
   signals: Signal[];
+  hidden?: Signal[];
+  ticked?: TickedItem[];
   timeline: TimelineItem[];
   calls: Call[];
 };

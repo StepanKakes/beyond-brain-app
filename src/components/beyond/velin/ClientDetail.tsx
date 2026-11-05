@@ -2,7 +2,17 @@ import { useCallback, useState } from 'react';
 import { ArrowLeft, ExternalLink, MessageSquare } from '../icons';
 import { Tabs } from '../ui';
 
-import { fetchClient, type ClientDetail as Detail, type Promise_, type TimelineItem } from './api';
+import {
+  closePromise,
+  decideSignal,
+  fetchClient,
+  moveFlag,
+  takeBackTicked,
+  type ClientDetail as Detail,
+  type Promise_,
+  type TickedItem,
+  type TimelineItem,
+} from './api';
 import {
   Empty,
   Metric,
@@ -50,7 +60,12 @@ export default function ClientDetail({
   onOpenChat: (slug: string) => void;
 }) {
   const load = useCallback(() => fetchClient(slug), [slug]);
-  const { data, error, loading } = usePolled<Detail>(load, 180_000);
+  const { data, error, loading, reload } = usePolled<Detail>(load, 180_000);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const run = (work: Promise<unknown>) => {
+    setActionError(null);
+    void work.then(reload).catch((err: Error) => setActionError(err.message));
+  };
   const [tab, setTab] = useState<Tab>('timeline');
 
   if (loading && !data) {
@@ -75,6 +90,10 @@ export default function ClientDetail({
   if (!data) return null;
 
   const c = data.client;
+  const forPeople = data.signals.filter((s) => s.actor !== 'agent');
+  const forBrain = data.signals.filter((s) => s.actor === 'agent');
+  const hidden = data.hidden || [];
+  const ticked = data.ticked || [];
 
   return (
     <div className="bb-vel">
@@ -113,16 +132,85 @@ export default function ClientDetail({
           </div>
         </header>
 
-        {data.signals.length > 0 && (
+        {actionError && <p className="bb-rut__error">{actionError}</p>}
+
+        {forPeople.length > 0 && (
           <section>
-            <SectionHead title="Signály" count={data.signals.length} />
+            <SectionHead title="Co hlídat" count={forPeople.length} />
             <div className="bb-sig">
-              {data.signals.map((s, i) => (
-                <div key={`${s.type}-${i}`} className="bb-sig__row" style={{ cursor: 'default' }}>
+              {forPeople.map((s) => (
+                <div key={s.type} className="bb-sig__row" style={{ cursor: 'default' }}>
                   <SeverityChip severity={s.severity} />
                   <span className="bb-sig__t">{s.title}</span>
                   <span className="bb-sig__d">{s.detail}</span>
                   <span className="bb-sig__m">{s.meaning}</span>
+                  {s.items?.map((item) => (
+                    <span key={item.text} className="bb-sig__item">
+                      <span>{item.text}</span>
+                      <button type="button" className="bb-pill" onClick={() => run(closePromise(c.slug, item.text))}>
+                        Hotovo
+                      </button>
+                    </span>
+                  ))}
+                  {s.vlajky?.map((title) => (
+                    <span key={title} className="bb-sig__item">
+                      <span>{title}</span>
+                      <button type="button" className="bb-pill" onClick={() => run(moveFlag(c.slug, title, 'trva'))}>
+                        Trvá
+                      </button>
+                      <button type="button" className="bb-pill" onClick={() => run(moveFlag(c.slug, title, 'uzavrit'))}>
+                        Uzavřít
+                      </button>
+                    </span>
+                  ))}
+                  <span className="bb-sig__acts">
+                    <button type="button" className="bb-pill" onClick={() => run(decideSignal(c.slug, s.type, 'vyreseno'))}>
+                      Vyřešeno
+                    </button>
+                    <button type="button" className="bb-pill" onClick={() => run(decideSignal(c.slug, s.type, 'odlozit'))}>
+                      Připomenout za týden
+                    </button>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {ticked.length > 0 && (
+          <section>
+            <SectionHead title="Brain odškrtl" count={ticked.length} />
+            <div className="bb-sig">
+              {ticked.map((t: TickedItem) => (
+                <div key={t.id} className="bb-sig__row" style={{ cursor: 'default' }}>
+                  <span className="bb-sig__t">{t.text}</span>
+                  <span className="bb-sig__m">
+                    {t.zdroj}: {t.dukaz}
+                  </span>
+                  <span className="bb-sig__acts">
+                    <button type="button" className="bb-pill" onClick={() => run(takeBackTicked(c.slug, t.id))}>
+                      Není hotové, vrátit
+                    </button>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {hidden.length > 0 && (
+          <section>
+            <SectionHead title="Schované" count={hidden.length} />
+            <div className="bb-sig">
+              {hidden.map((s) => (
+                <div key={s.type} className="bb-sig__row" style={{ cursor: 'default' }}>
+                  <span className="bb-sig__t">{s.title}</span>
+                  <span className="bb-sig__m">{s.detail}</span>
+                  <span className="bb-sig__acts">
+                    <button type="button" className="bb-pill" onClick={() => run(decideSignal(c.slug, s.type, 'vratit'))}>
+                      Vrátit na seznam
+                    </button>
+                  </span>
                 </div>
               ))}
             </div>
@@ -135,6 +223,20 @@ export default function ClientDetail({
         {tab === 'promises' && <Promises detail={data} />}
         {tab === 'metrics' && <Metrics detail={data} />}
         {tab === 'flags' && <Flags detail={data} />}
+
+        {forBrain.length > 0 && (
+          <section>
+            <SectionHead title="Řeší brain" count={forBrain.length} />
+            <div className="bb-sig">
+              {forBrain.map((s) => (
+                <div key={s.type} className="bb-sig__row" style={{ cursor: 'default' }}>
+                  <span className="bb-sig__t">{s.title}</span>
+                  <span className="bb-sig__m">{s.detail}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );

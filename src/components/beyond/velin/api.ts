@@ -22,6 +22,9 @@ export type Signal = {
   person?: string | null;
   days?: number;
   count?: number;
+  items?: { text: string }[];
+  vlajky?: string[];
+  schovano?: { stav: 'vyreseno' | 'odlozeno'; until?: string };
   clientSlug?: string;
   clientName?: string;
 };
@@ -142,6 +145,8 @@ export type TimelineItem = {
   future?: boolean;
 };
 
+export type TickedItem = { id: string; at: string; kind: 'ukol' | 'slib'; text: string; zdroj: string; dukaz: string };
+
 export type ClientDetail = {
   client: BoardClient & {
     programWeekStated: string | null;
@@ -156,6 +161,8 @@ export type ClientDetail = {
     daysSinceLastCall: number | null;
   };
   signals: Signal[];
+  hidden?: Signal[];
+  ticked?: TickedItem[];
   score: number;
   timeline: TimelineItem[];
   calls: Call[];
@@ -263,6 +270,14 @@ async function get<T>(pathname: string): Promise<T> {
 export const fetchVelin = () => get<Velin>('/');
 export const fetchBoard = () => get<{ builtAt: string; clients: BoardClient[] }>('/board');
 export const fetchClient = (slug: string) => get<ClientDetail>(`/client/${encodeURIComponent(slug)}`);
+const clientPath = (slug: string) => `/client/${encodeURIComponent(slug)}`;
+export const decideSignal = (slug: string, type: string, action: 'vyreseno' | 'odlozit' | 'vratit') =>
+  send(`${clientPath(slug)}/signal/${encodeURIComponent(type)}`, 'POST', { action });
+export const closePromise = (slug: string, text: string) => send(`${clientPath(slug)}/slib`, 'POST', { text });
+export const moveFlag = (slug: string, title: string, action: 'uzavrit' | 'trva') =>
+  send(`${clientPath(slug)}/vlajka`, 'POST', { title, action });
+export const takeBackTicked = (slug: string, id: string) =>
+  send(`${clientPath(slug)}/odskrtnuto/${encodeURIComponent(id)}/vratit`, 'POST', {});
 export const fetchCalls = (days = 14) => get<CallsPage>(`/calls?days=${days}`);
 
 export const fetchUkoly = () => get<Ukoly>('/ukoly');

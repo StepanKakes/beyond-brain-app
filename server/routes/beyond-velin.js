@@ -26,6 +26,8 @@ import * as mozek from '../services/beyond-mozek.js';
 import { createTask, getTask, removeTask, phoneZone, setScheduleOverride, updateTask } from '../services/beyond-tasks.js';
 import { snapshot as memorySnapshot } from '../services/beyond-memory.js';
 import * as ukoly from '../services/beyond-ukoly.js';
+import * as hlidani from '../services/beyond-hlidani.js';
+import { closePromise, moveFlag, reopenPromise } from '../services/beyond-klient-zapis.js';
 import * as obsah from '../services/beyond-obsah.js';
 import { listConnectors } from '../services/beyond-mcp-connectors-store.js';
 import { clipFileFor, cutForItem, removeClipFile } from '../services/beyond-clip.js';
@@ -184,12 +186,14 @@ router.get('/client/:slug', async (req, res) => {
         dateIso: c.dateIso,
         title: c.title || 'Call',
         excerpt: c.excerpt,
+        body: c.body || null,
       })),
       ...client.whatsappSummaries.map((w) => ({
         kind: 'whatsapp',
         dateIso: w.dateIso,
         title: 'WhatsApp',
         excerpt: w.excerpt,
+        body: w.body || null,
       })),
       ...client.fathom.map((f) => ({
         kind: 'fathom',
@@ -214,6 +218,8 @@ router.get('/client/:slug', async (req, res) => {
         daysSinceLastCall: client.calls[0] ? daysSince(client.calls[0].dateIso, now) : null,
       },
       signals: sig.signals,
+      hidden: sig.hidden,
+      ticked: hlidani.listTicked(client.slug),
       score: sig.score,
       timeline,
       calls: calls.calls.filter((c) => c.clientSlug === client.slug),
@@ -880,6 +886,74 @@ router.post('/rutiny/:name/spustit', (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ ok: false, error: err?.message || 'rutina nešla spustit' });
+  }
+});
+
+/* ---- co hlídat: what a person decides about a client's signals ---- */
+
+/** The client from the index, or a 404. Also what keeps the slug out of paths it should not reach. */
+async function clientOf(req, res) {
+  const { index, calls } = await load();
+  const client = index.clients.find((c) => c.slug === req.params.slug);
+  if (!client) res.status(404).json({ ok: false, error: 'Klient nenalezen' });
+  return client ? { client, calls } : null;
+}
+
+router.post('/client/:slug/signal/:type', async (req, res) => {
+  try {
+    const found = await clientOf(req, res);
+    if (!found) return;
+    const { hidden, signals } = signalsForClient(found.client, { upcomingCalls: found.calls.calls });
+    const signal = [...signals, ...hidden].find((s) => s.type === req.params.type);
+    if (!signal) return res.status(404).json({ ok: false, error: 'Tahle položka už na seznamu není' });
+    hlidani.decideSignal(found.client.slug, signal.type, {
+      action: req.body?.action,
+      stopa: signal.stopa,
+      by: req.user?.username,
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'nešlo uložit' });
+  }
+});
+
+router.post('/client/:slug/slib', async (req, res) => {
+  try {
+    const found = await clientOf(req, res);
+    if (!found) return;
+    await closePromise(found.client.slug, req.body?.text, { by: req.user?.username });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'slib nešel odškrtnout' });
+  }
+});
+
+router.post('/client/:slug/vlajka', async (req, res) => {
+  try {
+    const found = await clientOf(req, res);
+    if (!found) return;
+    const { title, action } = req.body || {};
+    if (action !== 'uzavrit' && action !== 'trva') throw new Error('neznámá akce');
+    await moveFlag(found.client.slug, title, action, { today: todayFor(req), by: req.user?.username });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'vlajka nešla změnit' });
+  }
+});
+
+/** Take back something the brain ticked off by itself. */
+router.post('/client/:slug/odskrtnuto/:id/vratit', async (req, res) => {
+  try {
+    const found = await clientOf(req, res);
+    if (!found) return;
+    const entry = hlidani.getTicked(req.params.id);
+    if (!entry || entry.slug !== found.client.slug) throw new Error('položka neexistuje');
+    if (entry.kind === 'ukol') await ukoly.updateTask(entry.ref, { state: 'none', note: entry.puvodni || null }, { by: req.user?.username });
+    else await reopenPromise(found.client.slug, entry.ref, { by: req.user?.username });
+    hlidani.markTakenBack(entry.id, req.user?.username);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'nešlo vrátit' });
   }
 });
 

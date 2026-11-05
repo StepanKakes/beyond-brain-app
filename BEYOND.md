@@ -719,6 +719,12 @@ platná adresa, Apple jinak push odmítne (`BEYOND_VAPID_SUBJECT`).
 **Zámek závislostí:** `npm install` na Macu přepíše `package-lock.json` tisíci
 změn a může rozbít `npm ci` na Windows. Novou závislost do něj dopisuj cíleně.
 
+## Co hlídat u klienta
+
+Signály z `brain-signals.js` se počítají z dat, takže se nedají odškrtnout přímo. Člověk o nich rozhoduje: Vyřešeno schová položku, dokud je její `stopa` stejná (sliby, den poslední zprávy), Připomenout za týden ji schová na týden. Rozhodnutí jsou ve `workspace/hlidani.json`, sdílí je tým a respektují je i úlohy, protože `signalsForClient` schované vrací zvlášť v `hidden`. Položky s `actor: agent` se nepočítají do čísla u klienta. Akce s klientem: `POST /client/:slug/signal/:type`, `/slib` (zaškrtne v `_action-items.md`), `/vlajka` (přepíše Stav ve `flags.md`). Zápis do souborů je v `beyond-klient-zapis.js`.
+
+Úloha `zkontrolovat-splnene` (denně 6:25, po stažení raw) projde otevřené úkoly s klientem a sliby proti WhatsAppu a Notionu z raw. Co má přímý důkaz, zavře a uloží s důkazem do `odskrtnuto`, na klientovi jde vrátit a vrácené už znovu nezavře. Čte jen raw, živý Notion ne. Klienta bez nových dat přeskočí podle razítka, na jeden běh nejvýš 12 klientů.
+
 ## Rutiny
 
 Rutina je vlastní úloha v `system/ulohy.json` (`deliver.kind: push`), kterou si člověk nastaví sám. Běží ji stejný plánovač a stejný `runnableFromTask` jako ostatní vlastní úlohy, `server/services/beyond-rutiny.js` je jen pohled pro appku a šablony. Obrazovky: mobil `src/mobile/Routines.tsx` (Více > Rutiny), počítač `src/components/beyond/velin/RutinyPage.tsx`, společné tvary a převod rozvrhu `src/rutiny.ts`. API je `/api/beyond/velin/rutiny`, každý vidí a mění jen své (`createdBy`). Navíc je v seznamu Ranní brief, vestavěný job pro celý tým: jde jen číst a vede na něj jeho notifikace.

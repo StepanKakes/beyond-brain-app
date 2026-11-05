@@ -464,6 +464,7 @@ function parseDatedBlocks(text, kind) {
         dateIso,
         title: title || null,
         excerpt: excerptOf(sec.body),
+        body: sec.body,
       };
     })
     .filter(Boolean)

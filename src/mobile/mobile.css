@@ -1274,6 +1274,63 @@ a {
   padding-bottom: 10px;
 }
 
+.m-signal-sheet {
+  padding-bottom: 8px;
+}
+
+.m-signal-detail {
+  margin: 0 0 8px;
+  font-size: 17px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.m-signal-meaning,
+.m-signal-note {
+  margin: 0 0 14px;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--bb-ink2);
+  overflow-wrap: anywhere;
+}
+
+.m-signal-items {
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+}
+
+.m-signal-items li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 0.5px solid var(--bb-line);
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.m-signal-items li > span:first-child {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.m-signal-pair {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+
+.m-signal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .m-flag {
   flex: none;
   width: 11px;
