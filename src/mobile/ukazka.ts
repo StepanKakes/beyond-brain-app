@@ -232,6 +232,33 @@ export function mockApi(path: string, options: Options): unknown {
   if (path.startsWith('/api/beyond/velin/agent/mozek')) {
     return { items: [{ id: 3, title: 'Tón zpráv Pavlovi', reason: 'Odpovídá lépe na kratší zprávy', before: 'Delší zprávy', after: 'Krátké zprávy, jedna otázka' }] };
   }
+  if (path.startsWith('/api/beyond/velin/planner')) {
+    if (options.method === 'POST') {
+      return { ok: true, card: { id: `u${now}`, stav: 'Reels nápad', platforma: null, format: null, cil: null, cta: null, styl: null, kdo: [], datum: null, misto: null, reviewLink: null, soubor: null, text: '', ...(options.body as object) } };
+    }
+    if (options.method) return { ok: true };
+    const card = (id: string, nazev: string, stav: string, extra: object = {}) => ({ id, nazev, stav, platforma: 'Reels', format: null, cil: null, cta: null, styl: null, kdo: [], datum: null, misto: null, reviewLink: null, soubor: null, text: '', ...extra });
+    return {
+      options: {
+        stav: ['Reels nápad', 'YouTube nápad', 'Natočeno', 'Střih', 'Review', 'Opravit', 'Vydáno'],
+        platforma: ['Reels', 'Youtube'],
+        format: ['Studio talking head', 'Undocumented', 'Real life - raw', 'Vlog', 'Splitscreen', 'Miroboard'],
+        cil: ['Viral potenciál (dosah)', 'Inspirovat (tenhle týpek je cool)', 'Budovat autoritu (prodat)'],
+        cta: ['REKLAMA – FREE PROGRAM (chci)', 'Free materiály', 'Bez CTA'],
+        styl: ['L1 - low effort', 'L2 - broll', 'L3 - high effort'],
+        kdo: ['Tim', 'Jirka', 'Štěpán'],
+      },
+      notionImport: { at: iso(-600), added: 6, skipped: 0, total: 6, error: null },
+      karty: [
+        card('p1', 'Zase se to děje: osobní značka je nový 2018', 'Reels nápad', { format: 'Studio talking head', cil: 'Budovat autoritu (prodat)', cta: 'REKLAMA – FREE PROGRAM (chci)', kdo: ['Tim'], text: '## Stavba\n\n1. Hook\n2. Minulost\n3. Nová příležitost\n\n## Skript\n\nZase se to děje. Jedna z největších příležitostí na internetu v dnešní době' }),
+        card('p2', 'Founders, velmi dlouhý název karty, který se nesmí rozbít ani na úzkém displeji telefonu', 'YouTube nápad', { platforma: 'Youtube', format: 'Vlog' }),
+        card('p3', 'AI návod, undocumented studio', 'Natočeno', { format: 'Undocumented', styl: 'L1 - low effort', soubor: 'C1577.MP4' }),
+        card('p4', 'Tvůj profil musí vyprávět příběh', 'Střih', { kdo: ['Jirka'], datum: day(2) }),
+        card('p5', 'Osobní profily největších podnikatelů', 'Review', { platforma: 'Youtube', reviewLink: 'https://example.com/review', datum: day(0) }),
+        card('p6', 'Stavím firmu 200 kč', 'Vydáno', { datum: day(-3), kdo: ['Tim', 'Jirka'] }),
+      ],
+    };
+  }
   if (path.startsWith('/api/beyond/velin/obsah')) {
     if (options.method && options.method !== 'GET') return { ok: true };
     return {

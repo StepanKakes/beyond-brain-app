@@ -25,6 +25,7 @@ import * as memory from './beyond-memory.js';
 import * as mozek from './beyond-mozek.js';
 import * as ukoly from './beyond-ukoly.js';
 import * as obsah from './beyond-obsah.js';
+import * as planner from './beyond-planner.js';
 import { getPeople } from './beyond-people.js';
 import { createProposal, listProposals, rejectProposal } from './beyond-proposals.js';
 import { getBrainIndex } from './brain-index.js';
@@ -318,6 +319,54 @@ export function buildBeyondToolsServer(ctx = {}) {
     },
   );
 
+  const plan = tool(
+    'planner',
+    [
+      'Content planner Beyond, náš plán obsahu a skripty (workspace/obsah/planner.json). Akce: list, pridej, uprav, smaz.',
+      'Hodnoty polí: stav, platforma, format, cil, cta, styl a kdo jen z možností, které vrátí list. datum RRRR-MM-DD. text = skript v markdownu.',
+      'list vrací karty bez textu, text jedné karty získáš přes id. Karty neměň ani nemaž, dokud o to člověk nepožádal, kromě přidání nápadu, o který říká.',
+    ].join(' '),
+    {
+      action: z.enum(['list', 'pridej', 'uprav', 'smaz']),
+      id: z.string().optional(),
+      nazev: z.string().optional(),
+      stav: z.string().optional(),
+      platforma: z.string().nullable().optional(),
+      format: z.string().nullable().optional(),
+      cil: z.string().nullable().optional(),
+      cta: z.string().nullable().optional(),
+      styl: z.string().nullable().optional(),
+      kdo: z.array(z.string()).optional(),
+      datum: z.string().nullable().optional(),
+      misto: z.string().nullable().optional(),
+      reviewLink: z.string().nullable().optional(),
+      soubor: z.string().nullable().optional(),
+      text: z.string().optional(),
+    },
+    async ({ action, id, ...fields }) => {
+      try {
+        if (action === 'list') {
+          const { karty, options } = planner.list();
+          if (id) return text(karty.find((c) => c.id === id) || { error: `karta ${id} neexistuje` });
+          return text({ options, karty: karty.map(({ text: _text, ...card }) => card) });
+        }
+        if (action === 'pridej') {
+          const card = await planner.add(fields, { by: actor });
+          return text({ ok: true, id: card.id, stav: card.stav });
+        }
+        if (!id) return fail('id chybí');
+        if (action === 'smaz') {
+          await planner.remove(id, { by: actor });
+          return text({ ok: true });
+        }
+        const card = await planner.update(id, fields, { by: actor });
+        return text({ ok: true, id: card.id, stav: card.stav });
+      } catch (err) {
+        return fail(err?.message || String(err));
+      }
+    },
+  );
+
   const content = tool(
     'obsah',
     [
@@ -512,8 +561,8 @@ export function buildBeyondToolsServer(ctx = {}) {
     },
   );
 
-  return createSdkMcpServer({ name: 'beyond', version: '1.0.0', tools: [schedule, history, pamet, skillManage, tasks, content, message, calendar, connectors] });
+  return createSdkMcpServer({ name: 'beyond', version: '1.0.0', tools: [schedule, history, pamet, skillManage, tasks, content, plan, message, calendar, connectors] });
 }
 
 /** Tool names as the SDK exposes them, for allow lists. */
-export const BEYOND_TOOL_NAMES = ['mcp__beyond__beyond_schedule', 'mcp__beyond__hledej_historii', 'mcp__beyond__pamet', 'mcp__beyond__skill_manage', 'mcp__beyond__ukoly', 'mcp__beyond__obsah', 'mcp__beyond__zprava', 'mcp__beyond__kalendar', 'mcp__beyond__konektory'];
+export const BEYOND_TOOL_NAMES = ['mcp__beyond__beyond_schedule', 'mcp__beyond__hledej_historii', 'mcp__beyond__pamet', 'mcp__beyond__skill_manage', 'mcp__beyond__ukoly', 'mcp__beyond__obsah', 'mcp__beyond__planner', 'mcp__beyond__zprava', 'mcp__beyond__kalendar', 'mcp__beyond__konektory'];

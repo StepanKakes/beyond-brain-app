@@ -78,6 +78,7 @@ import beyondVelinRoutes from './routes/beyond-velin.js';
 import beyondWidgetRoutes from './routes/beyond-widget.js';
 import beyondGoogleRoutes from './routes/beyond-google.js';
 import { startScheduler, schedulerStatus } from './services/beyond-scheduler.js';
+import { importOnFirstStart as importPlannerOnFirstStart } from './services/beyond-planner.js';
 import beyondEventsRoutes from './routes/beyond-events.js';
 import { startTelegramBot } from './services/beyond-telegram-bot.js';
 import { applyToEnv as applyBeyondSettings } from './services/beyond-settings.js';
@@ -1570,6 +1571,7 @@ async function startServer() {
             // Settings saved in the app win over .env, for everything below.
             try { applyBeyondSettings(); } catch (err) { console.error('[settings] načtení selhalo', err?.message || err); }
             startScheduler();
+            importPlannerOnFirstStart();
             // Telegram bot by long polling, opt-in (BEYOND_TG_POLLING=1);
             // exclusive with the n8n webhook, see beyond-telegram-bot.js.
             startTelegramBot().catch((err) => console.error('[tg-bot] start failed', err?.message || err));

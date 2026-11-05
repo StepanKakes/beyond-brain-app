@@ -8,6 +8,8 @@ import { back, navigate } from './router';
 import { clearCache, refresh, useResource } from './store';
 import { PROPOSALS_KEY, PROPOSALS_PATH } from './TaskDetail';
 import { TASKS_KEY, TASKS_PATH, meKey } from './Today';
+import { Planner } from '../planner/Planner';
+import type { Request as PlannerRequest } from '../planner/model';
 import type { Counts, KpiMetric, KpiPeriod, KpiResponse, MozekItem, ObsahItem, ProposalsResponse, TasksResponse } from './types';
 import { Empty, LinkRow, Markdown, Picker, PushedBar, Section, Sheet, Skeleton, TabScreen, toast } from './ui';
 
@@ -267,7 +269,24 @@ const OBSAH_STATES: { state: ObsahItem['state']; label: string }[] = [
   { state: 'zverejneno', label: 'Zveřejněno' },
 ];
 
+const plannerRequest: PlannerRequest = (path, options) => api(path, options);
+
 export function ObsahScreen() {
+  const { data } = useResource<{ items: ObsahItem[] }>(OBSAH_KEY, OBSAH_PATH);
+  const count = (data?.items || []).filter((i) => i.state === 'navrh').length;
+  return (
+    <>
+      <PushedBar title="Obsah" />
+      <div className="m-scroll m-pushed-list">
+        <div className="pl-mobile">
+          <Planner request={plannerRequest} draggable={false} Panel={Sheet} proposalCount={count} proposals={<ObsahProposals />} />
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ObsahProposals() {
   const { data, error } = useResource<{ items: ObsahItem[] }>(OBSAH_KEY, OBSAH_PATH);
   const [showBin, setShowBin] = useState(false);
   const items = data?.items || [];
@@ -282,11 +301,9 @@ export function ObsahScreen() {
   );
   return (
     <>
-      <PushedBar title="Obsah" />
-      <div className="m-scroll m-pushed-list">
-        {!data && !error ? <Skeleton /> : null}
-        {!data && error ? <Empty title="Obsah se nenačetl">{error}</Empty> : null}
-        {data && !items.length ? <Empty title="Zatím žádný obsah">Nápady z hovorů se objeví tady</Empty> : null}
+      {!data && !error ? <Skeleton /> : null}
+      {!data && error ? <Empty title="Obsah se nenačetl">{error}</Empty> : null}
+      {data && !items.length ? <Empty title="Zatím žádný obsah">Nápady z hovorů se objeví tady</Empty> : null}
         {OBSAH_STATES.map(({ state, label }) => {
           const list = items.filter((i) => i.state === state);
           return list.length ? (
@@ -300,8 +317,7 @@ export function ObsahScreen() {
             {showBin ? 'Skrýt zahozené' : `Zahozené (${bin.length})`}
           </button>
         ) : null}
-        {showBin && bin.length ? <Section>{bin.map(row)}</Section> : null}
-      </div>
+      {showBin && bin.length ? <Section>{bin.map(row)}</Section> : null}
     </>
   );
 }

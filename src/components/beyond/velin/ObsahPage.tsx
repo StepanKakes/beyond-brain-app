@@ -68,12 +68,11 @@ export default function ObsahPage({ onOpenStudio, onOpenClient }: { onOpenStudio
   };
 
   return (
-    <div className="bb-vel">
-      <div className="bb-vel__in bb-ob">
+    <div className="pl-proposals-web">
+      <div className="bb-ob">
         <header className="bb-vel__head">
           <div>
-            <h1 className="bb-vel__title">Obsah</h1>
-            <p className="bb-vel__sub">Co brain našel v callech a připravil na stories, a co se s tím stalo</p>
+            <p className="bb-vel__sub">Co brain našel v callech a připravil na stories. Schválený návrh se objeví na boardu</p>
           </div>
           <div className="bb-ob__tools">
             <Tabs

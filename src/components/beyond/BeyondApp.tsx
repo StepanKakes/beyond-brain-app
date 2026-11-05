@@ -17,7 +17,7 @@ import FilesPage from './files/FilesPage';
 import ScreenBoundary from './ScreenBoundary';
 import BeyondClaudeLogin from './BeyondClaudeLogin';
 import Toaster from './ui/Toaster';
-import ObsahPage from './velin/ObsahPage';
+import PlannerPage from './velin/PlannerPage';
 import StudioPage from './velin/StudioPage';
 import KpiPage from './velin/KpiPage';
 import RutinyPage from './velin/RutinyPage';
@@ -428,7 +428,7 @@ export default function BeyondApp() {
           ) : view.kind === 'files' ? (
             <FilesPage path={view.path} onOpen={openFiles} />
           ) : view.kind === 'obsah' ? (
-            <ObsahPage onOpenStudio={openStudio} onOpenClient={openClient} />
+            <PlannerPage onOpenStudio={openStudio} onOpenClient={openClient} />
           ) : view.kind === 'studio' ? (
             <StudioPage />
           ) : view.kind === 'kpi' ? (

@@ -82,7 +82,7 @@ async function queryAll(dbId, body = {}) {
   return pages;
 }
 
-async function blockChildren(blockId, depth = 0) {
+export async function blockChildren(blockId, depth = 0) {
   const out = [];
   let cursor;
   do {

@@ -29,6 +29,7 @@ import * as ukoly from '../services/beyond-ukoly.js';
 import * as hlidani from '../services/beyond-hlidani.js';
 import { closePromise, moveFlag, reopenPromise } from '../services/beyond-klient-zapis.js';
 import * as obsah from '../services/beyond-obsah.js';
+import * as planner from '../services/beyond-planner.js';
 import { listConnectors } from '../services/beyond-mcp-connectors-store.js';
 import { clipFileFor, cutForItem, removeClipFile } from '../services/beyond-clip.js';
 import { pullBrain } from '../services/beyond-git.js';
@@ -468,6 +469,49 @@ router.get('/studio', async (_req, res) => {
 
 /* ---- content line ------------------------------------------------- */
 
+router.get('/planner', (_req, res) => {
+  try {
+    res.json(planner.list());
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err?.message || 'planner se nenačetl' });
+  }
+});
+
+router.post('/planner', async (req, res) => {
+  try {
+    const card = await planner.add(req.body || {}, { by: req.user?.username || 'app' });
+    res.json({ ok: true, card });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'kartu nešlo přidat' });
+  }
+});
+
+router.post('/planner/z-notionu', async (req, res) => {
+  try {
+    res.json({ ok: true, ...(await planner.importFromNotion({ by: req.user?.username || 'app' })) });
+  } catch (err) {
+    res.status(502).json({ ok: false, error: err?.message || 'import z Notionu selhal' });
+  }
+});
+
+router.patch('/planner/:id', async (req, res) => {
+  try {
+    const card = await planner.update(req.params.id, req.body || {}, { by: req.user?.username || 'app' });
+    res.json({ ok: true, card });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'kartu nešlo upravit' });
+  }
+});
+
+router.delete('/planner/:id', async (req, res) => {
+  try {
+    await planner.remove(req.params.id, { by: req.user?.username || 'app' });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'kartu nešlo smazat' });
+  }
+});
+
 router.get('/obsah', (_req, res) => {
   res.json({ items: obsah.listItems() });
 });
@@ -476,6 +520,8 @@ router.patch('/obsah/:id', async (req, res) => {
   try {
     const by = req.user?.username || 'velin';
     const it = await obsah.updateItem(req.params.id, req.body || {}, { by });
+    // Approved means it goes on the plan, there is one place to look.
+    if (req.body?.state === 'schvaleno') await planner.addFromProposal(it, { by });
     // An approved moment gets its clip cut right away, and a moment whose
     // seconds changed gets a fresh one.
     // A discarded moment does not keep its video around.

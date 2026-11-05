@@ -637,6 +637,23 @@ aplikace, která místnost vytvořila; když to nejde, Meet udělá kalendář a
 vrátí jako ruční krok.
 
 
+## Content planner
+
+Náš plán publikací, přesunutý z notionové databáze „Kalendář publikací“ v Beyond
+HQ. Karty i se skripty jsou v `workspace/obsah/planner.json` v brainu, kód je
+`server/services/beyond-planner.js`, agent na to má nástroj `planner`. Pole a
+stavy odpovídají Notionu. Klientské plannery zůstávají v Notionu.
+
+Web i mobil kreslí stejná komponenta `src/planner/Planner.tsx` (Board, Kalendář,
+Návrhy brainu). Liší se jen tahání myší na webu a obal detailu: panel na webu,
+spodní list na telefonu. Změna chování se tak dělá na jednom místě.
+
+Při prvním startu bez souboru se karty načtou z Notionu samy (`importOnFirstStart`),
+potom jde import spustit `POST /planner/z-notionu`. Přidá jen karty, které tu ještě
+nejsou, a existující nepřepisuje. Do Notionu se nezapisuje nic. Karty s názvem
+„Sloučeno, smazat“ bez stavu a prázdné stránky se nepřenáší. Schválený návrh brainu
+(`PATCH /obsah/:id` se `state: schvaleno`) založí kartu právě jednou, podle `obsahId`.
+
 ## Obsah pro Instagram
 
 Osa `workspace/obsah/osa.json` v brainu (reel = moment z callu se sekundami,
