@@ -307,7 +307,17 @@ export function mockSocket(message: Record<string, unknown>, emit: (m: Record<st
   }, pause + 300 + words.length * 45);
 }
 
-const UKAZKA_VYSTUP = 'Tim, Honza Novák: řešili nízký počet hovorů z DM. Shodli se na dvou nových hácích do pátku\n\nŠtěpán, Eva Malá: check-in, tržby rostou. Eva pošle čísla za říjen, na nás je úprava nabídky';
+const UKAZKA_VYSTUP = [
+  '## Včera na callech',
+  '',
+  '- **Honza Novák:** domluvili nový ceník, nabídku pošle do **pátku**',
+  '- **Petra Malá:** drhne natáčení, potřebuje scénáře',
+  '',
+  '## Na nás',
+  '',
+  '1. Poslat Honzovi šablonu nabídky',
+  '2. Petře **tři scénáře** do středy',
+].join('\n');
 const UKAZKA_RUTINA = {
   name: 'ranni-souhrn-hovoru',
   title: 'Ranní souhrn hovorů',
