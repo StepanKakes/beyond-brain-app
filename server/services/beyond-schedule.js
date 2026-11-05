@@ -232,6 +232,18 @@ function nextRunWall(schedule, { lastW, nowW, zone }) {
   }
 }
 
+/**
+ * Where a custom task's clock starts. A cron schedule only looks forward from
+ * its last run, so one that has never run would get a single minute to fire, and
+ * lose it if another job holds that tick. Counting from when it was made lets a
+ * missed first slot fire late, like every later one. Daily and weekly schedules
+ * read "already ran today" from this, so they keep starting from nothing.
+ */
+export function taskLastRun(task, lastRunAt) {
+  if (lastRunAt) return lastRunAt;
+  return task?.schedule?.kind === 'cron' ? task.createdAt || null : null;
+}
+
 /** Is the job due at `now`? A schedule with a fixed time fires once per period. */
 export function isDueAt(schedule, { lastRunAt = null, now = new Date(), zone } = {}) {
   const nowW = toWall(now, zone);

@@ -36,7 +36,7 @@ import { countPending, createProposal, listProposals, sentRecently, slugsWithPen
 import { usesAlt } from './beyond-alt-model.js';
 import { diffModels } from './beyond-model-watch.js';
 import { broadcast as tgBroadcast, sendTo as tgSendTo, unconfiguredReason as tgReason } from './beyond-telegram.js';
-import { isDueAt, scheduleFromLegacy } from './beyond-schedule.js';
+import { isDueAt, scheduleFromLegacy, taskLastRun } from './beyond-schedule.js';
 import { listTasks, phoneZone, scheduleOverride } from './beyond-tasks.js';
 import { render as renderTemplate } from './beyond-events.js';
 import { countPending as mozekPending } from './beyond-mozek.js';
@@ -1983,7 +1983,8 @@ export function isDue(job, now = new Date()) {
   const schedule = effectiveSchedule(job);
   const state = getJobState(job.name);
   const zone = job.custom ? phoneZone(job.task?.createdBy) || undefined : undefined;
-  return isDueAt(schedule, { lastRunAt: state.lastRunAt, now, zone });
+  const lastRunAt = job.custom ? taskLastRun(job.task, state.lastRunAt) : state.lastRunAt;
+  return isDueAt(schedule, { lastRunAt, now, zone });
 }
 
 export { markJobRan, ranToday, resolveBrainPath, fs, path };

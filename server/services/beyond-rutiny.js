@@ -6,7 +6,7 @@
  * scheduler already does that. This is the view the app needs: what is set up,
  * what it said last, and the two templates most people start from.
  */
-import { describeSchedule, isDueAt } from './beyond-schedule.js';
+import { describeSchedule, isDueAt, taskLastRun } from './beyond-schedule.js';
 import { RUN_LOG_MARK, getJobState, listRuns, markJobRan } from './beyond-runs.js';
 import { listTasks, phoneZone, setPhoneZone } from './beyond-tasks.js';
 
@@ -138,7 +138,7 @@ export function skipMissedSlot(task) {
   if (task.enabled === false) return;
   const { lastRunAt } = getJobState(task.name) || {};
   const zone = phoneZone(task.createdBy) || undefined;
-  if (isDueAt(task.schedule, { lastRunAt: lastRunAt || null, zone })) markJobRan(task.name);
+  if (isDueAt(task.schedule, { lastRunAt: taskLastRun(task, lastRunAt), zone })) markJobRan(task.name);
 }
 
 /**
