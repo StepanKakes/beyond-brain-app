@@ -25,7 +25,7 @@ function apiKey() {
   return k && k.trim() ? k.trim() : null;
 }
 
-/** Something to read calls from: Cal.com, a person's Google calendar, or both. */
+/** Something to read calls from: Cal.com, the Beyond calendar, or both. */
 export function isConfigured() {
   return Boolean(apiKey()) || anyCalendar();
 }
@@ -178,16 +178,13 @@ export async function getCalls({ clients = [], people = [], days = 14, force = f
     }
   }
 
-  // The shared calendar first, then each person's own; the module caches the
-  // feed itself. An event someone was invited to sits in both with one UID,
-  // and the shared copy is the one that knows who runs it.
+  // Only the shared calendar: everything we plan lives there, and the invited
+  // e-mail says who runs it. The module caches the feed itself.
   const google = [];
   const ownEmails = people.map((p) => p.calcomEmail).filter(Boolean);
-  for (const source of [SHARED_CALENDAR, ...people]) {
-    const r = await calendarBookings(source, { from, to, force, ownEmails, people, includeBlocks });
-    if (r.error) calendarErrors[source.key] = r.error;
-    google.push(...r.events);
-  }
+  const shared = await calendarBookings(SHARED_CALENDAR, { from, to, force, ownEmails, people, includeBlocks });
+  if (shared.error) calendarErrors[SHARED_CALENDAR.key] = shared.error;
+  google.push(...shared.events);
 
   // The same call booked through Cal.com and sitting in the calendar shows
   // once: Cal.com wins, a calendar event within ten minutes of it is dropped.
@@ -222,8 +219,8 @@ function rehydrate(bookings, clients, people, error = null, calendarErrors = {})
     .sort((a, b) => a.startIso.localeCompare(b.startIso));
   return {
     configured: true,
-    // Cal.com trouble; a person's own calendar failing is reported per person
-    // so the calls that did load still show.
+    // Cal.com trouble; the calendar failing is reported on its own so the
+    // calls that did load still show.
     error,
     calendarErrors,
     calls,

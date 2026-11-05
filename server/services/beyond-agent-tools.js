@@ -434,8 +434,9 @@ export function buildBeyondToolsServer(ctx = {}) {
   const calendar = tool(
     'kalendar',
     [
-      'Plánování schůzek v Google kalendáři Beyond kalendář, přes Timův Workspace účet, takže Meet vzniká pod placenou licencí.',
-      'Akce: volno (od, do, mentor), seznam (od, do), vytvor (nazev, zacatek, konec, mentor, ucastnici), uprav (id a co se mění), zrus (id).',
+      'Plánování schůzek v Google kalendáři Beyond kalendář, přes Timův Workspace účet, takže Meet vzniká pod placenou licencí. Jiné kalendáře se nečtou.',
+      'Schůzka se přiřazuje mentorem: tim je tim@creationwithtim.com, stepan je stepan.kakes1@gmail.com, přidá se jako účastník. Kolize platí jen pro stejného mentora; nepřiřazená schůzka blokuje oba.',
+      'Akce: volno (od, do, mentor), seznam (od, do), vytvor (nazev, zacatek, konec, mentor, ucastnici), uprav (id a co se mění, mentor přeřadí), zrus (id).',
       'Časy vždy s pásmem, např. 2026-11-10T09:00:00+01:00. Před použitím si přečti system/kalendare.md.',
       'vytvor a uprav samy kontrolují kolize a při kolizi nebo neznámé dostupnosti nic neudělají a vrátí důvod; pres_kolizi použij, jen když to člověk výslovně řekl.',
       'poslat_pozvanky jde klientům: nastav true, jen když to člověk v tomhle rozhovoru výslovně schválil. Bez toho účastníci nic nedostanou a musíš to říct.',

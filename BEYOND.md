@@ -601,25 +601,23 @@ AGPL-3.0-or-later, dědí z claudecodeui upstreamu. Beyond Brain doplňky jsou p
 stejnou licencí.
 
 
-## Google kalendář lidí
+## Google kalendář
 
-Hovory nejsou jen z Cal.com; Tim je má často rovnou v Google Kalendáři. Každý
-z nás si na Velíně (Hovory dnes → Napojit kalendář) vloží tajnou adresu
-svého kalendáře ve formátu iCal; uloží se jako `BEYOND_ICS_<KEY>` v nastavení
-appky. `server/services/beyond-kalendar.js` feed každých pět minut stáhne,
+Appka čte z Googlu jen společný Beyond kalendář, osobní kalendáře neřeší. Na
+Velíně (Hovory dnes → Napojit kalendář) se vloží jeho tajná adresa ve formátu
+iCal; uloží se jako `BEYOND_ICS_BEYOND` v nastavení appky, adresu vidí vlastník
+kalendáře. `server/services/beyond-kalendar.js` feed každých pět minut stáhne,
 rozbalí jednoduchá opakování (denně, týdně s dny, interval, until, count,
 EXDATE) a jako hovor bere schůzku s dalším účastníkem nebo s odkazem na
-meet, zoom a podobně. `beyond-calls.js` je sloučí s Cal.com; stejný hovor
+meet, zoom a podobně. `beyond-calls.js` ho sloučí s Cal.com; stejný hovor
 z obou zdrojů se ukáže jednou, Cal.com má přednost. Žádný Google projekt ani
 OAuth, adresa nevyprší; když ji člověk v Googlu resetuje, vloží novou.
 
-Společný Beyond kalendář se napojuje stejně, klíč je `BEYOND_ICS_BEYOND`
-(řádek Beyond kalendář ve Velíně, adresu vidí vlastník kalendáře). Kdo schůzku
-vede, se pozná podle toho, kdo z nás je pozvaný účastník. Událost bez dalšího
-účastníka a bez odkazu je blok: ukáže ji jen obrazovka Hovory, úlohám
-(briefy, připomínky) se nepředává. Stejná událost ve společném i osobním
-kalendáři se ukáže jednou. Celý systém kalendářů popisuje
-`system/kalendare.md` v brainu.
+Kdo schůzku vede, se pozná podle toho, kdo z nás je pozvaný účastník
+(`tim@creationwithtim.com`, `stepan.kakes1@gmail.com`), bez ohledu na jeho
+odpověď. Událost bez dalšího účastníka a bez odkazu je blok: ukáže ji jen
+obrazovka Hovory, úlohám (briefy, připomínky) se nepředává. Celý systém
+kalendářů popisuje `system/kalendare.md` v brainu.
 
 ## Plánování schůzek přes Google
 
@@ -631,7 +629,8 @@ Klient je v Google Cloud projektu Beyond Brain typu Internal, redirect je
 `https://brain.growbeyond.cz`. Povoluje se na Velíně v řádku Plánování.
 
 Agent na to má nástroj `kalendar` (volno, seznam, vytvor, uprav, zrus). Kalendář
-se hledá podle názvu. Kolize a neznámá dostupnost zápis zastaví, pozvánky jdou jen
+se hledá podle názvu. Kolize se počítá z Beyond kalendáře a jen pro stejného
+mentora, nepřiřazená událost blokuje oba. Kolize zápis zastaví, pozvánky jdou jen
 s `poslat_pozvanky`, naplánované běhy smí jen číst. U schůzky, kterou vede Štěpán,
 vzniká místnost přes Meet API (otevřená, Štěpán co-host), protože role přidá jen
 aplikace, která místnost vytvořila; když to nejde, Meet udělá kalendář a co-host se

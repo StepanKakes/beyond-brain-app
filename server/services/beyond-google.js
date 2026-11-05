@@ -213,40 +213,61 @@ function mentorsOf(key) {
   return keys.map(person);
 }
 
+/** Those of us an event on the shared calendar is assigned to: whoever it invites. */
+function assignedTo(ev) {
+  const invited = (ev.attendees || []).map((a) => a.email?.toLowerCase()).filter(Boolean);
+  return getPeople().filter((p) => p.calcomEmail && invited.includes(p.calcomEmail.toLowerCase()));
+}
+
 /**
- * Busy times of each mentor's primary calendar and the shared one. A calendar
- * Google will not show comes back with `neznamo`: unknown is never free.
+ * What each mentor has on the shared calendar, the only one we plan by. An
+ * event blocks the people assigned to it, so Tim and Štěpán can run calls at
+ * the same time; one assigned to nobody blocks both until someone takes it.
+ * A window too long to read whole comes back with `neznamo`: unknown is never free.
  */
 export async function availability({ kdo = 'oba', od, do: until }) {
-  const from = instant(od, 'od');
-  const to = instant(until, 'do');
-  const shared = await sharedCalendarId();
+  const timeMin = instant(od, 'od');
+  const timeMax = instant(until, 'do');
   const people = mentorsOf(kdo);
-  const items = [...people.map((p) => ({ id: p.calcomEmail })), { id: shared }];
-  const res = await api(`${CALENDAR_API}/freeBusy`, {
-    method: 'POST',
-    body: { timeMin: from, timeMax: to, timeZone: zone(), items },
+  const calendarId = await sharedCalendarId();
+  const res = await api(`${CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events`, {
+    query: { timeMin, timeMax, singleEvents: true, orderBy: 'startTime', maxResults: 250 },
   });
-  const read = (id, name) => {
-    const c = res.calendars?.[id] || {};
-    const problem = c.errors?.[0]?.reason || (res.calendars?.[id] ? null : 'nevráceno');
-    return { kalendar: name, obsazeno: c.busy || [], neznamo: problem ? `Google kalendář neukázal (${problem}), zkontroluj sdílení volno/obsazeno` : null };
-  };
-  return [...people.map((p) => read(p.calcomEmail, p.displayName)), read(shared, SHARED_NAME)];
+  const events = (res.items || [])
+    .filter((ev) => ev.status !== 'cancelled' && ev.transparency !== 'transparent')
+    .map((ev) => ({ ev, assigned: assignedTo(ev) }));
+  return people.map((p) => ({
+    kalendar: SHARED_NAME,
+    mentor: p.displayName,
+    email: p.calcomEmail,
+    obsazeno: events
+      .filter(({ assigned }) => !assigned.length || assigned.some((a) => a.key === p.key))
+      .map(({ ev, assigned }) => ({
+        id: ev.id,
+        serie: ev.recurringEventId || null,
+        nazev: ev.summary || null,
+        start: ev.start?.dateTime || ev.start?.date,
+        end: ev.end?.dateTime || ev.end?.date,
+        prirazeno: assigned.length ? assigned.map((a) => a.displayName).join(' a ') : null,
+      })),
+    neznamo: res.nextPageToken ? 'rozsah je moc dlouhý na přečtení celý, zkrať ho' : null,
+  }));
 }
 
 const overlaps = (a, b) => Date.parse(a.start) < Date.parse(b.end) && Date.parse(b.start) < Date.parse(a.end);
 
-/** What stands in the way of this slot; `ignore` is the event's own current time. */
-async function obstacles(mentor, start, end, ignore = null) {
+/** What stands in the way of this slot; `ignoreId` is the event being moved. */
+async function obstacles(mentor, start, end, ignoreId = null) {
   const calendars = await availability({ kdo: mentor, od: start, do: end });
   const slot = { start, end };
   const out = [];
   for (const c of calendars) {
-    if (c.neznamo) out.push(`${c.kalendar}: ${c.neznamo}`);
+    if (c.neznamo) out.push(`${c.mentor}: ${c.neznamo}`);
     for (const b of c.obsazeno) {
-      const own = ignore && Date.parse(b.start) === Date.parse(ignore.start) && Date.parse(b.end) === Date.parse(ignore.end);
-      if (!own && overlaps(b, slot)) out.push(`${c.kalendar}: obsazeno ${b.start} až ${b.end}`);
+      const own = ignoreId && (b.id === ignoreId || b.serie === ignoreId);
+      if (!own && overlaps(b, slot)) {
+        out.push(`${c.mentor}: ${b.nazev || 'schůzka'} ${b.start} až ${b.end}${b.prirazeno ? '' : ' (nepřiřazená, blokuje oba)'}`);
+      }
     }
   }
   return out;
@@ -409,7 +430,7 @@ export async function updateMeeting({ id, nazev, zacatek, konec, mentor, ucastni
 
   const timeChanged = Date.parse(start) !== Date.parse(before.start) || Date.parse(end) !== Date.parse(before.end);
   if ((timeChanged || mentor) && !presKolizi) {
-    const blocked = await obstacles(checkFor, start, end, before);
+    const blocked = await obstacles(checkFor, start, end, id);
     if (blocked.length) return { pripraveno: false, zmeneno: false, kolize: blocked };
   }
 

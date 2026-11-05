@@ -1,13 +1,12 @@
 /**
- * Beyond Brain — each person's Google calendar, read through its secret
- * iCal address.
+ * Beyond Brain — the shared Beyond calendar, read through its secret iCal
+ * address. It is the only Google calendar the app reads: every meeting lives
+ * there and is assigned to Tim or Štěpán by inviting their e-mail.
  *
- * Not every call is booked through Cal.com; Tim's often sit straight in his
- * Google calendar. Google gives every calendar a private iCal address
- * (Settings → the calendar → "Secret address in iCal format"), and reading
- * that needs no Google Cloud project, no OAuth consent screen, no token that
- * expires: the person pastes one link once. The address is stored per
- * person as `BEYOND_ICS_<KEY>` in the app settings.
+ * Google gives every calendar a private iCal address (Settings → the calendar
+ * → "Secret address in iCal format"), and reading that needs no Google Cloud
+ * project, no OAuth consent screen, no token that expires: the owner pastes
+ * one link once. It is stored as `BEYOND_ICS_BEYOND` in the app settings.
  *
  * The feed is fetched every few minutes and cut down to what looks like a
  * call: a timed event in the window with at least one other attendee, a
@@ -15,8 +14,6 @@
  * expanded (daily, weekly with days, an interval, until or count, EXDATE);
  * anything fancier shows only its first occurrence.
  */
-import { getPeople } from './beyond-people.js';
-
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 10_000;
 const cache = new Map(); // personKey → { at, url, events }
@@ -37,25 +34,24 @@ export function icsUrlFor(personKey) {
  */
 export const SHARED_CALENDAR = { key: 'beyond', displayName: 'Beyond kalendář', shared: true };
 
-/** Which calendars are wired, for the UI: each person plus the shared one. */
+/** Whether the one calendar we plan by is wired, for the UI. */
 export function calendarStatus() {
-  const out = {};
-  for (const p of getPeople()) out[p.key] = Boolean(icsUrlFor(p.key));
-  out[SHARED_CALENDAR.key] = Boolean(icsUrlFor(SHARED_CALENDAR.key));
-  return out;
+  return { [SHARED_CALENDAR.key]: Boolean(icsUrlFor(SHARED_CALENDAR.key)) };
 }
 
 export function anyCalendar() {
-  return Boolean(icsUrlFor(SHARED_CALENDAR.key)) || getPeople().some((p) => icsUrlFor(p.key));
+  return Boolean(icsUrlFor(SHARED_CALENDAR.key));
 }
 
 /**
  * Who runs an event on the shared calendar. The calendar itself is the
- * organizer there, so the only signal is which of us was added as an attendee.
+ * organizer there, so the signal is which of us was added as an attendee. The
+ * assignment stands whatever they answered: a declined copy in someone's own
+ * calendar does not hand the call to nobody.
  */
 function sharedHosts(ev, people) {
   const going = people.filter((p) =>
-    p.calcomEmail && ev.attendees.some((a) => a.status !== 'DECLINED' && a.email?.toLowerCase() === p.calcomEmail.toLowerCase()));
+    p.calcomEmail && ev.attendees.some((a) => a.email?.toLowerCase() === p.calcomEmail.toLowerCase()));
   if (!going.length) return [{ email: null, name: SHARED_CALENDAR.displayName, username: null }];
   return going.map((p) => ({ email: p.calcomEmail, name: p.displayName, username: null }));
 }

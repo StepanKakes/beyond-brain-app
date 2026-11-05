@@ -12,7 +12,6 @@
  * returned to the browser masked.
  */
 import { getConnection } from '../modules/database/connection.js';
-import { getPeople } from './beyond-people.js';
 import { SHARED_CALENDAR, icsKeyFor } from './beyond-kalendar.js';
 import { wahaConfig } from './beyond-waha.js';
 
@@ -55,14 +54,6 @@ export const CATALOG = [
   { group: 'Kalendář', key: 'BEYOND_GOOGLE_CLIENT_SECRET', label: 'Google Client Secret', secret: true },
   { group: 'Kalendář', key: 'BEYOND_GOOGLE_REFRESH_TOKEN', label: 'Google přístup', hint: 'Doplní se samo po kliknutí na Povolit na Velíně.', secret: true },
   { group: 'Kalendář', key: 'BEYOND_GOOGLE_ACCOUNT', label: 'Připojený Google účet', hint: 'Doplní se samo po kliknutí na Povolit na Velíně.' },
-  // One Google calendar per person, by its secret iCal address.
-  ...getPeople().map((p) => ({
-    group: 'Kalendář',
-    key: icsKeyFor(p.key),
-    label: `Google kalendář: ${p.displayName}`,
-    hint: 'Tajná adresa kalendáře ve formátu iCal (Google Kalendář → Nastavení → kalendář → Tajná adresa ve formátu iCal). Hovory z něj se ukážou vedle Cal.com.',
-    secret: true,
-  })),
 
   { group: 'Události', key: 'BEYOND_EVENT_SECRET_WAHA', label: 'Secret cesty waha', hint: 'Stejná hodnota jako WHATSAPP_HOOK_HMAC_KEY ve WAHA.', secret: true },
   { group: 'Události', key: 'BEYOND_EVENT_SECRET_CALCOM', label: 'Secret cesty calcom', hint: 'Secret webhooku v Cal.com.', secret: true },
