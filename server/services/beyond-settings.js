@@ -32,6 +32,9 @@ export const CATALOG = [
   { group: 'Kde jste', key: 'BEYOND_TZ', label: 'Časové pásmo', hint: 'Denní úlohy, „dnes" u úkolů a slova jako zítra. Např. Europe/Prague nebo Asia/Bangkok.', placeholder: 'Europe/Prague' },
   { group: 'Kde jste', key: 'BEYOND_DEFAULT_OWNER', label: 'Výchozí vlastník úkolů', hint: 'Klíč osoby (tim, stepan), komu připadne úkol od agenta, když nevíme lépe.', placeholder: 'tim' },
 
+  { group: 'Beo', key: 'BEYOND_BEO_API_KEY', label: 'Klíč do Bea', hint: 'MCP klíč z Bea (Nastavení, MCP). Planner přes něj plánuje příspěvky na Instagram.', secret: true },
+  { group: 'Beo', key: 'BEYOND_BEO_URL', label: 'Adresa Bea', placeholder: 'https://app.growbeyond.cz' },
+
   { group: 'Notion', key: 'BEYOND_NOTION_TOKEN', label: 'Notion integration token', hint: 'Registr klientů, ranní pully a zápis po callu (Coaching Calls, Týdenní úkoly, Úkoly). Bez něj appka do Notionu nepíše.', secret: true },
 
   { group: 'Telegram', key: 'BEYOND_TG_BOT_TOKEN', label: 'Bot token', hint: 'Token bota od BotFather.', secret: true },

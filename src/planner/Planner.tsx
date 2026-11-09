@@ -28,6 +28,7 @@ import {
   type PlannerResponse,
   type Request,
 } from './model';
+import { InstagramPublikace } from './Instagram';
 import './planner.css';
 
 /**
@@ -175,11 +176,13 @@ function TextField({
 function CardDetail({
   card,
   options,
+  request,
   onPatch,
   onDelete,
 }: {
   card: PlannerCard;
   options: PlannerOptions;
+  request: Request;
   onPatch: (patch: Partial<PlannerCard>) => void;
   onDelete: () => void;
 }) {
@@ -266,6 +269,8 @@ function CardDetail({
         <TextField label="Review link" value={card.reviewLink} placeholder="Odkaz na střih" onSave={(reviewLink) => onPatch({ reviewLink })} />
         <TextField label="Soubor" value={card.soubor} placeholder="Např. C1577.MP4" onSave={(soubor) => onPatch({ soubor })} />
       </div>
+
+      {card.platforma !== 'Youtube' ? <InstagramPublikace card={card} request={request} /> : null}
 
       <div className="pl-script-head">
         <h3>Skript a poznámky</h3>
@@ -806,7 +811,7 @@ export function Planner({
 
       {open && options ? (
         <Panel title="Karta" onClose={() => setOpenId(null)}>
-          <CardDetail key={open.id} card={open} options={options} onPatch={(change) => patch(open.id, change)} onDelete={() => remove(open)} />
+          <CardDetail key={open.id} card={open} options={options} request={request} onPatch={(change) => patch(open.id, change)} onDelete={() => remove(open)} />
         </Panel>
       ) : null}
 

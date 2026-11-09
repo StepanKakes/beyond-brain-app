@@ -708,3 +708,31 @@ select.pl-field-input {
   .pl-card:active,
   .pl-btn:active { transform: none; }
 }
+
+/* Instagram přes Beo */
+.pl-ig {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pl-ig-stav {
+  margin: 0;
+  font-size: 14px;
+  color: var(--bb-ink2);
+}
+.pl-ig-chyba {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 13px;
+  background: var(--bb-danger-soft);
+  color: var(--bb-danger);
+}
+.pl-ig-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pl-ig-form .pl-fields,
+.pl-ig-form .pl-field { border-top: 0; }
+.pl-ig-popisek { min-height: 100px; }

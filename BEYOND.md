@@ -654,6 +654,17 @@ nejsou, a existující nepřepisuje. Do Notionu se nezapisuje nic. Karty s názv
 „Sloučeno, smazat“ bez stavu a prázdné stránky se nepřenáší. Schválený návrh brainu
 (`PATCH /obsah/:id` se `state: schvaleno`) založí kartu právě jednou, podle `obsahId`.
 
+**Vydání na Instagram přes Beo.** Detail karty (mimo YouTube) má blok Instagram
+(`src/planner/Instagram.tsx`): soubory, cover reelu, čas a popisek. Jedno video
+je reel, jedna fotka foto, víc souborů carousel. Prohlížeč si od serveru vezme
+podepsané adresy (`POST /planner/instagram/nahrani`) a nahraje soubory rovnou do
+úložiště Bea, pak `POST /planner/:id/instagram` naplánuje příspěvek. Vydává Beo
+(cron každou minutu, `src/lib/instagram/publikace.ts` v beo-saas). Server mluví
+s Beem přes `server/services/beyond-beo-publikace.js` s klíčem
+`BEYOND_BEO_API_KEY` (MCP klíč z Bea), ten se do prohlížeče nedostane. Co vyšlo,
+přepne kartu na Vydáno. Účet musí mít v Beovi povolené publikování (Nastavení,
+Instagram, Povolit publikování, jen pro správce platformy).
+
 ## Obsah pro Instagram
 
 Osa `workspace/obsah/osa.json` v brainu (reel = moment z callu se sekundami,

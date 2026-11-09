@@ -30,6 +30,7 @@ import * as hlidani from '../services/beyond-hlidani.js';
 import { closePromise, moveFlag, reopenPromise } from '../services/beyond-klient-zapis.js';
 import * as obsah from '../services/beyond-obsah.js';
 import * as planner from '../services/beyond-planner.js';
+import * as beoPublikace from '../services/beyond-beo-publikace.js';
 import { listConnectors } from '../services/beyond-mcp-connectors-store.js';
 import { clipFileFor, cutForItem, removeClipFile } from '../services/beyond-clip.js';
 import { pullBrain } from '../services/beyond-git.js';
@@ -491,6 +492,41 @@ router.post('/planner/z-notionu', async (req, res) => {
     res.json({ ok: true, ...(await planner.importFromNotion({ by: req.user?.username || 'app' })) });
   } catch (err) {
     res.status(502).json({ ok: false, error: err?.message || 'import z Notionu selhal' });
+  }
+});
+
+// Instagram přes Beo. Stav se ptá najednou za všechny karty na obrazovce.
+router.get('/planner/instagram', async (req, res) => {
+  try {
+    const ids = String(req.query.ids || '').split(',').map((s) => s.trim()).filter(Boolean);
+    res.json({ ok: true, ...(await beoPublikace.stav(ids)) });
+  } catch (err) {
+    res.status(502).json({ ok: false, error: err?.message || 'Beo neodpovědělo' });
+  }
+});
+
+router.post('/planner/instagram/nahrani', async (req, res) => {
+  try {
+    res.json({ ok: true, ...(await beoPublikace.nahrani(req.body?.soubory || [])) });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'nahrání nešlo připravit' });
+  }
+});
+
+router.post('/planner/:id/instagram', async (req, res) => {
+  try {
+    res.json({ ok: true, post: await beoPublikace.naplanuj(req.params.id, req.body || {}) });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'příspěvek nešlo naplánovat' });
+  }
+});
+
+router.delete('/planner/instagram/:postId', async (req, res) => {
+  try {
+    await beoPublikace.zrus(req.params.postId);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'příspěvek nešlo zrušit' });
   }
 });
 
