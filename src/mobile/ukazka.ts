@@ -232,6 +232,21 @@ export function mockApi(path: string, options: Options): unknown {
   if (path.startsWith('/api/beyond/velin/agent/mozek')) {
     return { items: [{ id: 3, title: 'Tón zpráv Pavlovi', reason: 'Odpovídá lépe na kratší zprávy', before: 'Delší zprávy', after: 'Krátké zprávy, jedna otázka' }] };
   }
+  if (path.startsWith('/api/beyond/velin/planner') && path.includes('/instagram')) {
+    if (path.includes('/nahrani')) return { ok: true, soubory: [] };
+    if (options.method === 'DELETE') return { ok: true };
+    if (options.method === 'POST') {
+      return { ok: true, post: { id: `ig${now}`, typ: 'reel', stav: 'ceka', naplanovano_na: iso(60 * 24), publikovano_at: null, permalink: null, chyba: null, popisek: '', ...(options.body as object) } };
+    }
+    return {
+      ok: true,
+      muze_publikovat: true,
+      posty: {
+        p4: { id: 'ig1', typ: 'reel', stav: 'ceka', naplanovano_na: `${day(2)}T18:00:00`, publikovano_at: null, permalink: null, chyba: null, popisek: 'Tvůj profil musí vyprávět příběh' },
+        p6: { id: 'ig2', typ: 'reel', stav: 'publikovano', naplanovano_na: `${day(-3)}T18:00:00`, publikovano_at: `${day(-3)}T18:01:00`, permalink: 'https://www.instagram.com/', chyba: null, popisek: '' },
+      },
+    };
+  }
   if (path.startsWith('/api/beyond/velin/planner')) {
     if (options.method === 'POST') {
       return { ok: true, card: { id: `u${now}`, stav: 'Reels nápad', platforma: null, format: null, cil: null, cta: null, styl: null, kdo: [], datum: null, misto: null, reviewLink: null, soubor: null, text: '', ...(options.body as object) } };

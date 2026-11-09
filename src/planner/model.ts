@@ -116,3 +116,84 @@ export function monthLabel(year: number, month: number): string {
 export function isUrl(value: string | null): boolean {
   return Boolean(value && /^https?:\/\//i.test(value));
 }
+
+/* Fáze pro oko. Data drží stavy z Notionu (dva druhy nápadu, Opravit), ale
+   člověk vidí jednu cestu: nápad, natočeno, střih, review, vydáno. Opravit je
+   review, které se vrátilo, ne další krok. */
+export type Faze = 'napad' | 'natoceno' | 'strih' | 'review' | 'vydano';
+
+export const FAZE: { key: Faze; label: string; tone: string }[] = [
+  { key: 'napad', label: 'Nápady', tone: 'purple' },
+  { key: 'natoceno', label: 'Natočeno', tone: 'blue' },
+  { key: 'strih', label: 'Střih', tone: 'yellow' },
+  { key: 'review', label: 'Review', tone: 'pink' },
+  { key: 'vydano', label: 'Vydáno', tone: 'green' },
+];
+
+export function fazeKarty(stav: string): Faze {
+  if (stav === 'Natočeno') return 'natoceno';
+  if (stav === 'Střih') return 'strih';
+  if (stav === 'Review' || stav === 'Opravit') return 'review';
+  if (stav === 'Vydáno') return 'vydano';
+  return 'napad';
+}
+
+/** Stav, který se uloží, když kartu někdo pošle do fáze. */
+export function stavProFazi(faze: Faze, card: Pick<PlannerCard, 'platforma'>): string {
+  switch (faze) {
+    case 'napad':
+      return card.platforma === 'Youtube' ? 'YouTube nápad' : 'Reels nápad';
+    case 'natoceno':
+      return 'Natočeno';
+    case 'strih':
+      return 'Střih';
+    case 'review':
+      return 'Review';
+    default:
+      return 'Vydáno';
+  }
+}
+
+export function dalsiFaze(faze: Faze): Faze | null {
+  const at = FAZE.findIndex((f) => f.key === faze);
+  return at >= 0 && at < FAZE.length - 1 ? FAZE[at + 1].key : null;
+}
+
+const DNY = ['ne', 'po', 'út', 'st', 'čt', 'pá', 'so'];
+
+/** „út 11. 11.“, u jiného roku i s rokem. */
+export function denLabel(iso: string): string {
+  const [year, month, day] = iso.slice(0, 10).split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  const base = `${DNY[date.getDay()]} ${day}. ${month}.`;
+  return year === new Date().getFullYear() ? base : `${base} ${year}`;
+}
+
+/** Relativně, kde to jde: dnes, zítra, včera, jinak den. */
+export function kdyLabel(iso: string): string {
+  const day = iso.slice(0, 10);
+  const today = todayIso();
+  const shift = (by: number) => isoDay(new Date(Date.now() + by * 86400000));
+  if (day === today) return 'dnes';
+  if (day === shift(1)) return 'zítra';
+  if (day === shift(-1)) return 'včera';
+  return denLabel(day);
+}
+
+export function casLabel(isoDateTime: string): string {
+  return new Date(isoDateTime).toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' });
+}
+
+/** Příspěvek na Instagram, jak ho vrací Beo přes server brainu. */
+export type IgPost = {
+  id: string;
+  typ: 'foto' | 'reel' | 'carousel';
+  stav: 'ceka' | 'zpracovava' | 'publikovano' | 'chyba' | 'zruseno';
+  naplanovano_na: string;
+  publikovano_at: string | null;
+  permalink: string | null;
+  chyba: string | null;
+  popisek: string;
+};
+
+export const IG_PATH = `${PLANNER_PATH}/instagram`;

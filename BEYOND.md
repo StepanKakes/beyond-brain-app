@@ -644,8 +644,12 @@ HQ. Karty i se skripty jsou v `workspace/obsah/planner.json` v brainu, kód je
 `server/services/beyond-planner.js`, agent na to má nástroj `planner`. Pole a
 stavy odpovídají Notionu. Klientské plannery zůstávají v Notionu.
 
-Web i mobil kreslí stejná komponenta `src/planner/Planner.tsx` (Board, Kalendář,
-Návrhy brainu). Liší se jen tahání myší na webu a obal detailu: panel na webu,
+Web i mobil kreslí stejná komponenta `src/planner/Planner.tsx` (Fáze, Kalendář,
+Návrhy brainu, panel Jak to funguje). Board ukazuje pět fází (`FAZE` v `model.ts`):
+oba druhy nápadu jsou jeden sloupec a Opravit je Review se štítkem, data ale drží
+stavy z Notionu beze změny. Detail karty má nahoře cestu fázemi, pod ní Vydání
+(den, platforma, Instagram), Zadání, Podklady a skript. Stav příspěvků na Instagram
+se načítá jedním dotazem za všechny karty a ukazuje se i na kartách a v kalendáři. Liší se jen tahání myší na webu a obal detailu: panel na webu,
 spodní list na telefonu. Změna chování se tak dělá na jednom místě.
 
 Při prvním startu bez souboru se karty načtou z Notionu samy (`importOnFirstStart`),
