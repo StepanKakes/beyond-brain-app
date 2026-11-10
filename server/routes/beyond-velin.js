@@ -501,7 +501,9 @@ router.get('/planner/instagram', async (req, res) => {
     const ids = String(req.query.ids || '').split(',').map((s) => s.trim()).filter(Boolean);
     res.json({ ok: true, ...(await beoPublikace.stav(ids)) });
   } catch (err) {
-    res.status(502).json({ ok: false, error: err?.message || 'Beo neodpovědělo' });
+    // Schválně 200: Cloudflare tunel by odpověď 502 nahradil svou stránkou
+    // a planner by místo důvodu (chybí klíč, Beo spí) ukázal jen číslo.
+    res.json({ ok: false, posty: {}, error: err?.message || 'Beo neodpovědělo' });
   }
 });
 

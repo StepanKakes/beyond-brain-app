@@ -876,7 +876,11 @@ export function Planner({
   const loadIg = useCallback(async () => {
     if (!igIds) return;
     try {
-      const res = await request<{ posty: IgMap }>(`${IG_PATH}?ids=${encodeURIComponent(igIds)}`);
+      const res = await request<{ ok?: boolean; posty: IgMap; error?: string }>(`${IG_PATH}?ids=${encodeURIComponent(igIds)}`);
+      if (res.ok === false) {
+        setIgError(res.error || 'Beo neodpovědělo');
+        return;
+      }
       setIg(res.posty || {});
       setIgError(null);
     } catch (err) {
