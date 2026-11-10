@@ -312,13 +312,13 @@ export function InstagramPublikace({
     }
   };
 
-  if (error && /klíč/i.test(error)) {
+  if (error && /chybí napojení|chybí klíč/i.test(error)) {
     return (
       <div className="pl-ig-box">
         <Icon name="link" size={18} />
         <div>
           <strong>Brain není napojený na Beo</strong>
-          <p>Vlož klíč z Bea (Nastavení, MCP) v Agent, Napojení a klíče, Beo.</p>
+          <p>Připoj Beo v Konektorech, nebo vlož klíč z Bea v Agent, Napojení a klíče, Beo.</p>
         </div>
       </div>
     );
@@ -385,7 +385,7 @@ export function InstagramPublikace({
       ) : null}
 
       {chyba ? <p className="pl-ig-chyba">{chyba}</p> : null}
-      {error && !/klíč/i.test(error) ? <p className="pl-ig-chyba">Beo neodpovídá: {error}</p> : null}
+      {error && !/chybí napojení|chybí klíč/i.test(error) ? <p className="pl-ig-chyba">Beo neodpovídá: {error}</p> : null}
 
       {ukazFormular ? <Formular card={card} request={request} predchozi={post} onPost={(p) => { setOpakovat(false); onPost(p); }} /> : null}
     </div>
