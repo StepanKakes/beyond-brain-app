@@ -48,6 +48,17 @@ export async function nahrani(soubory) {
   return volej('/nahrani', { method: 'POST', body: { soubory } });
 }
 
+/** Karta, která čeká na vydání, patří do Naplánováno. Vydané se nevrací. */
+function stavPoNaplanovani(card) {
+  return card.stav === 'Vydáno' ? null : 'Naplánováno';
+}
+
+function denVPraze(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Prague' });
+}
+
 export async function naplanuj(cardId, input) {
   const card = planner.list().karty.find((c) => c.id === cardId);
   if (!card) throw new Error('karta neexistuje');
@@ -55,19 +66,40 @@ export async function naplanuj(cardId, input) {
     method: 'POST',
     body: {
       planner_id: cardId,
+      nazev: card.nazev,
       typ: input.typ,
       popisek: input.popisek || '',
       media: input.media || [],
       cover_path: input.cover_path || null,
+      trial: input.typ === 'reel' && (input.trial === 'manual' || input.trial === 'auto') ? input.trial : null,
       naplanovano_na: input.naplanovano_na,
     },
   });
   // Datum karty drží den vydání, ať kalendář sedí s tím, co je v Beovi.
-  const den = String(input.naplanovano_na || '').slice(0, 10);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(den) && card.datum !== den) {
-    await planner.update(cardId, { datum: den }, { by: 'beo' }).catch(() => {});
-  }
+  const zmena = {};
+  const den = denVPraze(input.naplanovano_na);
+  if (den && card.datum !== den) zmena.datum = den;
+  const stav = stavPoNaplanovani(card);
+  if (stav && card.stav !== stav) zmena.stav = stav;
+  if (Object.keys(zmena).length) await planner.update(cardId, zmena, { by: 'beo' }).catch(() => {});
   return post;
+}
+
+/** Nový reel rovnou k vydání: karta vznikne až s naplánovaným příspěvkem. */
+export async function novy(input) {
+  const nazev = String(input.nazev || '').trim();
+  if (!nazev) throw new Error('název chybí');
+  const card = await planner.add(
+    { nazev, platforma: 'Reels', stav: 'Naplánováno', datum: denVPraze(input.naplanovano_na) },
+    { by: 'app' },
+  );
+  try {
+    const post = await naplanuj(card.id, input);
+    return { card: planner.list().karty.find((c) => c.id === card.id) || card, post };
+  } catch (err) {
+    await planner.remove(card.id, { by: 'app' }).catch(() => {});
+    throw err;
+  }
 }
 
 export async function zrus(postId) {
@@ -76,16 +108,36 @@ export async function zrus(postId) {
 
 /**
  * Stav příspěvků ke kartám. Co v Beovi vyšlo, se v planneru posune na Vydáno,
- * ať se to nemusí přepínat ručně.
+ * ať se to nemusí přepínat ručně. Příspěvek, ke kterému karta není (naplánoval
+ * ho konektor Bea z jiné konverzace), si kartu založí, ať je všechno na jednom
+ * místě.
  */
 export async function stav(ids) {
-  const out = await volej(`/posty?planner=${encodeURIComponent(ids.join(','))}`);
+  const out = await volej(`/posty?vse=1&planner=${encodeURIComponent(ids.join(','))}`);
   const karty = planner.list().karty;
+  let pribylo = 0;
   for (const [id, post] of Object.entries(out.posty || {})) {
     const card = karty.find((c) => c.id === id);
-    if (card && post?.stav === 'publikovano' && card.stav !== 'Vydáno') {
+    if (!card) {
+      if (post?.stav === 'zruseno' || !/^p-[0-9a-f]{8}$/.test(id) || planner.hasId(id)) continue;
+      await planner
+        .add(
+          {
+            id,
+            nazev: post.nazev || (post.typ === 'reel' ? 'Reel z Bea' : 'Příspěvek z Bea'),
+            platforma: 'Reels',
+            stav: post.stav === 'publikovano' ? 'Vydáno' : 'Naplánováno',
+            datum: denVPraze(post.naplanovano_na),
+          },
+          { by: 'beo' },
+        )
+        .then(() => { pribylo += 1; })
+        .catch(() => {});
+      continue;
+    }
+    if (post?.stav === 'publikovano' && card.stav !== 'Vydáno') {
       await planner.update(id, { stav: 'Vydáno' }, { by: 'beo' }).catch(() => {});
     }
   }
-  return out;
+  return { ...out, pribylo };
 }

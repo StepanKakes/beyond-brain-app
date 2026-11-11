@@ -255,7 +255,7 @@ export function mockApi(path: string, options: Options): unknown {
     const card = (id: string, nazev: string, stav: string, extra: object = {}) => ({ id, nazev, stav, platforma: 'Reels', format: null, cil: null, cta: null, styl: null, kdo: [], datum: null, misto: null, reviewLink: null, soubor: null, text: '', ...extra });
     return {
       options: {
-        stav: ['Reels nápad', 'YouTube nápad', 'Natočeno', 'Střih', 'Review', 'Opravit', 'Vydáno'],
+        stav: ['Reels nápad', 'YouTube nápad', 'Natočeno', 'Střih', 'Review', 'Opravit', 'Naplánováno', 'Vydáno'],
         platforma: ['Reels', 'Youtube'],
         format: ['Studio talking head', 'Undocumented', 'Real life - raw', 'Vlog', 'Splitscreen', 'Miroboard'],
         cil: ['Viral potenciál (dosah)', 'Inspirovat (tenhle týpek je cool)', 'Budovat autoritu (prodat)'],

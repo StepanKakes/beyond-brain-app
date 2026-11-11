@@ -16,6 +16,7 @@
 .pl-tone-pink { --tone: #d9568f; }
 .pl-tone-red { --tone: var(--bb-p1); }
 .pl-tone-green { --tone: var(--bb-work); }
+.pl-tone-teal { --tone: #1f9e8f; }
 
 .pl-dot {
   flex: none;
@@ -195,10 +196,10 @@
 .pl-filter-people { display: inline-flex; gap: 6px; }
 .pl-notion { margin-left: auto; }
 
-/* Board: pět fází vedle sebe */
+/* Board: šest fází vedle sebe */
 .pl-board {
   display: grid;
-  grid-template-columns: repeat(5, minmax(210px, 1fr));
+  grid-template-columns: repeat(6, minmax(210px, 1fr));
   align-items: start;
   gap: 12px;
   overflow-x: auto;
@@ -444,7 +445,7 @@
 .pl-stepper { display: flex; flex-direction: column; gap: 12px; }
 .pl-steps {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   margin: 0;
   padding: 0;
   list-style: none;
@@ -710,6 +711,20 @@
 }
 .pl-ig-thumb-kind { bottom: 5px; left: 5px; }
 .pl-ig-thumb-x { top: 5px; right: 5px; cursor: pointer; }
+/* Náhled reelu: přehrát celý, ať je jasné, co přesně vyjde */
+.pl-ig-player {
+  position: relative;
+  align-self: center;
+  width: min(100%, 240px);
+  aspect-ratio: 9 / 16;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #000;
+}
+.pl-ig-player video,
+.pl-ig-player img { width: 100%; height: 100%; object-fit: contain; }
+.pl-ig-player .pl-ig-thumb-x { top: 8px; right: 8px; width: 26px; height: 26px; }
+.pl-ig-trial { flex-wrap: wrap; align-self: flex-start; max-width: 100%; }
 .pl-ig-cover { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 14px; }
 .pl-ig-cover img { width: 32px; height: 40px; border-radius: 6px; object-fit: cover; }
 
@@ -794,7 +809,7 @@
 }
 .pl-state strong { color: var(--bb-ink); font-size: 16px; }
 .pl-state p { margin: 0; }
-.pl-skeleton { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.pl-skeleton { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
 .pl-skeleton span { height: 220px; border-radius: 14px; background: var(--bb-bg2); animation: pl-pulse 1.4s ease-in-out infinite; }
 @keyframes pl-pulse { 50% { opacity: 0.55; } }
 

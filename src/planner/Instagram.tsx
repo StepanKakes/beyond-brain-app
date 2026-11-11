@@ -70,21 +70,47 @@ function Nahled({ file, url, onRemove }: { file: File; url: string; onRemove: ()
   );
 }
 
+type Trial = 'manual' | 'auto' | null;
+type Odeslani = {
+  typ: IgPost['typ'];
+  popisek: string;
+  media: { path: string; typ: 'foto' | 'video' }[];
+  cover_path: string | null;
+  trial: Trial;
+  naplanovano_na: string;
+};
+
+const TRIALY: { value: Trial; label: string; hint: string }[] = [
+  { value: null, label: 'Klasický', hint: 'Uvidí ho sledující i ostatní' },
+  { value: 'manual', label: 'Trial, pustím sám', hint: 'Nejdřív jen lidem, kteří tě nesledují. Sledujícím ho pustíš v Instagramu' },
+  { value: 'auto', label: 'Trial, pustí Instagram', hint: 'Nejdřív jen lidem, kteří tě nesledují. Když se mu bude dařit, Instagram ho pustí i sledujícím' },
+];
+
+/** Název karty z názvu souboru: bez přípony, podtržítek a pomlček. */
+function nazevZeSouboru(file: File): string {
+  return file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+}
+
 function Formular({
-  card,
+  datum,
   request,
   predchozi,
-  onPost,
+  novy,
+  onSend,
 }: {
-  card: PlannerCard;
+  datum: string | null;
   request: Request;
   predchozi: IgPost | null;
-  onPost: (post: IgPost) => void;
+  /** Nový reel bez karty: formulář chce i název. */
+  novy?: boolean;
+  onSend: (body: Odeslani & { nazev?: string }) => Promise<void>;
 }) {
   const [soubory, setSoubory] = useState<File[]>([]);
   const [cover, setCover] = useState<File | null>(null);
   const [popisek, setPopisek] = useState(predchozi?.popisek || '');
-  const [cas, setCas] = useState(() => vychoziCas(card.datum));
+  const [nazev, setNazev] = useState('');
+  const [trial, setTrial] = useState<Trial>(predchozi?.trial ?? null);
+  const [cas, setCas] = useState(() => vychoziCas(datum));
   const [prace, setPrace] = useState<string | null>(null);
   const [chyba, setChyba] = useState<string | null>(null);
   const [nadZonou, setNadZonou] = useState(false);
@@ -104,11 +130,16 @@ function Formular({
       return;
     }
     setChyba(null);
+    if (novy && !nazev && !soubory.length) setNazev(nazevZeSouboru(nove[0]));
     setSoubory((cur) => [...cur, ...nove].slice(0, 10));
   };
 
   const odeslat = async (hned: boolean) => {
     if (!typ) return;
+    if (novy && !nazev.trim()) {
+      setChyba('Doplň název, pod ním bude reel v planneru');
+      return;
+    }
     setChyba(null);
     try {
       setPrace('Připravuju soubory');
@@ -127,14 +158,16 @@ function Formular({
         });
         if (!res.ok) throw new Error(`Nahrání souboru ${i + 1} selhalo (${res.status})`);
       }
-      const media = tickety.slice(0, soubory.length).map((t) => ({ path: t.path, typ: t.typ }));
-      const coverPath = cover && typ === 'reel' ? tickety[soubory.length]?.path : null;
       setPrace('Plánuju');
-      const { post } = await request<{ post: IgPost }>(`${PLANNER_PATH}/${encodeURIComponent(card.id)}/instagram`, {
-        method: 'POST',
-        body: { typ, popisek, media, cover_path: coverPath, naplanovano_na: hned ? new Date().toISOString() : new Date(cas).toISOString() },
+      await onSend({
+        ...(novy ? { nazev: nazev.trim() } : {}),
+        typ,
+        popisek,
+        media: tickety.slice(0, soubory.length).map((t) => ({ path: t.path, typ: t.typ })),
+        cover_path: cover && typ === 'reel' ? tickety[soubory.length]?.path ?? null : null,
+        trial: typ === 'reel' ? trial : null,
+        naplanovano_na: hned ? new Date().toISOString() : new Date(cas).toISOString(),
       });
-      onPost(post);
     } catch (err) {
       setChyba(err instanceof Error ? err.message : 'Naplánování selhalo');
     } finally {
@@ -151,7 +184,7 @@ function Formular({
   const rychle = [
     { label: 'Dnes 18:00', value: `${isoDay(new Date())}T18:00` },
     { label: 'Zítra 18:00', value: `${isoDay(new Date(Date.now() + 86_400_000))}T18:00` },
-    ...(card.datum && card.datum > isoDay(new Date(Date.now() + 86_400_000)) ? [{ label: `${denLabel(card.datum)} 18:00`, value: `${card.datum}T18:00` }] : []),
+    ...(datum && datum > isoDay(new Date(Date.now() + 86_400_000)) ? [{ label: `${denLabel(datum)} 18:00`, value: `${datum}T18:00` }] : []),
   ];
   const casVMinulosti = cas && new Date(cas).getTime() < Date.now() - 60_000;
 
@@ -165,11 +198,20 @@ function Formular({
               Přidat další
             </button>
           </div>
-          <div className="pl-ig-thumbs">
-            {soubory.map((file, i) => (
-              <Nahled key={urls[i]} file={file} url={urls[i]} onRemove={() => setSoubory((cur) => cur.filter((_, j) => j !== i))} />
-            ))}
-          </div>
+          {typ === 'reel' ? (
+            <div className="pl-ig-player">
+              <video key={urls[0]} src={urls[0]} controls playsInline preload="metadata" />
+              <button type="button" className="pl-ig-thumb-x" aria-label={`Odebrat ${soubory[0].name}`} onClick={() => setSoubory([])}>
+                <Icon name="close" size={12} />
+              </button>
+            </div>
+          ) : (
+            <div className="pl-ig-thumbs">
+              {soubory.map((file, i) => (
+                <Nahled key={urls[i]} file={file} url={urls[i]} onRemove={() => setSoubory((cur) => cur.filter((_, j) => j !== i))} />
+              ))}
+            </div>
+          )}
           {typ === 'reel' ? (
             <div className="pl-ig-cover">
               {cover ? (
@@ -203,7 +245,7 @@ function Formular({
           onDrop={onDrop}
         >
           <Icon name="gallery" size={22} />
-          <strong>Nahrát hotový střih nebo fotky</strong>
+          <strong>{novy ? 'Přetáhni sem hotový reel' : 'Nahrát hotový střih nebo fotky'}</strong>
           <span>Jedno video je reel, jedna fotka post, víc souborů carousel</span>
         </button>
       )}
@@ -218,6 +260,27 @@ function Formular({
           e.target.value = '';
         }}
       />
+
+      {novy ? (
+        <label className="pl-ig-label">
+          <span>Název v planneru</span>
+          <input className="pl-field-input" value={nazev} maxLength={300} placeholder="O čem reel je" onChange={(e) => setNazev(e.target.value)} />
+        </label>
+      ) : null}
+
+      {typ === 'reel' ? (
+        <div className="pl-ig-label">
+          <span>Komu ho Instagram ukáže</span>
+          <span className="pl-seg pl-ig-trial" role="radiogroup" aria-label="Trial reel">
+            {TRIALY.map((t) => (
+              <button key={t.label} type="button" role="radio" aria-checked={trial === t.value} className={trial === t.value ? 'is-on' : ''} onClick={() => setTrial(t.value)}>
+                {t.label}
+              </button>
+            ))}
+          </span>
+          <span className="pl-ig-hint">{TRIALY.find((t) => t.value === trial)?.hint}</span>
+        </div>
+      ) : null}
 
       <label className="pl-ig-label">
         <span>Popisek</span>
@@ -269,7 +332,7 @@ function Formular({
 
       <div className="pl-ig-actions">
         <button type="button" className="pl-btn is-primary" disabled={!typ || !!prace || !cas} onClick={() => void odeslat(false)}>
-          {prace || 'Naplánovat na Instagram'}
+          {prace || (trial && typ === 'reel' ? 'Naplánovat trial reel' : 'Naplánovat na Instagram')}
         </button>
         {!prace ? (
           <button type="button" className="pl-btn" disabled={!typ} onClick={() => void odeslat(true)}>
@@ -327,8 +390,16 @@ export function InstagramPublikace({
   const stav = post?.stav;
   const ukazFormular = !post || stav === 'zruseno' || ((stav === 'chyba') && opakovat);
 
+  const nahled = post?.nahled_url && stav !== 'publikovano' && stav !== 'zruseno' && !ukazFormular ? post.nahled_url : null;
+
   return (
     <div className="pl-ig">
+      {nahled ? (
+        <div className="pl-ig-player">
+          {post!.typ === 'foto' ? <img src={nahled} alt="" /> : <video src={nahled} controls playsInline preload="metadata" />}
+        </div>
+      ) : null}
+
       {stav === 'ceka' ? (
         <div className="pl-ig-box">
           <Icon name="clock" size={18} />
@@ -336,7 +407,8 @@ export function InstagramPublikace({
             <strong>
               Vyjde {kdyLabel(post!.naplanovano_na)} v {casLabel(post!.naplanovano_na)}
             </strong>
-            <p>{post!.typ === 'reel' ? 'Reel' : post!.typ === 'foto' ? 'Fotka' : 'Carousel'} čeká v Beovi, v ten čas ho samo vydá.</p>
+            <p>{post!.trial ? 'Trial reel' : post!.typ === 'reel' ? 'Reel' : post!.typ === 'foto' ? 'Fotka' : 'Carousel'} čeká v Beovi, v ten čas ho samo vydá.</p>
+            {post!.trial ? <p>{TRIALY.find((t) => t.value === post!.trial)?.hint}</p> : null}
             {post!.popisek ? <p className="pl-ig-quote">{post!.popisek}</p> : null}
           </div>
           <button type="button" className="pl-btn" disabled={rusim} onClick={() => void zrus()}>
@@ -387,7 +459,58 @@ export function InstagramPublikace({
       {chyba ? <p className="pl-ig-chyba">{chyba}</p> : null}
       {error && !/chybí napojení|chybí klíč/i.test(error) ? <p className="pl-ig-chyba">Beo neodpovídá: {error}</p> : null}
 
-      {ukazFormular ? <Formular card={card} request={request} predchozi={post} onPost={(p) => { setOpakovat(false); onPost(p); }} /> : null}
+      {ukazFormular ? (
+        <Formular
+          datum={card.datum}
+          request={request}
+          predchozi={post}
+          onSend={async (body) => {
+            const { post: novyPost } = await request<{ post: IgPost }>(`${PLANNER_PATH}/${encodeURIComponent(card.id)}/instagram`, { method: 'POST', body });
+            setOpakovat(false);
+            onPost(novyPost);
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/** Hotový reel rovnou do kalendáře: karta vznikne až s naplánovaným příspěvkem. */
+export function NovyReel({
+  request,
+  datum,
+  error,
+  onHotovo,
+}: {
+  request: Request;
+  datum: string | null;
+  error: string | null;
+  onHotovo: (card: PlannerCard, post: IgPost) => void;
+}) {
+  if (error && /chybí napojení|chybí klíč/i.test(error)) {
+    return (
+      <div className="pl-ig-box">
+        <Icon name="link" size={18} />
+        <div>
+          <strong>Brain není napojený na Beo</strong>
+          <p>Připoj Beo v Konektorech, nebo vlož klíč z Bea v Agent, Napojení a klíče, Beo.</p>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="pl-ig">
+      <p className="pl-ig-hint">Karta se v planneru objeví rovnou v Naplánováno, Beo reel v ten čas vydá samo</p>
+      <Formular
+        datum={datum}
+        request={request}
+        predchozi={null}
+        novy
+        onSend={async (body) => {
+          const res = await request<{ card: PlannerCard; post: IgPost }>(`${IG_PATH}/novy`, { method: 'POST', body });
+          onHotovo(res.card, res.post);
+        }}
+      />
     </div>
   );
 }

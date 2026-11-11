@@ -13,7 +13,7 @@ import {
 
 import { Icon } from '../mobile/icons';
 
-import { InstagramPublikace } from './Instagram';
+import { InstagramPublikace, NovyReel } from './Instagram';
 import {
   FAZE,
   IG_PATH,
@@ -795,7 +795,7 @@ function Navod() {
   const radky: { title: string; text: string }[] = [
     {
       title: 'Karta je jedno video',
-      text: 'Projde fázemi Nápady, Natočeno, Střih, Review a Vydáno. Fázi měníš v kartě nahoře, na počítači i přetažením na boardu. Review, které je potřeba předělat, vrátíš tlačítkem Vrátit k opravě.',
+      text: 'Projde fázemi Nápady, Natočeno, Střih, Review, Naplánováno a Vydáno. Fázi měníš v kartě nahoře, na počítači i přetažením na boardu. Review, které je potřeba předělat, vrátíš tlačítkem Vrátit k opravě.',
     },
     {
       title: 'Kalendář je podle dne vydání',
@@ -803,7 +803,15 @@ function Navod() {
     },
     {
       title: 'Instagram vydává Beo',
-      text: 'V kartě v části Vydání nahraješ hotový střih nebo fotky, napíšeš popisek a zvolíš čas. Soubor se uloží v Beovi a ten ho v ten čas sám vydá na Instagram. Karta pak ukáže Vyšlo s odkazem a přesune se do Vydáno. Do té doby jde příspěvek zrušit.',
+      text: 'Hotový reel dáš přes Naplánovat reel nahoře, nebo v kartě v části Vydání. Nahraješ video, napíšeš popisek a zvolíš čas. Soubor se uloží v Beovi a ten ho v ten čas sám vydá na Instagram. Karta čeká v Naplánováno, po vydání ukáže Vyšlo s odkazem a přesune se do Vydáno. Do té doby jde příspěvek zrušit.',
+    },
+    {
+      title: 'Trial reels',
+      text: 'U reelu zvolíš, komu ho Instagram ukáže. Trial jde nejdřív jen lidem, kteří tě nesledují. Sledujícím ho pak pustíš sám v Instagramu, nebo to necháš na Instagramu podle toho, jak se mu daří.',
+    },
+    {
+      title: 'Plánování z Clauda',
+      text: 'Konektor Bea umí reely naplánovat i z jiné konverzace, třeba napiš naplánuj tyhle 3 reely na další 3 dny v 18:00. Karty se tady objeví samy v Naplánováno.',
     },
     {
       title: 'Návrhy brainu',
@@ -853,6 +861,7 @@ export function Planner({
   const [importing, setImporting] = useState(false);
   const [ig, setIg] = useState<IgMap>({});
   const [igError, setIgError] = useState<string | null>(null);
+  const [novyReel, setNovyReel] = useState(false);
   const saving = useRef(0);
 
   const load = useCallback(async () => {
@@ -876,17 +885,19 @@ export function Planner({
   const loadIg = useCallback(async () => {
     if (!igIds) return;
     try {
-      const res = await request<{ ok?: boolean; posty: IgMap; error?: string }>(`${IG_PATH}?ids=${encodeURIComponent(igIds)}`);
+      const res = await request<{ ok?: boolean; posty: IgMap; error?: string; pribylo?: number }>(`${IG_PATH}?ids=${encodeURIComponent(igIds)}`);
       if (res.ok === false) {
         setIgError(res.error || 'Beo neodpovědělo');
         return;
       }
       setIg(res.posty || {});
       setIgError(null);
+      // Reel naplánovaný přes konektor Bea si na serveru založil kartu.
+      if (res.pribylo) void load();
     } catch (err) {
       setIgError(err instanceof Error ? err.message : 'Beo neodpovědělo');
     }
-  }, [igIds, request]);
+  }, [igIds, request, load]);
 
   useEffect(() => {
     void load();
@@ -1038,10 +1049,16 @@ export function Planner({
             Jak to funguje
           </button>
           {view !== 'navrhy' && options ? (
-            <button type="button" className="pl-btn is-primary pl-add-btn" onClick={() => setDraft({})}>
-              <Icon name="plus" size={15} />
-              Nový nápad
-            </button>
+            <>
+              <button type="button" className="pl-btn pl-add-btn" onClick={() => setDraft({})}>
+                <Icon name="plus" size={15} />
+                Nový nápad
+              </button>
+              <button type="button" className="pl-btn is-primary pl-add-btn" onClick={() => setNovyReel(true)}>
+                <Icon name="video" size={15} />
+                Naplánovat reel
+              </button>
+            </>
           ) : null}
         </div>
       </div>
@@ -1153,6 +1170,22 @@ export function Planner({
       {draft && options ? (
         <Panel title={draft.datum ? `Nový nápad na ${denLabel(draft.datum)}` : 'Nový nápad'} onClose={() => setDraft(null)}>
           <AddCard draft={draft} options={options} onAdd={add} onClose={() => setDraft(null)} />
+        </Panel>
+      ) : null}
+
+      {novyReel ? (
+        <Panel title="Naplánovat reel" onClose={() => setNovyReel(false)}>
+          <NovyReel
+            request={request}
+            datum={null}
+            error={igError}
+            onHotovo={(card, post) => {
+              setCards((list) => (list.some((c) => c.id === card.id) ? list : [card, ...list]));
+              setIgPost(card.id, post);
+              setNovyReel(false);
+              setOpenId(card.id);
+            }}
+          />
         </Panel>
       ) : null}
 

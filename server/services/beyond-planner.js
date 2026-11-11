@@ -24,7 +24,7 @@ const FILE = path.join('workspace', 'obsah', 'planner.json');
 const NOTION_DB = process.env.BEYOND_PLANNER_NOTION_DB || '59f29a4fef524aa5bcf618b912a724ae';
 
 export const OPTIONS = {
-  stav: ['Reels nápad', 'YouTube nápad', 'Natočeno', 'Střih', 'Review', 'Opravit', 'Vydáno'],
+  stav: ['Reels nápad', 'YouTube nápad', 'Natočeno', 'Střih', 'Review', 'Opravit', 'Naplánováno', 'Vydáno'],
   platforma: ['Reels', 'Youtube'],
   format: ['Studio talking head', 'Undocumented', 'Real life - raw', 'Vlog', 'Splitscreen', 'Miroboard'],
   cil: ['Viral potenciál (dosah)', 'Inspirovat (tenhle týpek je cool)', 'Budovat autoritu (prodat)'],
@@ -147,6 +147,11 @@ function blank() {
   };
 }
 
+/** I smazané: karta, kterou člověk smazal, se znovu nezakládá. */
+export function hasId(id) {
+  return readFile().karty.some((c) => c.id === id);
+}
+
 export function list() {
   const data = readFile();
   return { karty: data.karty.filter((c) => !c.smazano), options: OPTIONS, notionImport: data.notionImport };
@@ -154,6 +159,11 @@ export function list() {
 
 export async function add(input, { by = 'app' } = {}) {
   const card = blank();
+  // Id přichází zvenku jen u příspěvku naplánovaného v Beovi, ať karta a
+  // příspěvek k sobě sedí.
+  if (typeof input.id === 'string' && /^p-[0-9a-f]{8}$/.test(input.id) && !readFile().karty.some((c) => c.id === input.id)) {
+    card.id = input.id;
+  }
   if (!input.stav && input.platforma === 'Youtube') card.stav = 'YouTube nápad';
   applyFields(card, input);
   if (!card.nazev) throw new Error('název chybí');

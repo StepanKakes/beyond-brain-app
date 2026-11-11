@@ -515,6 +515,14 @@ router.post('/planner/instagram/nahrani', async (req, res) => {
   }
 });
 
+router.post('/planner/instagram/novy', async (req, res) => {
+  try {
+    res.json({ ok: true, ...(await beoPublikace.novy(req.body || {})) });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'reel nešlo naplánovat' });
+  }
+});
+
 router.post('/planner/:id/instagram', async (req, res) => {
   try {
     res.json({ ok: true, post: await beoPublikace.naplanuj(req.params.id, req.body || {}) });

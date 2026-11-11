@@ -49,6 +49,7 @@ export const STAV_TONE: Record<string, string> = {
   Střih: 'yellow',
   Review: 'pink',
   Opravit: 'red',
+  Naplánováno: 'teal',
   Vydáno: 'green',
 };
 
@@ -64,7 +65,7 @@ export function nextStav(stav: string, order: string[]): string | null {
   if (at < 0) return null;
   const next = order[at + 1];
   // Opravit je návrat zpět, ne další krok.
-  return next === 'Opravit' ? 'Vydáno' : next || null;
+  return next === 'Opravit' ? order[at + 2] || null : next || null;
 }
 
 /** Karty ve sloupci: nejbližší datum nahoře, vydané od nejnovějšího. */
@@ -120,13 +121,14 @@ export function isUrl(value: string | null): boolean {
 /* Fáze pro oko. Data drží stavy z Notionu (dva druhy nápadu, Opravit), ale
    člověk vidí jednu cestu: nápad, natočeno, střih, review, vydáno. Opravit je
    review, které se vrátilo, ne další krok. */
-export type Faze = 'napad' | 'natoceno' | 'strih' | 'review' | 'vydano';
+export type Faze = 'napad' | 'natoceno' | 'strih' | 'review' | 'naplanovano' | 'vydano';
 
 export const FAZE: { key: Faze; label: string; tone: string }[] = [
   { key: 'napad', label: 'Nápady', tone: 'purple' },
   { key: 'natoceno', label: 'Natočeno', tone: 'blue' },
   { key: 'strih', label: 'Střih', tone: 'yellow' },
   { key: 'review', label: 'Review', tone: 'pink' },
+  { key: 'naplanovano', label: 'Naplánováno', tone: 'teal' },
   { key: 'vydano', label: 'Vydáno', tone: 'green' },
 ];
 
@@ -134,6 +136,7 @@ export function fazeKarty(stav: string): Faze {
   if (stav === 'Natočeno') return 'natoceno';
   if (stav === 'Střih') return 'strih';
   if (stav === 'Review' || stav === 'Opravit') return 'review';
+  if (stav === 'Naplánováno') return 'naplanovano';
   if (stav === 'Vydáno') return 'vydano';
   return 'napad';
 }
@@ -149,6 +152,8 @@ export function stavProFazi(faze: Faze, card: Pick<PlannerCard, 'platforma'>): s
       return 'Střih';
     case 'review':
       return 'Review';
+    case 'naplanovano':
+      return 'Naplánováno';
     default:
       return 'Vydáno';
   }
@@ -194,6 +199,10 @@ export type IgPost = {
   permalink: string | null;
   chyba: string | null;
   popisek: string;
+  /** Trial reel: nejdřív jen lidem, kteří účet nesledují. */
+  trial?: 'manual' | 'auto' | null;
+  /** Krátce platná adresa média, dokud leží v Beovi. */
+  nahled_url?: string | null;
 };
 
 export const IG_PATH = `${PLANNER_PATH}/instagram`;
