@@ -87,8 +87,50 @@ export function isoDay(date: Date): string {
   return `${date.getFullYear()}-${month}-${day}`;
 }
 
+/* Obsah vychází pro české publikum, proto planner počítá všechny dny a časy
+   v Praze, i když je člověk zrovna jinde ve světě. */
+export const PRAHA = 'Europe/Prague';
+
+/** Den v Praze jako YYYY-MM-DD. */
+export function prahaDen(when: Date | string = new Date()): string {
+  return new Date(when).toLocaleDateString('sv-SE', { timeZone: PRAHA });
+}
+
+/** Den v Praze posunutý o počet dní. */
+export function prahaDenZa(dni: number): string {
+  return prahaDen(new Date(Date.now() + dni * 86400000));
+}
+
+/** Čas zadaný v Praze (YYYY-MM-DDTHH:mm) jako okamžik ISO. */
+export function zPrahy(local: string): string {
+  const odhad = new Date(`${local}:00Z`);
+  const praha = new Date(odhad.toLocaleString('en-US', { timeZone: PRAHA }));
+  const utc = new Date(odhad.toLocaleString('en-US', { timeZone: 'UTC' }));
+  return new Date(odhad.getTime() - (praha.getTime() - utc.getTime())).toISOString();
+}
+
+/** Je člověk v jiném pásmu než Praha, třeba na cestách? */
+export function jinePasmo(iso: string): boolean {
+  const d = new Date(iso);
+  return d.toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit', timeZone: PRAHA }) !==
+    d.toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' });
+}
+
+/** Místní čas u člověka, když není v Česku. */
+export function mistniCas(iso: string): string {
+  const d = new Date(iso);
+  const den = d.toLocaleDateString('sv-SE') !== prahaDen(d) ? `${denLabel(d.toLocaleDateString('sv-SE'))} ` : '';
+  return `${den}${d.toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' })}`;
+}
+
+/** „zítra v 18:00 českého času“, na cestách i s místním časem. */
+export function kdyPopis(iso: string): string {
+  const zaklad = `${kdyLabel(iso)} v ${casLabel(iso)} českého času`;
+  return jinePasmo(iso) ? `${zaklad}, u tebe ${mistniCas(iso)}` : zaklad;
+}
+
 export function todayIso(): string {
-  return isoDay(new Date());
+  return prahaDen();
 }
 
 /** Celé týdny měsíce od pondělí, i se dny ze sousedních měsíců. */
@@ -176,9 +218,10 @@ export function denLabel(iso: string): string {
 
 /** Relativně, kde to jde: dnes, zítra, včera, jinak den. */
 export function kdyLabel(iso: string): string {
-  const day = iso.slice(0, 10);
+  // Okamžik (s časem) se počítá podle dne v Praze, samotné datum se bere, jak je.
+  const day = iso.length > 10 ? prahaDen(iso) : iso.slice(0, 10);
   const today = todayIso();
-  const shift = (by: number) => isoDay(new Date(Date.now() + by * 86400000));
+  const shift = (by: number) => prahaDenZa(by);
   if (day === today) return 'dnes';
   if (day === shift(1)) return 'zítra';
   if (day === shift(-1)) return 'včera';
@@ -186,7 +229,7 @@ export function kdyLabel(iso: string): string {
 }
 
 export function casLabel(isoDateTime: string): string {
-  return new Date(isoDateTime).toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' });
+  return new Date(isoDateTime).toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit', timeZone: PRAHA });
 }
 
 /** Příspěvek na Instagram, jak ho vrací Beo přes server brainu. */

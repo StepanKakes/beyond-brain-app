@@ -26,6 +26,7 @@ import {
   fazeKarty,
   isUrl,
   kdyLabel,
+  kdyPopis,
   monthGrid,
   monthLabel,
   platformLabel,
@@ -119,7 +120,7 @@ function IgRadek({ post }: { post: IgPost | undefined }) {
   return (
     <span className="pl-ig-line is-wait">
       <Icon name="clock" size={13} />
-      IG {kdyLabel(post.naplanovano_na)} {casLabel(post.naplanovano_na)}
+      IG {kdyLabel(post.naplanovano_na)} {casLabel(post.naplanovano_na)} CZ
     </span>
   );
 }
@@ -1005,7 +1006,7 @@ export function Planner({
       else delete next[id];
       return next;
     });
-    if (post) setNotice({ text: `Naplánováno na ${kdyLabel(post.naplanovano_na)} ${casLabel(post.naplanovano_na)}` });
+    if (post) setNotice({ text: `Naplánováno na ${kdyPopis(post.naplanovano_na)}` });
   };
 
   const cards = useMemo(

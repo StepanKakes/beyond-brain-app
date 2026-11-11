@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 
 import { Icon } from '../mobile/icons';
 
-import { IG_PATH, PLANNER_PATH, casLabel, denLabel, isoDay, kdyLabel, type IgPost, type PlannerCard, type Request } from './model';
+import { IG_PATH, PLANNER_PATH, casLabel, denLabel, jinePasmo, kdyLabel, kdyPopis, mistniCas, prahaDen, prahaDenZa, zPrahy, type IgPost, type PlannerCard, type Request } from './model';
 
 type Ticket = { path: string; typ: 'foto' | 'video'; uploadUrl: string };
 
@@ -15,8 +15,8 @@ const MAX_POPISEK = 2200;
 const CASY = Array.from({ length: 24 * 4 }, (_, i) => `${String(Math.floor(i / 4)).padStart(2, '0')}:${String((i % 4) * 15).padStart(2, '0')}`);
 
 function vychoziCas(datum: string | null): string {
-  const today = isoDay(new Date());
-  const den = datum && datum >= today ? datum : isoDay(new Date(Date.now() + 86_400_000));
+  const today = prahaDen();
+  const den = datum && datum >= today ? datum : prahaDenZa(1);
   return `${den}T18:00`;
 }
 
@@ -166,7 +166,7 @@ function Formular({
         media: tickety.slice(0, soubory.length).map((t) => ({ path: t.path, typ: t.typ })),
         cover_path: cover && typ === 'reel' ? tickety[soubory.length]?.path ?? null : null,
         trial: typ === 'reel' ? trial : null,
-        naplanovano_na: hned ? new Date().toISOString() : new Date(cas).toISOString(),
+        naplanovano_na: hned ? new Date().toISOString() : zPrahy(cas),
       });
     } catch (err) {
       setChyba(err instanceof Error ? err.message : 'Naplánování selhalo');
@@ -182,11 +182,11 @@ function Formular({
   };
 
   const rychle = [
-    { label: 'Dnes 18:00', value: `${isoDay(new Date())}T18:00` },
-    { label: 'Zítra 18:00', value: `${isoDay(new Date(Date.now() + 86_400_000))}T18:00` },
-    ...(datum && datum > isoDay(new Date(Date.now() + 86_400_000)) ? [{ label: `${denLabel(datum)} 18:00`, value: `${datum}T18:00` }] : []),
+    { label: 'Dnes 18:00', value: `${prahaDen()}T18:00` },
+    { label: 'Zítra 18:00', value: `${prahaDenZa(1)}T18:00` },
+    ...(datum && datum > prahaDenZa(1) ? [{ label: `${denLabel(datum)} 18:00`, value: `${datum}T18:00` }] : []),
   ];
-  const casVMinulosti = cas && new Date(cas).getTime() < Date.now() - 60_000;
+  const casVMinulosti = cas && new Date(zPrahy(cas)).getTime() < Date.now() - 60_000;
 
   return (
     <div className="pl-ig-form">
@@ -298,7 +298,7 @@ function Formular({
       </label>
 
       <div className="pl-ig-label">
-        <span>Kdy vyjde</span>
+        <span>Kdy vyjde, český čas</span>
         <div className="pl-ig-when">
           {rychle.map((r) => (
             <button key={r.value} type="button" className={`pl-chip${cas === r.value ? ' is-on' : ''}`} onClick={() => setCas(r.value)}>
@@ -321,7 +321,7 @@ function Formular({
         </div>
         {cas && !casVMinulosti ? (
           <span className="pl-ig-hint">
-            Vyjde {kdyLabel(cas)} v {casLabel(new Date(cas).toISOString())}
+            Vyjde {kdyPopis(zPrahy(cas))}
           </span>
         ) : casVMinulosti ? (
           <span className="pl-ig-hint is-bad">Čas už minul, příspěvek by vyšel hned</span>
@@ -461,8 +461,9 @@ export function InstagramPublikace({
           <Icon name="clock" size={18} />
           <div>
             <strong>
-              Vyjde {kdyLabel(post!.naplanovano_na)} v {casLabel(post!.naplanovano_na)}
+              Vyjde {kdyLabel(post!.naplanovano_na)} v {casLabel(post!.naplanovano_na)} českého času
             </strong>
+            {jinePasmo(post!.naplanovano_na) ? <p>U tebe to bude {mistniCas(post!.naplanovano_na)}</p> : null}
             <p>{post!.trial ? 'Trial reel' : post!.typ === 'reel' ? 'Reel' : post!.typ === 'foto' ? 'Fotka' : 'Carousel'} čeká v Beovi, v ten čas ho samo vydá.</p>
             {post!.trial ? <p>{TRIALY.find((t) => t.value === post!.trial)?.hint}</p> : null}
           </div>
@@ -494,7 +495,7 @@ export function InstagramPublikace({
         <div className="pl-ig-box is-done">
           <Icon name="check" size={18} />
           <div>
-            <strong>Vyšlo {post!.publikovano_at ? `${kdyLabel(post!.publikovano_at)} v ${casLabel(post!.publikovano_at)}` : ''}</strong>
+            <strong>Vyšlo {post!.publikovano_at ? `${kdyLabel(post!.publikovano_at)} v ${casLabel(post!.publikovano_at)} českého času` : ''}</strong>
             {post!.permalink ? (
               <a className="pl-link" href={post!.permalink} target="_blank" rel="noreferrer">
                 Otevřít na Instagramu
