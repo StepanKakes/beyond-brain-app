@@ -106,6 +106,35 @@ export async function zrus(postId) {
   return volej(`/posty/${encodeURIComponent(postId)}`, { method: 'DELETE' });
 }
 
+export async function uprav(postId, input) {
+  const body = {};
+  if (typeof input.popisek === 'string') body.popisek = input.popisek;
+  if (input.naplanovano_na !== undefined) body.naplanovano_na = input.naplanovano_na;
+  if (input.trial !== undefined) body.trial = input.trial;
+  const { post } = await volej(`/posty/${encodeURIComponent(postId)}`, { method: 'PATCH', body });
+  return post;
+}
+
+/**
+ * Smazaná karta nesmí v Beovi nechat čekat příspěvek, jinak by vyšel.
+ * Vrací true, když něco zrušila. Bez napojení na Beo není co rušit.
+ */
+export async function zrusKeKarte(cardId) {
+  let out;
+  try {
+    out = await volej(`/posty?planner=${encodeURIComponent(cardId)}`);
+  } catch (err) {
+    if (/chybí napojení/i.test(err?.message || '')) return false;
+    throw err;
+  }
+  const post = out.posty?.[cardId];
+  if (!post) return false;
+  if (post.stav === 'zpracovava') throw new Error('Reel právě vychází, kartu smaž, až vyjde');
+  if (post.stav !== 'ceka' && post.stav !== 'chyba') return false;
+  await zrus(post.id);
+  return true;
+}
+
 /**
  * Stav příspěvků ke kartám. Co v Beovi vyšlo, se v planneru posune na Vydáno,
  * ať se to nemusí přepínat ručně. Příspěvek, ke kterému karta není (naplánoval

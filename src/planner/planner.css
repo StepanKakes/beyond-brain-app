@@ -728,6 +728,19 @@
 .pl-ig-cover { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 14px; }
 .pl-ig-cover img { width: 32px; height: 40px; border-radius: 6px; object-fit: cover; }
 
+.pl-ig-label-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--bb-ink2); font-size: 13px; font-weight: 500; }
+.pl-ig-text {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--bb-line2);
+  border-radius: 12px;
+  background: var(--bb-raise);
+  color: var(--bb-ink);
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .pl-ig-label { display: flex; flex-direction: column; gap: 6px; }
 .pl-ig-label > span:first-child { color: var(--bb-ink2); font-size: 13px; font-weight: 500; }
 .pl-ig-popisek {

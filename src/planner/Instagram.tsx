@@ -344,6 +344,62 @@ function Formular({
   );
 }
 
+/** Popisek čekajícího příspěvku celý, a dokud nevyšel, i k úpravě. */
+function Popisek({ post, request, onPost }: { post: IgPost; request: Request; onPost: (post: IgPost | null) => void }) {
+  const [upravuju, setUpravuju] = useState(false);
+  const [text, setText] = useState(post.popisek);
+  const [ukladam, setUkladam] = useState(false);
+  const [chyba, setChyba] = useState<string | null>(null);
+  const hashtagy = (text.match(/#/g) || []).length;
+
+  const uloz = async () => {
+    setUkladam(true);
+    setChyba(null);
+    try {
+      const res = await request<{ post: IgPost }>(`${IG_PATH}/${encodeURIComponent(post.id)}`, { method: 'PATCH', body: { popisek: text } });
+      onPost({ ...res.post, nahled_url: post.nahled_url });
+      setUpravuju(false);
+    } catch (err) {
+      setChyba(err instanceof Error ? err.message : 'Uložení selhalo');
+    } finally {
+      setUkladam(false);
+    }
+  };
+
+  if (!upravuju) {
+    return (
+      <div className="pl-ig-label">
+        <span className="pl-ig-label-row">
+          <span>Popisek</span>
+          <button type="button" className="pl-textbtn" onClick={() => { setText(post.popisek); setUpravuju(true); }}>
+            Upravit
+          </button>
+        </span>
+        {post.popisek ? <p className="pl-ig-text">{post.popisek}</p> : <p className="pl-ig-hint">Bez popisku</p>}
+      </div>
+    );
+  }
+  return (
+    <div className="pl-ig-label">
+      <span>Popisek</span>
+      <textarea className="pl-ig-popisek" value={text} maxLength={MAX_POPISEK} autoFocus onChange={(e) => setText(e.target.value)} />
+      <span className={`pl-ig-count${hashtagy > 30 ? ' is-bad' : ''}`}>
+        {hashtagy ? `${hashtagy} z 30 hashtagů, ` : ''}
+        {text.length} z {MAX_POPISEK}
+      </span>
+      {chyba ? <p className="pl-ig-chyba">{chyba}</p> : null}
+      <div className="pl-ig-actions">
+        <button type="button" className="pl-btn is-primary" disabled={ukladam || hashtagy > 30} onClick={() => void uloz()}>
+          {ukladam ? 'Ukládám' : 'Uložit popisek'}
+        </button>
+        <button type="button" className="pl-btn" disabled={ukladam} onClick={() => setUpravuju(false)}>
+          Zrušit úpravu
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function InstagramPublikace({
   card,
   request,
@@ -409,11 +465,18 @@ export function InstagramPublikace({
             </strong>
             <p>{post!.trial ? 'Trial reel' : post!.typ === 'reel' ? 'Reel' : post!.typ === 'foto' ? 'Fotka' : 'Carousel'} čeká v Beovi, v ten čas ho samo vydá.</p>
             {post!.trial ? <p>{TRIALY.find((t) => t.value === post!.trial)?.hint}</p> : null}
-            {post!.popisek ? <p className="pl-ig-quote">{post!.popisek}</p> : null}
           </div>
           <button type="button" className="pl-btn" disabled={rusim} onClick={() => void zrus()}>
             Zrušit
           </button>
+        </div>
+      ) : null}
+
+      {stav === 'ceka' ? <Popisek post={post!} request={request} onPost={onPost} /> : null}
+      {post && stav !== 'ceka' && stav !== 'zruseno' && post.popisek && !ukazFormular ? (
+        <div className="pl-ig-label">
+          <span>Popisek</span>
+          <p className="pl-ig-text">{post.popisek}</p>
         </div>
       ) : null}
 

@@ -531,6 +531,14 @@ router.post('/planner/:id/instagram', async (req, res) => {
   }
 });
 
+router.patch('/planner/instagram/:postId', async (req, res) => {
+  try {
+    res.json({ ok: true, post: await beoPublikace.uprav(req.params.postId, req.body || {}) });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err?.message || 'příspěvek nešlo upravit' });
+  }
+});
+
 router.delete('/planner/instagram/:postId', async (req, res) => {
   try {
     await beoPublikace.zrus(req.params.postId);
@@ -551,8 +559,9 @@ router.patch('/planner/:id', async (req, res) => {
 
 router.delete('/planner/:id', async (req, res) => {
   try {
+    const zrusenoIg = await beoPublikace.zrusKeKarte(req.params.id);
     await planner.remove(req.params.id, { by: req.user?.username || 'app' });
-    res.json({ ok: true });
+    res.json({ ok: true, zrusenoIg });
   } catch (err) {
     res.status(400).json({ ok: false, error: err?.message || 'kartu nešlo smazat' });
   }

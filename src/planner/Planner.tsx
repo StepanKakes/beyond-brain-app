@@ -957,9 +957,9 @@ export function Planner({
     setOpenId(null);
     setCards((cards) => cards.filter((c) => c.id !== card.id));
     void send(`${PLANNER_PATH}/${encodeURIComponent(card.id)}`, { method: 'DELETE' })
-      .then(() =>
+      .then((res) =>
         setNotice({
-          text: 'Karta je smazaná',
+          text: (res as { zrusenoIg?: boolean }).zrusenoIg ? 'Karta je smazaná a reel v Beovi zrušený' : 'Karta je smazaná',
           undo: () => {
             setCards((cards) => [card, ...cards]);
             void send(`${PLANNER_PATH}/${encodeURIComponent(card.id)}`, { method: 'PATCH', body: { smazano: false } }).catch(() => undefined);
