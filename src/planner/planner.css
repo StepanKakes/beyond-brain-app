@@ -612,188 +612,239 @@
   border-top: 1px solid var(--bb-line2);
 }
 
-/* Instagram v kartě */
-.pl-ig { display: flex; flex-direction: column; gap: 10px; }
-.pl-ig-box {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid var(--bb-line2);
-  border-radius: 12px;
-  background: var(--bb-raise);
-}
-.pl-ig-box > svg { flex: none; margin-top: 1px; color: var(--bb-ink2); }
-.pl-ig-box > div { display: flex; flex: 1; flex-direction: column; gap: 4px; min-width: 0; }
-.pl-ig-box strong { font-size: 15px; font-weight: 600; }
-.pl-ig-box p { margin: 0; color: var(--bb-ink2); font-size: 14px; line-height: 1.45; }
-.pl-ig-box .pl-link { align-self: flex-start; }
-.pl-ig-box .pl-btn { min-height: 32px; padding: 0 12px; font-size: 13px; }
-.pl-ig-box-btns { display: flex; flex: none; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
-.pl-ig-box.is-done > svg { color: var(--bb-work); }
-.pl-ig-box.is-bad { border-color: transparent; background: var(--bb-danger-soft); }
-.pl-ig-box.is-bad > svg,
-.pl-ig-box.is-bad strong { color: var(--bb-danger); }
-.pl-ig-quote {
-  display: -webkit-box;
-  margin-top: 4px !important;
-  overflow: hidden;
-  white-space: pre-wrap;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-}
-.pl-ig-chyba {
-  margin: 0;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: var(--bb-danger-soft);
-  color: var(--bb-danger);
-  font-size: 14px;
-}
+/* Instagram v kartě: seskupené řádky jako v iOS, na počítači i v listu na mobilu */
+.pl-ig { --pl-ig-bg: var(--bb-bg); --pl-ig-group: var(--bb-raise); display: flex; flex-direction: column; gap: 16px; }
+.pl-ig-form { display: flex; flex-direction: column; gap: 20px; }
+.pl-ig-sec { display: flex; flex-direction: column; gap: 6px; }
+.pl-ig-cap { margin: 0; padding: 0 14px; color: var(--bb-ink2); font-size: 13px; font-weight: 500; }
+.pl-ig-foot { padding: 0 14px; color: var(--bb-ink2); font-size: 13px; line-height: 1.4; }
+.pl-ig-foot .is-bad { color: var(--bb-danger); }
+.pl-ig-group { overflow: hidden; border: 1px solid var(--bb-line2); border-radius: 12px; background: var(--pl-ig-group); }
+.pl-ig-group:has(.pl-ig-input:focus) { border-color: var(--bb-ink3); }
+.pl-ig-group > * + *,
+.pl-ig-inset > * + *,
+.pl-ig [role='radiogroup'] > * + * { border-top: 1px solid var(--bb-line2); }
 
-.pl-ig-form { display: flex; flex-direction: column; gap: 14px; }
+.pl-ig-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--bb-ink);
+  font: inherit;
+  font-size: 15px;
+  text-align: left;
+}
+.pl-ig-row.is-tap { cursor: pointer; transition: background-color var(--bb-t-fast, 0.15s) ease; -webkit-tap-highlight-color: transparent; }
+@media (hover: hover) { .pl-ig-row.is-tap:hover { background: var(--bb-tint); } }
+.pl-ig-row.is-tap:active { background: var(--bb-panel2); }
+.pl-ig-row:disabled { opacity: 0.5; cursor: default; }
+.pl-ig-row:focus-visible { outline: 2px solid var(--bb-ink3); outline-offset: -2px; }
+.pl-ig-row-label { flex: none; }
+.pl-ig-row-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--bb-ink2);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.pl-ig-row > svg { flex: none; color: var(--bb-ink3); }
+.pl-ig-row-action { flex: none; color: var(--bb-ink); font-weight: 500; }
+.pl-ig-chev { display: inline-flex; flex: none; color: var(--bb-ink3); transition: transform 0.2s ease; }
+.pl-ig-chev.is-open { transform: rotate(90deg); }
+.pl-ig-row-plain { justify-content: center; font-weight: 500; }
+.pl-ig-row-plain.is-danger { color: var(--bb-danger); }
+.pl-ig-inset { background: var(--bb-tint); }
+.pl-ig-row-btns { justify-content: flex-end; gap: 8px; }
+.pl-ig-quick { flex-wrap: wrap; gap: 6px; }
+
+/* Nativní výběr dne a času přes celý řádek: na iPhonu otevře systémová kolečka */
+.pl-ig-native { cursor: pointer; }
+.pl-ig-native input,
+.pl-ig-native select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 16px;
+  appearance: none;
+}
+.pl-ig-native input::-webkit-calendar-picker-indicator { position: absolute; inset: 0; width: auto; height: auto; cursor: pointer; }
+
+.pl-ig-volba { align-items: flex-start; padding-top: 11px; padding-bottom: 11px; }
+.pl-ig-volba-text { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.pl-ig-volba-text small { color: var(--bb-ink2); font-size: 13px; line-height: 1.35; }
+.pl-ig-check { display: inline-flex; flex: none; width: 18px; height: 18px; margin-top: 1px; color: var(--bb-ink); }
+
+.pl-ig-input {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 11px 14px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--bb-ink);
+  font: inherit;
+  font-size: 15px;
+}
+.pl-ig-input::placeholder { color: var(--bb-ink3); }
+.pl-ig-popisek { min-height: 132px; resize: vertical; line-height: 1.5; }
+.pl-ig-count { display: flex; justify-content: space-between; gap: 8px; font-variant-numeric: tabular-nums; }
+.pl-ig-count .is-bad { color: var(--bb-danger); }
+.pl-ig-caption { align-items: flex-start; padding-top: 11px; padding-bottom: 11px; }
+.pl-ig-text { flex: 1; min-width: 0; margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; font-size: 15px; line-height: 1.5; }
+.pl-ig-caption.is-tap .pl-ig-text { display: -webkit-box; overflow: hidden; -webkit-line-clamp: 4; -webkit-box-orient: vertical; }
+.pl-ig-placeholder { flex: 1; color: var(--bb-ink3); }
+
+/* Média */
 .pl-ig-drop {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
   width: 100%;
-  padding: 24px 16px;
+  padding: 28px 16px;
   border: 1.5px dashed var(--bb-line);
   border-radius: 12px;
-  background: var(--bb-raise);
+  background: var(--pl-ig-group);
   color: var(--bb-ink);
   font: inherit;
   text-align: center;
   cursor: pointer;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
-.pl-ig-drop svg { color: var(--bb-ink2); }
+.pl-ig-drop-icon { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin-bottom: 4px; border-radius: 50%; background: var(--bb-panel2); color: var(--bb-ink2); }
 .pl-ig-drop strong { font-size: 15px; font-weight: 600; }
-.pl-ig-drop span { color: var(--bb-ink2); font-size: 13px; }
-.pl-ig-drop:hover,
+.pl-ig-drop span:last-child { color: var(--bb-ink2); font-size: 13px; }
 .pl-ig-drop.is-over { border-color: var(--bb-ink3); background: var(--bb-panel2); }
-
-.pl-ig-media {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid var(--bb-line2);
-  border-radius: 12px;
-  background: var(--bb-raise);
-}
-.pl-ig-media-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.pl-ig-typ { font-size: 14px; font-weight: 600; }
-.pl-ig-thumbs { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; }
-.pl-ig-thumb {
-  position: relative;
-  flex: none;
-  width: 76px;
-  aspect-ratio: 9 / 16;
-  overflow: hidden;
-  border-radius: 8px;
-  background: var(--bb-bg2);
-}
+@media (hover: hover) { .pl-ig-drop:hover { border-color: var(--bb-ink3); } }
+.pl-ig-player { display: flex; justify-content: center; overflow: hidden; background: #000; }
+.pl-ig > .pl-ig-player { border-radius: 12px; }
+.pl-ig-player video,
+.pl-ig-player img { display: block; width: auto; max-width: 100%; height: min(440px, 56vh); aspect-ratio: 9 / 16; object-fit: contain; background: #000; }
+.pl-ig-thumbs { display: flex; gap: 8px; padding: 12px 14px; overflow-x: auto; scrollbar-width: none; }
+.pl-ig-thumb { position: relative; flex: none; width: 76px; aspect-ratio: 4 / 5; overflow: hidden; border-radius: 8px; background: var(--bb-panel2); }
 .pl-ig-thumb img,
 .pl-ig-thumb video { width: 100%; height: 100%; object-fit: cover; }
-.pl-ig-thumb-kind,
+.pl-ig-thumb-add { display: flex; align-items: center; justify-content: center; border: 1.5px dashed var(--bb-line); background: transparent; color: var(--bb-ink2); cursor: pointer; }
 .pl-ig-thumb-x {
   position: absolute;
-  display: inline-flex;
+  top: 4px;
+  right: 4px;
+  display: flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
   border: 0;
   border-radius: 50%;
   background: rgb(0 0 0 / 0.55);
   color: #fff;
+  cursor: pointer;
 }
-.pl-ig-thumb-kind { bottom: 5px; left: 5px; }
-.pl-ig-thumb-x { top: 5px; right: 5px; cursor: pointer; }
-/* Náhled reelu: přehrát celý, ať je jasné, co přesně vyjde */
-.pl-ig-player {
-  position: relative;
-  align-self: center;
-  width: min(100%, 240px);
-  aspect-ratio: 9 / 16;
-  overflow: hidden;
-  border-radius: 12px;
-  background: #000;
-}
-.pl-ig-player video,
-.pl-ig-player img { width: 100%; height: 100%; object-fit: contain; }
-.pl-ig-player .pl-ig-thumb-x { top: 8px; right: 8px; width: 26px; height: 26px; }
-.pl-ig-trial { flex-wrap: wrap; align-self: flex-start; max-width: 100%; }
-.pl-ig-cover { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 14px; }
-.pl-ig-cover img { width: 32px; height: 40px; border-radius: 6px; object-fit: cover; }
+.pl-ig-thumb-x::after { position: absolute; inset: -8px; content: ''; }
+.pl-ig-cover { width: 28px; height: 36px; border-radius: 5px; object-fit: cover; vertical-align: middle; }
 
-.pl-ig-label-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--bb-ink2); font-size: 13px; font-weight: 500; }
-.pl-ig-text {
-  margin: 0;
-  padding: 12px 14px;
-  border: 1px solid var(--bb-line2);
-  border-radius: 12px;
-  background: var(--bb-raise);
-  color: var(--bb-ink);
-  font-size: 14px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+/* Hlavní akce */
+.pl-ig-cta { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
+.pl-ig-wide { justify-content: center; width: 100%; min-height: 44px; font-size: 15px; text-decoration: none; }
+.pl-ig-why { color: var(--bb-ink2); font-size: 13px; text-align: center; }
+.pl-ig-now { align-self: center; min-height: 40px; }
+.pl-ig-form.is-sheet .pl-ig-cta {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  padding-top: 16px;
+  background: linear-gradient(to bottom, transparent, var(--pl-ig-bg) 16px);
 }
-.pl-ig-label { display: flex; flex-direction: column; gap: 6px; }
-.pl-ig-label > span:first-child { color: var(--bb-ink2); font-size: 13px; font-weight: 500; }
-.pl-ig-popisek {
-  width: 100%;
-  min-height: 110px;
-  padding: 12px 14px;
-  border: 1px solid var(--bb-line);
-  border-radius: 12px;
-  outline: 0;
-  background: var(--bb-raise);
-  color: var(--bb-ink);
-  font: inherit;
-  font-size: 15px;
-  line-height: 1.5;
-  resize: vertical;
-}
-.pl-ig-popisek:focus { border-color: var(--bb-ink3); }
-.pl-ig-count { align-self: flex-end; color: var(--bb-ink3); font-size: 12px; font-variant-numeric: tabular-nums; }
-.pl-ig-count.is-bad,
-.pl-ig-hint.is-bad { color: var(--bb-danger); }
-.pl-ig-hint { color: var(--bb-ink2); font-size: 13px; }
-.pl-ig-when { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.pl-ig-den {
-  position: relative;
-  display: inline-flex;
+.pl-ig-progress { display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 12px; background: var(--bb-panel2); font-size: 14px; font-variant-numeric: tabular-nums; }
+.pl-ig-bar { display: block; height: 4px; overflow: hidden; border-radius: 2px; background: var(--bb-line); }
+.pl-ig-bar > span { display: block; height: 100%; background: var(--bb-ink); transform-origin: left; transition: transform 0.2s linear; }
+.pl-ig-confirm { display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 12px; background: var(--bb-panel2); }
+.pl-ig-confirm p { margin: 0 0 4px; color: var(--bb-ink2); font-size: 14px; line-height: 1.4; text-align: center; }
+
+/* Souhrn naplánovaného příspěvku */
+.pl-ig-sum { display: flex; align-items: center; gap: 14px; }
+.pl-ig-sum-thumb { position: relative; flex: none; width: 64px; aspect-ratio: 9 / 16; padding: 0; overflow: hidden; border: 0; border-radius: 10px; background: #000; cursor: pointer; }
+.pl-ig-sum-thumb video,
+.pl-ig-sum-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.pl-ig-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
   align-items: center;
-  gap: 6px;
-  min-height: 30px;
-  padding: 0 10px;
-  border: 1px solid var(--bb-line);
-  border-radius: 9px;
-  background: var(--bb-raise);
-  color: var(--bb-ink);
-  font-size: 14px;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.5);
+  color: #fff;
+  translate: -50% -50%;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
 }
-.pl-ig-den svg { color: var(--bb-ink2); }
-.pl-ig-den input { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; }
-.pl-ig-den input::-webkit-calendar-picker-indicator { position: absolute; inset: 0; width: auto; height: auto; cursor: pointer; }
-.pl-ig-cas {
-  appearance: none;
-  min-height: 30px;
-  padding: 0 10px;
-  border: 1px solid var(--bb-line);
-  border-radius: 9px;
-  background: var(--bb-raise);
-  color: var(--bb-ink);
-  font: inherit;
-  font-size: 14px;
+.pl-ig-sum-text { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
+.pl-ig-sum-text strong { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.2; }
+.pl-ig-sum-text > span:not(.pl-ig-pill) { color: var(--bb-ink2); font-size: 14px; }
+.pl-ig-pill { margin-bottom: 4px; padding: 2px 8px; border-radius: 999px; background: var(--bb-panel2); color: var(--bb-ink2); font-size: 12px; font-weight: 600; }
+.pl-ig-pill.is-wait { background: color-mix(in srgb, #1f9e8f 14%, transparent); color: #17786d; }
+.pl-ig-pill.is-work { background: var(--bb-warn-soft); color: var(--bb-warn); }
+.pl-ig-pill.is-done { background: color-mix(in srgb, var(--bb-work) 14%, transparent); color: var(--bb-work); }
+.pl-ig-pill.is-bad { background: var(--bb-danger-soft); color: var(--bb-danger); }
+.pl-ig-state { display: flex; align-items: flex-start; gap: 12px; padding: 14px; border-radius: 12px; background: var(--bb-panel2); }
+.pl-ig-state > div { display: flex; flex: 1; flex-direction: column; gap: 4px; min-width: 0; }
+.pl-ig-state strong { font-size: 15px; font-weight: 600; }
+.pl-ig-state p { margin: 0; color: var(--bb-ink2); font-size: 14px; line-height: 1.45; }
+.pl-ig-state-icon { display: inline-flex; flex: none; margin-top: 1px; color: var(--bb-ink2); }
+.pl-ig-state.is-bad { background: var(--bb-danger-soft); }
+.pl-ig-state.is-bad strong,
+.pl-ig-state.is-bad .pl-ig-state-icon { color: var(--bb-danger); }
+.pl-ig-chyba { margin: 0; padding: 10px 14px; border-radius: 12px; background: var(--bb-danger-soft); color: var(--bb-danger); font-size: 14px; }
+
+/* iPhone: list ze spodu, velikosti podle Apple (tělo 17 pt, cíl dotyku 44 pt, velké tlačítko 50 pt) */
+.m-sheet .pl-ig { --pl-ig-bg: var(--bb-raise); --pl-ig-group: var(--bb-bg2); }
+.m-sheet .pl-ig-group { border-color: transparent; }
+.m-sheet .pl-ig-group:has(.pl-ig-input:focus) { border-color: transparent; }
+.m-sheet .pl-ig-row { min-height: 48px; font-size: 17px; }
+.m-sheet .pl-ig-input,
+.m-sheet .pl-ig-text { font-size: 17px; }
+.m-sheet .pl-ig-volba-text small,
+.m-sheet .pl-ig-cap,
+.m-sheet .pl-ig-foot { font-size: 13px; }
+.m-sheet .pl-ig-inset { background: rgb(0 0 0 / 0.03); }
+.m-sheet .pl-ig-quick .pl-chip { min-height: 34px; padding: 0 14px; border-radius: 17px; font-size: 15px; }
+.m-sheet .pl-ig-wide { min-height: 50px; border-radius: 14px; font-size: 17px; font-weight: 600; }
+.m-sheet .pl-ig-row-btns .pl-btn { min-height: 40px; font-size: 15px; }
+.m-sheet .pl-ig-now { min-height: 44px; font-size: 17px; }
+.m-sheet .pl-ig-drop { padding: 32px 16px; border-style: solid; border-color: transparent; }
+.m-sheet .pl-ig-drop strong { font-size: 17px; }
+.m-sheet .pl-ig-sum-text strong { font-size: 22px; }
+.m-sheet .pl-ig-player video,
+.m-sheet .pl-ig-player img { height: min(420px, 50vh); }
+
+@media (prefers-reduced-motion: reduce) {
+  .pl-ig-chev,
+  .pl-ig-bar > span { transition: none; }
 }
-.pl-ig-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* Přidání karty */
+.pl-ig-label { display: flex; flex-direction: column; gap: 6px; }
+.pl-ig-label > span:first-child { color: var(--bb-ink2); font-size: 13px; font-weight: 500; }
+.pl-ig-hint { margin: 0; color: var(--bb-ink2); font-size: 13px; }
 .pl-add { display: flex; flex-direction: column; gap: 16px; padding-top: 4px; }
 .pl-add-input {
   min-height: 44px;
