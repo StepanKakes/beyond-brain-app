@@ -41,6 +41,16 @@ const DEFAULT_PEOPLE = [
     tgChatId: null,
     wahaSession: 'stepan',
   },
+  {
+    key: 'jirka',
+    displayName: 'Jirka',
+    aliases: ['jirka', 'jiří', 'jiri'],
+    usernames: ['jirka', 'jiri'],
+    calcomEmail: null,
+    calcomUsername: null,
+    tgChatId: null,
+    wahaSession: null,
+  },
 ];
 
 let cached = null;
