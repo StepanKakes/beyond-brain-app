@@ -551,7 +551,12 @@ router.delete('/planner/instagram/:postId', async (req, res) => {
 router.patch('/planner/:id', async (req, res) => {
   try {
     const card = await planner.update(req.params.id, req.body || {}, { by: req.user?.username || 'app' });
-    res.json({ ok: true, card });
+    // Nový den karty posune i reel, který na ni v Beovi čeká, ať nevyjde jindy.
+    let posunutoIg = null;
+    if (req.body?.datum) {
+      posunutoIg = await beoPublikace.posunKeKarte(req.params.id, card.datum).catch((err) => ({ chyba: err?.message || 'reel se neposunul' }));
+    }
+    res.json({ ok: true, card, posunutoIg });
   } catch (err) {
     res.status(400).json({ ok: false, error: err?.message || 'kartu nešlo upravit' });
   }

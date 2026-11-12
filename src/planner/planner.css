@@ -629,6 +629,7 @@
 .pl-ig-box p { margin: 0; color: var(--bb-ink2); font-size: 14px; line-height: 1.45; }
 .pl-ig-box .pl-link { align-self: flex-start; }
 .pl-ig-box .pl-btn { min-height: 32px; padding: 0 12px; font-size: 13px; }
+.pl-ig-box-btns { display: flex; flex: none; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 .pl-ig-box.is-done > svg { color: var(--bb-work); }
 .pl-ig-box.is-bad { border-color: transparent; background: var(--bb-danger-soft); }
 .pl-ig-box.is-bad > svg,

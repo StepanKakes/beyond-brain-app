@@ -112,7 +112,46 @@ export async function uprav(postId, input) {
   if (input.naplanovano_na !== undefined) body.naplanovano_na = input.naplanovano_na;
   if (input.trial !== undefined) body.trial = input.trial;
   const { post } = await volej(`/posty/${encodeURIComponent(postId)}`, { method: 'PATCH', body });
+  // Den karty jde s časem reelu, ať kalendář ukazuje, kdy opravdu vyjde.
+  const den = body.naplanovano_na ? denVPraze(post?.naplanovano_na) : null;
+  const card = den && post?.planner_id ? planner.list().karty.find((c) => c.id === post.planner_id) : null;
+  if (card && card.datum !== den) await planner.update(card.id, { datum: den }, { by: 'beo' }).catch(() => {});
   return post;
+}
+
+/** Hodiny a minuty v Praze, HH:mm. */
+function casVPraze(iso) {
+  return new Date(iso).toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Prague' });
+}
+
+/** Čas zadaný v Praze (YYYY-MM-DDTHH:mm) jako okamžik ISO. */
+function zPrahy(local) {
+  const odhad = new Date(`${local}:00Z`);
+  const praha = new Date(odhad.toLocaleString('en-US', { timeZone: 'Europe/Prague' }));
+  const utc = new Date(odhad.toLocaleString('en-US', { timeZone: 'UTC' }));
+  return new Date(odhad.getTime() - (praha.getTime() - utc.getTime())).toISOString();
+}
+
+/**
+ * Karta se přesunula na jiný den. Čekající reel jde s ní, ve stejnou hodinu.
+ * Vrací nový příspěvek, nebo null, když nebylo co posouvat.
+ */
+export async function posunKeKarte(cardId, datum) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(datum || ''))) return null;
+  let out;
+  try {
+    out = await volej(`/posty?planner=${encodeURIComponent(cardId)}`);
+  } catch (err) {
+    if (/chybí napojení/i.test(err?.message || '')) return null;
+    throw err;
+  }
+  const post = out.posty?.[cardId];
+  if (!post || post.stav !== 'ceka' || denVPraze(post.naplanovano_na) === datum) return null;
+  const { post: novy } = await volej(`/posty/${encodeURIComponent(post.id)}`, {
+    method: 'PATCH',
+    body: { naplanovano_na: zPrahy(`${datum}T${casVPraze(post.naplanovano_na)}`) },
+  });
+  return { ...novy, nahled_url: post.nahled_url };
 }
 
 /**

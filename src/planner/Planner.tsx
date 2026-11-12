@@ -804,7 +804,7 @@ function Navod() {
     },
     {
       title: 'Instagram vydává Beo',
-      text: 'Hotový reel dáš přes Naplánovat reel nahoře, nebo v kartě v části Vydání. Nahraješ video, napíšeš popisek a zvolíš čas. Soubor se uloží v Beovi a ten ho v ten čas sám vydá na Instagram. Karta čeká v Naplánováno, po vydání ukáže Vyšlo s odkazem a přesune se do Vydáno. Do té doby jde příspěvek zrušit.',
+      text: 'Hotový reel dáš přes Naplánovat reel nahoře, nebo v kartě v části Vydání. Nahraješ video, napíšeš popisek a zvolíš čas. Soubor se uloží v Beovi a ten ho v ten čas sám vydá na Instagram. Karta čeká v Naplánováno, po vydání ukáže Vyšlo s odkazem a přesune se do Vydáno. Do té doby jde v kartě změnit čas, upravit popisek nebo příspěvek zrušit. Přetažení karty na jiný den v kalendáři posune i reel, ve stejnou hodinu.',
     },
     {
       title: 'Trial reels',
@@ -951,7 +951,19 @@ export function Planner({
 
   const patch = (id: string, change: Partial<PlannerCard>) => {
     setCards((cards) => cards.map((card) => (card.id === id ? { ...card, ...change } : card)));
-    void send(`${PLANNER_PATH}/${encodeURIComponent(id)}`, { method: 'PATCH', body: change }).catch(() => undefined);
+    void send(`${PLANNER_PATH}/${encodeURIComponent(id)}`, { method: 'PATCH', body: change })
+      .then((res) => {
+        // Nový den karty posunul i reel, který čekal v Beovi.
+        const posun = (res as { posunutoIg?: (IgPost & { chyba?: string }) | { chyba: string } | null }).posunutoIg;
+        if (!posun) return;
+        if ('id' in posun) {
+          setIg((cur) => ({ ...cur, [id]: posun as IgPost }));
+          setNotice({ text: `Reel se posunul na ${kdyPopis(posun.naplanovano_na)}` });
+        } else {
+          setNotice({ text: `Karta se posunula, ale reel v Beovi ne: ${posun.chyba}` });
+        }
+      })
+      .catch(() => undefined);
   };
 
   const remove = (card: PlannerCard) => {
@@ -1007,6 +1019,8 @@ export function Planner({
       return next;
     });
     if (post) setNotice({ text: `Naplánováno na ${kdyPopis(post.naplanovano_na)}` });
+    // Den karty se na serveru srovnal s časem reelu.
+    if (post) void load();
   };
 
   const cards = useMemo(

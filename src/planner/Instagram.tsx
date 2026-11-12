@@ -91,6 +91,54 @@ function nazevZeSouboru(file: File): string {
   return file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
 }
 
+/** Den a čas vydání, vždy v Praze. Rychlé volby plus libovolný den a čtvrthodina. */
+function VyberCasu({ cas, setCas, datum }: { cas: string; setCas: (cas: string) => void; datum: string | null }) {
+  const rychle = [
+    { label: 'Dnes 18:00', value: `${prahaDen()}T18:00` },
+    { label: 'Zítra 18:00', value: `${prahaDenZa(1)}T18:00` },
+    ...(datum && datum > prahaDenZa(1) ? [{ label: `${denLabel(datum)} 18:00`, value: `${datum}T18:00` }] : []),
+  ];
+  const casVMinulosti = cas && new Date(zPrahy(cas)).getTime() < Date.now() - 60_000;
+
+  return (
+    <div className="pl-ig-label">
+      <span>Kdy vyjde, český čas</span>
+      <div className="pl-ig-when">
+        {rychle.map((r) => (
+          <button key={r.value} type="button" className={`pl-chip${cas === r.value ? ' is-on' : ''}`} onClick={() => setCas(r.value)}>
+            {r.label}
+          </button>
+        ))}
+        <label className="pl-ig-den">
+          <Icon name="calendar" size={14} />
+          {denLabel(cas.slice(0, 10))}
+          <input type="date" aria-label="Jiný den" value={cas.slice(0, 10)} onChange={(e) => e.target.value && setCas(`${e.target.value}T${cas.slice(11, 16) || '18:00'}`)} />
+        </label>
+        <select className="pl-ig-cas" aria-label="Čas" value={cas.slice(11, 16)} onChange={(e) => setCas(`${cas.slice(0, 10)}T${e.target.value}`)}>
+          {CASY.includes(cas.slice(11, 16)) ? null : <option value={cas.slice(11, 16)}>{cas.slice(11, 16)}</option>}
+          {CASY.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </select>
+      </div>
+      {cas && !casVMinulosti ? (
+        <span className="pl-ig-hint">
+          Vyjde {kdyPopis(zPrahy(cas))}
+        </span>
+      ) : casVMinulosti ? (
+        <span className="pl-ig-hint is-bad">Čas už minul, příspěvek by vyšel hned</span>
+      ) : null}
+    </div>
+  );
+}
+
+/** Čas vydání v Praze jako YYYY-MM-DDTHH:mm, pro výběr času. */
+function prahaMistne(iso: string): string {
+  return `${prahaDen(iso)}T${casLabel(iso)}`;
+}
+
 function Formular({
   datum,
   request,
@@ -180,13 +228,6 @@ function Formular({
     setNadZonou(false);
     if (event.dataTransfer.files?.length) pridej(event.dataTransfer.files);
   };
-
-  const rychle = [
-    { label: 'Dnes 18:00', value: `${prahaDen()}T18:00` },
-    { label: 'Zítra 18:00', value: `${prahaDenZa(1)}T18:00` },
-    ...(datum && datum > prahaDenZa(1) ? [{ label: `${denLabel(datum)} 18:00`, value: `${datum}T18:00` }] : []),
-  ];
-  const casVMinulosti = cas && new Date(zPrahy(cas)).getTime() < Date.now() - 60_000;
 
   return (
     <div className="pl-ig-form">
@@ -297,36 +338,7 @@ function Formular({
         </span>
       </label>
 
-      <div className="pl-ig-label">
-        <span>Kdy vyjde, český čas</span>
-        <div className="pl-ig-when">
-          {rychle.map((r) => (
-            <button key={r.value} type="button" className={`pl-chip${cas === r.value ? ' is-on' : ''}`} onClick={() => setCas(r.value)}>
-              {r.label}
-            </button>
-          ))}
-          <label className="pl-ig-den">
-            <Icon name="calendar" size={14} />
-            {denLabel(cas.slice(0, 10))}
-            <input type="date" aria-label="Jiný den" value={cas.slice(0, 10)} onChange={(e) => e.target.value && setCas(`${e.target.value}T${cas.slice(11, 16) || '18:00'}`)} />
-          </label>
-          <select className="pl-ig-cas" aria-label="Čas" value={cas.slice(11, 16)} onChange={(e) => setCas(`${cas.slice(0, 10)}T${e.target.value}`)}>
-            {CASY.includes(cas.slice(11, 16)) ? null : <option value={cas.slice(11, 16)}>{cas.slice(11, 16)}</option>}
-            {CASY.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-        </div>
-        {cas && !casVMinulosti ? (
-          <span className="pl-ig-hint">
-            Vyjde {kdyPopis(zPrahy(cas))}
-          </span>
-        ) : casVMinulosti ? (
-          <span className="pl-ig-hint is-bad">Čas už minul, příspěvek by vyšel hned</span>
-        ) : null}
-      </div>
+      <VyberCasu cas={cas} setCas={setCas} datum={datum} />
 
       {chyba ? <p className="pl-ig-chyba">{chyba}</p> : null}
 
@@ -400,6 +412,57 @@ function Popisek({ post, request, onPost }: { post: IgPost; request: Request; on
   );
 }
 
+/** Nový čas pro reel, který ještě čeká. Média zůstávají, mění se jen kdy. */
+function ZmenaCasu({
+  post,
+  datum,
+  request,
+  onPost,
+  onHotovo,
+}: {
+  post: IgPost;
+  datum: string | null;
+  request: Request;
+  onPost: (post: IgPost | null) => void;
+  onHotovo: () => void;
+}) {
+  const [cas, setCas] = useState(() => prahaMistne(post.naplanovano_na));
+  const [ukladam, setUkladam] = useState(false);
+  const [chyba, setChyba] = useState<string | null>(null);
+
+  const uloz = async () => {
+    setUkladam(true);
+    setChyba(null);
+    try {
+      const res = await request<{ post: IgPost }>(`${IG_PATH}/${encodeURIComponent(post.id)}`, {
+        method: 'PATCH',
+        body: { naplanovano_na: zPrahy(cas) },
+      });
+      onPost({ ...res.post, nahled_url: post.nahled_url });
+      onHotovo();
+    } catch (err) {
+      setChyba(err instanceof Error ? err.message : 'Změna času selhala');
+    } finally {
+      setUkladam(false);
+    }
+  };
+
+  return (
+    <div className="pl-ig-form">
+      <VyberCasu cas={cas} setCas={setCas} datum={datum} />
+      {chyba ? <p className="pl-ig-chyba">{chyba}</p> : null}
+      <div className="pl-ig-actions">
+        <button type="button" className="pl-btn is-primary" disabled={ukladam} onClick={() => void uloz()}>
+          {ukladam ? 'Ukládám' : 'Uložit nový čas'}
+        </button>
+        <button type="button" className="pl-btn" disabled={ukladam} onClick={onHotovo}>
+          Nechat původní
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function InstagramPublikace({
   card,
   request,
@@ -416,6 +479,7 @@ export function InstagramPublikace({
 }) {
   const [opakovat, setOpakovat] = useState(false);
   const [rusim, setRusim] = useState(false);
+  const [menimCas, setMenimCas] = useState(false);
   const [chyba, setChyba] = useState<string | null>(null);
 
   const zrus = async () => {
@@ -467,10 +531,21 @@ export function InstagramPublikace({
             <p>{post!.trial ? 'Trial reel' : post!.typ === 'reel' ? 'Reel' : post!.typ === 'foto' ? 'Fotka' : 'Carousel'} čeká v Beovi, v ten čas ho samo vydá.</p>
             {post!.trial ? <p>{TRIALY.find((t) => t.value === post!.trial)?.hint}</p> : null}
           </div>
-          <button type="button" className="pl-btn" disabled={rusim} onClick={() => void zrus()}>
-            Zrušit
-          </button>
+          <span className="pl-ig-box-btns">
+            {!menimCas ? (
+              <button type="button" className="pl-btn" onClick={() => setMenimCas(true)}>
+                Změnit čas
+              </button>
+            ) : null}
+            <button type="button" className="pl-btn" disabled={rusim} onClick={() => void zrus()}>
+              Zrušit
+            </button>
+          </span>
         </div>
+      ) : null}
+
+      {stav === 'ceka' && menimCas ? (
+        <ZmenaCasu post={post!} datum={card.datum} request={request} onPost={onPost} onHotovo={() => setMenimCas(false)} />
       ) : null}
 
       {stav === 'ceka' ? <Popisek post={post!} request={request} onPost={onPost} /> : null}
