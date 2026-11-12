@@ -1,0 +1,31 @@
+name: Add user
+
+# Založí nebo obnoví jeden login na počítači s brainem. Bere jméno a bcrypt
+# otisk hesla, ne heslo samotné, takže v záznamu běhu žádné heslo není.
+# Otisk vyrobíš: node -e "console.log(require('bcrypt').hashSync('HESLO',12))"
+
+on:
+  workflow_dispatch:
+    inputs:
+      username:
+        description: Přihlašovací jméno
+        required: true
+      hash:
+        description: bcrypt otisk hesla
+        required: true
+
+jobs:
+  add:
+    runs-on: [self-hosted, windows, beyond-brain]
+    timeout-minutes: 5
+    env:
+      NEW_USER: ${{ github.event.inputs.username }}
+      NEW_HASH: ${{ github.event.inputs.hash }}
+    steps:
+      - name: Add user
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $app = if ($env:BEYOND_APP_DIR) { $env:BEYOND_APP_DIR } else { 'C:\Users\Vlast\beyond\beyond-brain-app' }
+          Set-Location $app
+          node scripts\add-user.cjs
