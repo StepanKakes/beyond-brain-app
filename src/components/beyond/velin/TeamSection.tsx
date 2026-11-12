@@ -123,7 +123,7 @@ export default function TeamSection() {
             />
           </label>
           <p style={{ fontSize: 12, color: 'var(--bb-ink3)', margin: 0, lineHeight: 1.5 }}>
-            Jméno <code>tim</code> nebo <code>stepan</code> se samo napojí na jméno, kterým brain
+            Jméno <code>tim</code>, <code>stepan</code> nebo <code>jirka</code> se samo napojí na jméno, kterým brain
             podepisuje sliby a Cal.com hovory.
           </p>
           <div style={{ display: 'flex', gap: 6 }}>
