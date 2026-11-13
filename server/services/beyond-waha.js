@@ -30,7 +30,10 @@ function fromClaudeConfig() {
     const candidates = [projects[brain], ...Object.values(projects)];
     for (const proj of candidates) {
       const waha = proj?.mcpServers?.waha;
-      const key = waha?.headers?.['X-Api-Key'] || waha?.headers?.['x-api-key'];
+      let key = waha?.headers?.['X-Api-Key'] || waha?.headers?.['x-api-key'];
+      // `${WAHA_API_KEY}` is a placeholder Claude Code expands; sent literally
+      // it is a guaranteed 401. Expand it from env or skip the entry.
+      if (typeof key === 'string' && /^\$\{\w+\}$/.test(key)) key = process.env[key.slice(2, -1)] || null;
       if (waha?.url && key) {
         // The MCP endpoint is <base>/mcp; the REST API lives at <base>/api.
         return { baseUrl: String(waha.url).replace(/\/mcp\/?$/, ''), apiKey: key, source: '.claude.json' };
@@ -42,16 +45,19 @@ function fromClaudeConfig() {
   return null;
 }
 
+// Env (settings saved in the app land there) is read on every call: the
+// settings are applied after the server starts listening, so caching the first
+// answer once pinned a stale fallback key for the whole process (13.11.2026:
+// every WhatsApp pull 401 from a restart until the next one).
 function config() {
-  if (cached) return cached;
   const url = process.env.BEYOND_WAHA_URL;
   const key = process.env.BEYOND_WAHA_API_KEY;
   if (url && key) {
-    cached = { baseUrl: url.replace(/\/+$/, ''), apiKey: key, source: 'env' };
-  } else {
-    cached = fromClaudeConfig();
-    if (cached) console.log(`[waha] klíč načten z ${cached.source}`);
+    return { baseUrl: url.replace(/\/+$/, ''), apiKey: key, source: 'env' };
   }
+  if (cached) return cached;
+  cached = fromClaudeConfig();
+  if (cached) console.log(`[waha] klíč načten z ${cached.source}`);
   return cached;
 }
 

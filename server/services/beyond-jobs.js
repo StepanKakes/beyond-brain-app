@@ -312,6 +312,12 @@ const pullWhatsAppJob = {
   async run({ log, context } = {}) {
     const out = await pullWhatsApp({ log, only: context?.slug || null });
     if (out.note) return { skipped: out.note };
+    // Every client failing is an outage (bad key, WAHA down), not a quiet day:
+    // throw so the run shows red on Velín instead of "ok" with stale raw.
+    const failed = out.done.filter((d) => /: selhalo \(/.test(d));
+    if (out.done.length && failed.length === out.done.length) {
+      throw new Error(`WhatsApp se nestáhl u žádného klienta: ${failed[0].replace(/^[^:]+: selhalo /, '')}`);
+    }
     invalidateBrainIndex();
     return { summary: out.done.join('\n') };
   },
