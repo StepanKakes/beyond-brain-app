@@ -1384,8 +1384,8 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
 
 // Serve React app for all other routes (excluding static files)
 app.get('*', (req, res) => {
-    // Skip requests for static assets (files with extensions)
-    if (path.extname(req.path)) {
+    // Skip requests for static assets (files with extensions); /soubory/<cesta k souboru> je SPA route
+    if (path.extname(req.path) && !req.path.startsWith("/soubory/")) {
         return res.status(404).send('Not found');
     }
 
