@@ -458,6 +458,78 @@ export async function updateMeeting({ id, nazev, zacatek, konec, mentor, ucastni
   };
 }
 
+/* ------------------------------------------------------------------ */
+/* Cal.com bookings                                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Cal.com writes a booking into the shared calendar itself, but as an event
+ * the Beyond calendar organises, with the client already marked as accepted
+ * and nobody of us invited. Google therefore sends the client nothing, so the
+ * meeting never reaches their calendar, and it is missing from the mentor's
+ * primary calendar too (where Fathom looks). This takes the event over right
+ * after the booking: the mentor is invited, the client is invited afresh, and
+ * Google sends the invitations. Google can lag behind the webhook, so the
+ * lookup retries a few times.
+ */
+export async function adoptCalBooking({ uid, iCalUID, startTime, organizerEmail, attendeeEmails = [] }) {
+  if (!uid && !iCalUID) throw new Error('Booking z Calu nemá uid');
+  const calendarId = await sharedCalendarId();
+  const base = `${CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events`;
+  const icalIds = [...new Set([iCalUID, uid && `${uid}@Cal.com`].filter(Boolean))];
+  const clients = emails(attendeeEmails);
+
+  let ev = null;
+  for (let attempt = 0; attempt < 5 && !ev; attempt += 1) {
+    if (attempt) await new Promise((r) => { setTimeout(r, 3000); });
+    for (const id of icalIds) {
+      const res = await api(base, { query: { iCalUID: id } });
+      ev = (res.items || []).find((x) => x.status !== 'cancelled') || null;
+      if (ev) break;
+    }
+    // Fallback: the same start time and the same client on the shared calendar.
+    if (!ev && startTime && clients.length) {
+      const t = Date.parse(startTime);
+      if (Number.isFinite(t)) {
+        const res = await api(base, {
+          query: { timeMin: new Date(t - 60_000).toISOString(), timeMax: new Date(t + 60_000).toISOString(), singleEvents: true },
+        });
+        ev = (res.items || []).find((x) => x.status !== 'cancelled'
+          && Date.parse(x.start?.dateTime) === t
+          && (x.attendees || []).some((a) => clients.includes(a.email?.toLowerCase()))) || null;
+      }
+    }
+  }
+  if (!ev) throw new Error(`Událost bookingu ${uid || iCalUID} v Beyond kalendáři není`);
+
+  const people = getPeople().filter((p) => p.calcomEmail);
+  const ours = people.map((p) => p.calcomEmail.toLowerCase());
+  const lead = people.find((p) => p.calcomEmail.toLowerCase() === String(organizerEmail || '').toLowerCase()) || person('tim');
+  const existing = ev.attendees || [];
+  const isClient = (a) => a.email && !a.resource
+    && !ours.includes(a.email.toLowerCase())
+    && a.email.toLowerCase() !== calendarId.toLowerCase();
+  const already = existing.some((a) => a.email?.toLowerCase() === lead.calcomEmail.toLowerCase());
+  const clientsOnEvent = existing.filter(isClient);
+  const toInvite = clientsOnEvent.filter((a) => a.responseStatus !== 'needsAction');
+  if (already && !toInvite.length) return { id: ev.id, zmeneno: false, duvod: 'už převzaté' };
+
+  // Clients go back to "needs action": an invitation they accept themselves,
+  // not a meeting someone accepted on their behalf.
+  const attendees = [
+    ...existing.filter((a) => !isClient(a)),
+    ...(already ? [] : [{ email: lead.calcomEmail }]),
+    ...clientsOnEvent.map((a) => ({ email: a.email, ...(a.displayName ? { displayName: a.displayName } : {}), responseStatus: 'needsAction' })),
+  ];
+  const updated = await api(`${base}/${encodeURIComponent(ev.id)}`, {
+    method: 'PATCH',
+    query: { sendUpdates: 'all' },
+    body: { attendees },
+  });
+  invalidateCalendars();
+  return { id: updated.id, zmeneno: true, mentor: lead.displayName, klienti: clientsOnEvent.map((a) => a.email), meet: shapeEvent(updated).meet };
+}
+
 export async function cancelMeeting({ id, poslatPozvanky = false }) {
   if (!id) throw new Error('Chybí id události');
   const calendarId = await sharedCalendarId();

@@ -14,8 +14,32 @@
 import crypto from 'crypto';
 import express from 'express';
 
-import { intake } from '../services/beyond-events.js';
-import { listMeetings } from '../services/beyond-google.js';
+import { intake, getRoute, verifyAuth } from '../services/beyond-events.js';
+import { listMeetings, adoptCalBooking } from '../services/beyond-google.js';
+
+/**
+ * A Cal.com booking lands in the Beyond calendar without an invitation for the
+ * client and without the mentor (see adoptCalBooking). This runs on every
+ * authenticated BOOKING_CREATED / BOOKING_RESCHEDULED, independently of the
+ * agent job the same route queues, and never holds up the answer to Cal.
+ */
+function adoptCalcomBooking(req, rawBody) {
+  const route = getRoute('calcom');
+  if (!route || verifyAuth(route, req, rawBody)) return;
+  let body;
+  try { body = JSON.parse(rawBody); } catch { return; }
+  if (!['BOOKING_CREATED', 'BOOKING_RESCHEDULED'].includes(body?.triggerEvent)) return;
+  const p = body.payload || {};
+  adoptCalBooking({
+    uid: p.uid,
+    iCalUID: p.iCalUID,
+    startTime: p.startTime,
+    organizerEmail: p.organizer?.email,
+    attendeeEmails: (p.attendees || []).map((a) => a.email).filter(Boolean),
+  })
+    .then((r) => console.log(`[calcom] pozvánky ${p.uid}: ${r.zmeneno ? `odeslané (${(r.klienti || []).join(', ')}, mentor ${r.mentor})` : r.duvod}`))
+    .catch((err) => console.error(`[calcom] pozvánky ${p.uid} selhaly: ${err?.message}`));
+}
 
 const router = express.Router();
 
@@ -59,6 +83,8 @@ router.post('/:route', express.raw({ type: () => true, limit: '2mb' }), (req, re
     console.error('[events] intake selhal', err);
     return res.status(500).json({ ok: false, error: err?.message || 'intake selhal' });
   }
+
+  if (req.params.route === 'calcom' && result.status !== 'rejected') adoptCalcomBooking(req, rawBody);
 
   if (result.status === 'rejected') {
     console.warn(`[events] ${req.params.route}: odmítnuto (${result.reason})`);
