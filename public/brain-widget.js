@@ -92,8 +92,11 @@ function header(widget, count, canAdd) {
     const plus = row.addStack();
     plus.url = selfUrl('pridat=1');
     plus.setPadding(2, 8, 2, 0);
-    const icon = plus.addImage(SFSymbol.named('plus.circle.fill').image);
-    icon.imageSize = new Size(22, 22);
+    // Plné kolečko s plusem iOS při obarvení slije do jedné plochy, proto jen plus.
+    const symbol = SFSymbol.named('plus');
+    symbol.applyFont(Font.semiboldSystemFont(18));
+    const icon = plus.addImage(symbol.image);
+    icon.imageSize = new Size(18, 18);
     icon.tintColor = colors.ink;
   }
 }
