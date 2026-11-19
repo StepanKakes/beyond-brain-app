@@ -84,7 +84,10 @@ function header(widget, count, canAdd) {
   const row = widget.addStack();
   row.layoutHorizontally();
   row.centerAlignContent();
-  const title = row.addText(count ? `Dnes ${count}` : 'Dnes');
+  // Widget neumí posouvat, takže klepnutí na nadpis otevře všechny úkoly v Brainu.
+  const titleBox = row.addStack();
+  if (canAdd) titleBox.url = `${BRAIN}/m`;
+  const title = titleBox.addText(count ? `Dnes ${count}` : 'Dnes');
   title.font = Font.boldSystemFont(15);
   title.textColor = colors.ink;
   row.addSpacer();
@@ -160,19 +163,11 @@ function build({ data, problem }, family) {
     message(widget, 'Na dnes nic');
   } else {
     const limit = LIMITS[family] || LIMITS.medium;
-    // Když se všechny nevejdou, jeden řádek uvolní místo pro počet zbývajících.
-    const shown = tasks.length > limit ? limit - 1 : limit;
-    tasks.slice(0, shown).forEach((task, i) => {
+    // Počet všech je v nadpisu, takže se zobrazí plný počet řádků bez řádku navíc.
+    tasks.slice(0, limit).forEach((task, i) => {
       if (i) widget.addSpacer(5);
       taskRow(widget, task, tappable);
     });
-    if (tasks.length > shown) {
-      widget.addSpacer(4);
-      // Widget neumí posouvat, tak zbytek otevře celý seznam v Brainu.
-      const more = widget.addStack();
-      if (tappable) more.url = `${BRAIN}/m`;
-      message(more, `a další: ${tasks.length - shown}`);
-    }
   }
   widget.addSpacer();
   return widget;
