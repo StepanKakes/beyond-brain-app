@@ -168,7 +168,10 @@ function build({ data, problem }, family) {
     });
     if (tasks.length > shown) {
       widget.addSpacer(4);
-      message(widget, `a další: ${tasks.length - shown}`);
+      // Widget neumí posouvat, tak zbytek otevře celý seznam v Brainu.
+      const more = widget.addStack();
+      if (tappable) more.url = `${BRAIN}/m`;
+      message(more, `a další: ${tasks.length - shown}`);
     }
   }
   widget.addSpacer();
