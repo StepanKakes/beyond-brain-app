@@ -89,6 +89,16 @@ function header(widget, count, canAdd) {
   title.textColor = colors.ink;
   row.addSpacer();
   if (canAdd) {
+    // Mikrofon spustí zkratku Myslenka: nadiktuješ a úkol nebo poznámka se zapíše sama.
+    const mic = row.addStack();
+    mic.url = `shortcuts://run-shortcut?name=${encodeURIComponent('Myslenka')}`;
+    mic.setPadding(2, 8, 2, 8);
+    const micSymbol = SFSymbol.named('mic');
+    micSymbol.applyFont(Font.semiboldSystemFont(18));
+    const micIcon = mic.addImage(micSymbol.image);
+    micIcon.imageSize = new Size(18, 18);
+    micIcon.tintColor = colors.ink;
+
     const plus = row.addStack();
     plus.url = selfUrl('pridat=1');
     plus.setPadding(2, 8, 2, 0);
